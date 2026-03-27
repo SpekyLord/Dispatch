@@ -1,0 +1,34 @@
+# Node / web
+node_modules/
+apps/web/node_modules/
+apps/web/dist/
+coverage/
+
+# Python / API
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Flutter / mobile
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/build/
+apps/mobile/.metadata
+
+# Local environment
+.env
+.env.local
+.env.*.local
+apps/web/.env
+services/api/.env
+apps/mobile/.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,16 @@
+{
+  "name": "dispatch",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "scripts": {
+    "dev:web": "corepack pnpm --filter @dispatch/web dev",
+    "build:web": "corepack pnpm --filter @dispatch/web build",
+    "lint:web": "corepack pnpm --filter @dispatch/web lint",
+    "test:web": "corepack pnpm --filter @dispatch/web test",
+    "check:web": "corepack pnpm --filter @dispatch/web check"
+  }
+}

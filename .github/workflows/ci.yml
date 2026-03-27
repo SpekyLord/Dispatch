@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable corepack
+        run: corepack enable
+      - name: Install web dependencies
+        run: corepack pnpm install --frozen-lockfile
+      - name: Lint web
+        run: corepack pnpm --filter @dispatch/web lint
+      - name: Test web
+        run: corepack pnpm --filter @dispatch/web test
+      - name: Build web
+        run: corepack pnpm --filter @dispatch/web build
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Sync API dependencies
+        working-directory: services/api
+        run: uv sync --group dev
+      - name: Ruff check
+        working-directory: services/api
+        run: uv run ruff check .
+      - name: Ruff format check
+        working-directory: services/api
+        run: uv run ruff format --check .
+      - name: Pytest
+        working-directory: services/api
+        run: uv run pytest
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: Flutter analyze
+        working-directory: apps/mobile
+        run: flutter analyze
+      - name: Flutter test
+        working-directory: apps/mobile
+        run: flutter test

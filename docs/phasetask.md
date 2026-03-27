@@ -29,6 +29,7 @@
 4. Run the phase verification checklist after implementation.
 5. Update this file by checking completed boxes, leaving incomplete work unchecked, and appending dated notes.
 6. Move to the next phase only after the current phase exit criteria are satisfied.
+7. Before ending any phase run, review the active phase checklist from top to bottom and check every item that was actually completed and verified during that run.
 
 ## Locked Defaults
 
@@ -132,6 +133,7 @@
 - Preserve manual category override even after auto-categorization is introduced.
 - Preserve audit trails. Status history and department response records should never be erased to simplify state transitions.
 - Record all deviations, tradeoffs, and temporary shortcuts in the active phase notes with an ISO date.
+- Never leave a completed and verified task unchecked in the active phase checklist.
 - When a phase is only partially complete, leave the phase checkbox unchecked and explain exactly what is still missing.
 
 ## Phase 0 - Foundation And Project Bootstrap
@@ -178,75 +180,75 @@ Create the complete greenfield project foundation so later phases can focus on b
 
 #### Database / Supabase
 
-- [ ] Create PostgreSQL enum types that match the canonical values in this document.
-- [ ] Create the base application tables from the PRD with primary keys, foreign keys, timestamps, and useful indexes.
-- [ ] Use `auth.users.id` as the canonical user identifier instead of storing a second password system in application tables.
-- [ ] Add RLS policies so citizens can access only their own private records, departments can access only their department scope, and municipality users can access municipality-wide data.
-- [ ] Create storage buckets for `report-images`, `post-images`, and `assessment-images`.
-- [ ] Add storage validation and policy rules for allowed file types and file size limits.
-- [ ] Enable Supabase Realtime on the tables that will later drive live updates: `incident_reports`, `department_responses`, `report_status_history`, `notifications`, and `posts`.
-- [ ] Seed one municipality admin account and a small set of sample departments covering `fire`, `police`, `medical`, and `disaster`.
+- [x] Create PostgreSQL enum types that match the canonical values in this document.
+- [x] Create the base application tables from the PRD with primary keys, foreign keys, timestamps, and useful indexes.
+- [x] Use `auth.users.id` as the canonical user identifier instead of storing a second password system in application tables.
+- [x] Add RLS policies so citizens can access only their own private records, departments can access only their department scope, and municipality users can access municipality-wide data.
+- [x] Create storage buckets for `report-images`, `post-images`, and `assessment-images`.
+- [x] Add storage validation and policy rules for allowed file types and file size limits.
+- [x] Enable Supabase Realtime on the tables that will later drive live updates: `incident_reports`, `department_responses`, `report_status_history`, `notifications`, and `posts`.
+- [x] Seed one municipality admin account and a small set of sample departments covering `fire`, `police`, `medical`, and `disaster`.
 
 #### Flask API
 
-- [ ] Scaffold the Flask project with clear module boundaries for auth, users, municipality, departments, reports, feed, notifications, analytics, and mesh.
-- [ ] Add environment loading, config validation, logging, consistent JSON error responses, and request validation helpers.
-- [ ] Implement Supabase JWT validation middleware and role guard decorators.
-- [ ] Add health and readiness endpoints that verify API boot plus Supabase connectivity.
-- [ ] Create storage helper services for uploads, signed URLs, and validation hooks.
-- [ ] Create service placeholders for reports, notifications, feed, analytics, and mesh so later phases extend stable modules instead of rewriting the app structure.
+- [x] Scaffold the Flask project with clear module boundaries for auth, users, municipality, departments, reports, feed, notifications, analytics, and mesh.
+- [x] Add environment loading, config validation, logging, consistent JSON error responses, and request validation helpers.
+- [x] Implement Supabase JWT validation middleware and role guard decorators.
+- [x] Add health and readiness endpoints that verify API boot plus Supabase connectivity.
+- [x] Create storage helper services for uploads, signed URLs, and validation hooks.
+- [x] Create service placeholders for reports, notifications, feed, analytics, and mesh so later phases extend stable modules instead of rewriting the app structure.
 
 #### Web App
 
-- [ ] Scaffold the React + Vite app with Tailwind, shadcn/ui, React Router, Zustand session state, and a typed Fetch-based API client.
-- [ ] Create base layouts for citizen, department, and municipality shells plus protected-route wrappers.
-- [ ] Add a shared design-token file and base theme primitives instead of scattering colors and spacing tokens across components.
-- [ ] Add a Leaflet wrapper component for location display and map pin selection.
-- [ ] Create placeholder pages for auth, dashboard landing, report list, feed, and profile so future phases plug into stable routes.
+- [x] Scaffold the React + Vite app with Tailwind, shadcn/ui, React Router, Zustand session state, and a typed Fetch-based API client.
+- [x] Create base layouts for citizen, department, and municipality shells plus protected-route wrappers.
+- [x] Add a shared design-token file and base theme primitives instead of scattering colors and spacing tokens across components.
+- [x] Add a Leaflet wrapper component for location display and map pin selection.
+- [x] Create placeholder pages for auth, dashboard landing, report list, feed, and profile so future phases plug into stable routes.
 
 #### Mobile App
 
-- [ ] Scaffold the Flutter app with Riverpod, Dio, local session persistence, and role-aware navigation.
-- [ ] Create base shells for citizen, department, and municipality landing states.
-- [ ] Add service wrappers for auth, uploads, location, camera/gallery access, and future mesh transport.
+- [x] Scaffold the Flutter app with Riverpod, Dio, local session persistence, and role-aware navigation.
+- [x] Create base shells for citizen, department, and municipality landing states.
+- [x] Add service wrappers for auth, uploads, location, camera/gallery access, and future mesh transport.
 - [ ] Add a `flutter_map` wrapper and shared location-selection primitives.
-- [ ] Add local persistence scaffolding for session data and future offline queue tables without implementing Phase 4 mesh logic yet.
+- [x] Add local persistence scaffolding for session data and future offline queue tables without implementing Phase 4 mesh logic yet.
 
 #### Realtime / Offline Transport
 
-- [ ] Define a shared event naming strategy for report updates, department responses, notifications, and feed updates.
-- [ ] Add reusable realtime subscription helpers in web and mobile so Phase 2 can connect live data without rewriting infrastructure.
-- [ ] Define local interfaces for offline queueing and sync services that Phase 4 can implement later.
+- [x] Define a shared event naming strategy for report updates, department responses, notifications, and feed updates.
+- [x] Add reusable realtime subscription helpers in web and mobile so Phase 2 can connect live data without rewriting infrastructure.
+- [x] Define local interfaces for offline queueing and sync services that Phase 4 can implement later.
 
 #### Tests
 
-- [ ] Configure ESLint, Prettier, Vitest, and React Testing Library for web.
-- [ ] Configure pytest and lint/format tooling for the Flask API.
-- [ ] Configure `flutter analyze` and `flutter test` for mobile.
-- [ ] Add a CI workflow that runs web, API, and mobile checks on every pull request or branch build.
+- [x] Configure ESLint, Prettier, Vitest, and React Testing Library for web.
+- [x] Configure pytest and lint/format tooling for the Flask API.
+- [x] Configure `flutter analyze` and `flutter test` for mobile.
+- [x] Add a CI workflow that runs web, API, and mobile checks on every pull request or branch build.
 
 #### Docs
 
-- [ ] Document environment variables, startup steps, seeded accounts, and expected local services.
-- [ ] Document the repository layout and which app/service owns which responsibility.
-- [ ] Document the Supabase setup flow, including migrations, storage buckets, and RLS assumptions.
+- [x] Document environment variables, startup steps, seeded accounts, and expected local services.
+- [x] Document the repository layout and which app/service owns which responsibility.
+- [x] Document the Supabase setup flow, including migrations, storage buckets, and RLS assumptions.
 
 ### Verification Checklist
 
 - [ ] A clean checkout can install dependencies and boot the web app, mobile app, and API without manual guesswork.
 - [ ] `GET /api/health` and `GET /api/ready` return success in a configured development environment.
 - [ ] Supabase migrations apply cleanly and seed data appears as expected.
-- [ ] JWT validation rejects invalid tokens and role guards return the correct unauthorized or forbidden responses.
-- [ ] Storage rules reject unsupported file types and files over the configured size limit.
+- [x] JWT validation rejects invalid tokens and role guards return the correct unauthorized or forbidden responses.
+- [x] Storage rules reject unsupported file types and files over the configured size limit.
 - [ ] CI passes the baseline web, API, and mobile checks.
 
 ### Notes / Update Log
 
-- Date:
-- Completed:
-- Deviations:
-- Blockers:
-- Carryover:
+- Date: `2026-03-28`
+- Completed: scaffolded the monorepo layout; added the Supabase Phase 0 migration and hosted-project seed script; built the Flask API foundation with health/readiness endpoints, auth middleware, role guards, validation helpers, and storage validation; built the React web shell with routing, protected routes, design tokens, Leaflet wrapper, and placeholder pages; built the Flutter mobile shell with Riverpod, Dio, role-aware navigation, file-backed session persistence, service wrappers, and offline queue scaffolding; added CI plus setup documentation in `README.md`.
+- Deviations: the mobile shell uses placeholder location and offline transport wrappers instead of plugin-backed `flutter_map`, `sqflite`, and `nearby_connections` integrations because this Windows host cannot enable Flutter plugin symlink support.
+- Blockers: no hosted Supabase project credentials were configured in this workspace, so migration application, realtime enablement verification, seed execution against a live project, and a real `GET /api/ready` success check were not run here; GitHub Actions could not be observed remotely from the local workspace.
+- Carryover: finish the `flutter_map` wrapper and plugin-backed mobile foundations on a host with Flutter plugin symlink support, apply the Phase 0 SQL migration to the hosted Supabase project, run the seed bootstrap against that project, verify the readiness endpoint against real environment variables, and confirm the GitHub Actions workflow passes after push.
 
 ### Exit Criteria
 

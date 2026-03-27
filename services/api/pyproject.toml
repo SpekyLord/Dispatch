@@ -1,0 +1,42 @@
+[project]
+name = "dispatch-api"
+version = "0.1.0"
+description = "Flask API foundation for the Dispatch emergency coordination platform."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "flask>=3.1.2,<4.0.0",
+  "flask-cors>=6.0.1,<7.0.0",
+  "httpx>=0.28.1,<0.29.0",
+  "pydantic>=2.11.9,<3.0.0",
+  "pydantic-settings>=2.11.0,<3.0.0",
+  "python-dotenv>=1.1.1,<2.0.0"
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.2,<9.0.0",
+  "ruff>=0.13.1,<0.14.0"
+]
+
+[project.scripts]
+dispatch-api = "dispatch_api.__main__:main"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"

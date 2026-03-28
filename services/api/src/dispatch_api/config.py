@@ -18,19 +18,17 @@ class Settings(BaseSettings):
     dispatch_env: Literal["development", "test", "production"] = "development"
     api_host: str = "127.0.0.1"
     api_port: int = 5000
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: str = Field(default="http://localhost:5173")
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
     supabase_service_role_key: str | None = None
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, value: str | list[str]) -> list[str]:
-        if isinstance(value, list):
-            return value
-        if not value:
+    @computed_field  # type: ignore[misc]
+    @property
+    def cors_origins_list(self) -> list[str]:
+        if not self.cors_origins:
             return []
-        return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @computed_field  # type: ignore[misc]
     @property

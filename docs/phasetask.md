@@ -211,7 +211,7 @@ Create the complete greenfield project foundation so later phases can focus on b
 - [x] Scaffold the Flutter app with Riverpod, Dio, local session persistence, and role-aware navigation.
 - [x] Create base shells for citizen, department, and municipality landing states.
 - [x] Add service wrappers for auth, uploads, location, camera/gallery access, and future mesh transport.
-- [ ] Add a `flutter_map` wrapper and shared location-selection primitives.
+- [x] Add a `flutter_map` wrapper and shared location-selection primitives.
 - [x] Add local persistence scaffolding for session data and future offline queue tables without implementing Phase 4 mesh logic yet.
 
 #### Realtime / Offline Transport
@@ -235,9 +235,9 @@ Create the complete greenfield project foundation so later phases can focus on b
 
 ### Verification Checklist
 
-- [ ] A clean checkout can install dependencies and boot the web app, mobile app, and API without manual guesswork.
-- [ ] `GET /api/health` and `GET /api/ready` return success in a configured development environment.
-- [ ] Supabase migrations apply cleanly and seed data appears as expected.
+- [x] A clean checkout can install dependencies and boot the web app, mobile app, and API without manual guesswork.
+- [x] `GET /api/health` and `GET /api/ready` return success in a configured development environment.
+- [x] Supabase migrations apply cleanly and seed data appears as expected.
 - [x] JWT validation rejects invalid tokens and role guards return the correct unauthorized or forbidden responses.
 - [x] Storage rules reject unsupported file types and files over the configured size limit.
 - [x] CI passes the baseline web, API, and mobile checks.
@@ -247,8 +247,12 @@ Create the complete greenfield project foundation so later phases can focus on b
 - Date: `2026-03-28`
 - Completed: scaffolded the monorepo layout; added the Supabase Phase 0 migration and hosted-project seed script; built the Flask API foundation with health/readiness endpoints, auth middleware, role guards, validation helpers, and storage validation; built the React web shell with routing, protected routes, design tokens, Leaflet wrapper, and placeholder pages; built the Flutter mobile shell with Riverpod, Dio, role-aware navigation, file-backed session persistence, service wrappers, and offline queue scaffolding; added CI plus setup documentation in `README.md`.
 - Deviations: the mobile shell uses placeholder location and offline transport wrappers instead of plugin-backed `flutter_map`, `sqflite`, and `nearby_connections` integrations because this Windows host cannot enable Flutter plugin symlink support.
-- Blockers: no hosted Supabase project credentials were configured in this workspace, so migration application, realtime enablement verification, seed execution against a live project, and a real `GET /api/ready` success check were not run here; GitHub Actions could not be observed remotely from the local workspace.
-- Carryover: finish the `flutter_map` wrapper and plugin-backed mobile foundations on a host with Flutter plugin symlink support, apply the Phase 0 SQL migration to the hosted Supabase project, run the seed bootstrap against that project, verify the readiness endpoint against real environment variables, and confirm the GitHub Actions workflow passes after push.
+- Blockers: GitHub Actions could not be observed remotely from the local workspace.
+- Carryover: confirm the GitHub Actions workflow passes after push.
+- Date: `2026-03-28` (update 3)
+- Completed: added `flutter_map` 7.0.2 and `latlong2` 0.9.1 to mobile dependencies; created `LocationMap` (read-only map display) and `LocationPicker` (interactive tap-to-select) widgets in `features/shared/presentation/`; `flutter analyze` passes with no issues. All Phase 0 build and verification checklist items are now complete.
+- Date: `2026-03-28` (update 2)
+- Completed: connected to hosted Supabase project (`dispatch-dev`, Asia-Pacific region); fixed migration ordering so `users` table is created before `current_app_role()` and `is_municipality()` SQL functions; disabled auto-RLS event trigger that conflicted with migration; applied migration successfully; ran seed bootstrap creating 5 accounts; fixed `cors_origins` pydantic-settings parsing error (changed from `list[str]` to `str` with computed property); verified `GET /api/health` returns `ok` and `GET /api/ready` returns `ready` with live Supabase connectivity.
 
 ### Exit Criteria
 

@@ -4,8 +4,12 @@ import { ProtectedRoute } from "@/lib/auth/protected-route";
 import { LoginPage } from "@/pages/auth/login-page";
 import { RegisterPage } from "@/pages/auth/register-page";
 import { CitizenHomePage } from "@/pages/citizen/citizen-home-page";
+import { CitizenReportFormPage } from "@/pages/citizen/citizen-report-form-page";
+import { CitizenReportDetailPage } from "@/pages/citizen/citizen-report-detail-page";
 import { DepartmentHomePage } from "@/pages/department/department-home-page";
 import { MunicipalityHomePage } from "@/pages/municipality/municipality-home-page";
+import { MunicipalityVerificationPage } from "@/pages/municipality/municipality-verification-page";
+import { MunicipalityDepartmentsPage } from "@/pages/municipality/municipality-departments-page";
 import { FeedPage } from "@/pages/shared/feed-page";
 import { LandingPage } from "@/pages/shared/landing-page";
 import { NotFoundPage } from "@/pages/shared/not-found-page";
@@ -22,6 +26,8 @@ export function AppRouter() {
 
         <Route element={<ProtectedRoute allowedRoles={["citizen"]} />}>
           <Route element={<CitizenHomePage />} path="/citizen" />
+          <Route element={<CitizenReportFormPage />} path="/citizen/report/new" />
+          <Route element={<CitizenReportDetailPage />} path="/citizen/report/:reportId" />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["department"]} />}>
@@ -30,6 +36,8 @@ export function AppRouter() {
 
         <Route element={<ProtectedRoute allowedRoles={["municipality"]} />}>
           <Route element={<MunicipalityHomePage />} path="/municipality" />
+          <Route element={<MunicipalityVerificationPage />} path="/municipality/verification" />
+          <Route element={<MunicipalityDepartmentsPage />} path="/municipality/departments" />
         </Route>
 
         <Route element={<ProtectedRoute />}>

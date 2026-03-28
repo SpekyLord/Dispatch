@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useSessionStore } from "@/lib/auth/session-store";
+import { apiRequest } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 type AppShellProps = {
@@ -11,15 +12,46 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-const navItems = [
-  { to: "/", label: "Overview" },
+const roleNavItems: Record<string, { to: string; label: string }[]> = {
+  citizen: [
+    { to: "/citizen", label: "My Reports" },
+    { to: "/feed", label: "Feed" },
+    { to: "/profile", label: "Profile" },
+  ],
+  department: [
+    { to: "/department", label: "Dashboard" },
+    { to: "/feed", label: "Feed" },
+    { to: "/profile", label: "Profile" },
+  ],
+  municipality: [
+    { to: "/municipality", label: "Overview" },
+    { to: "/municipality/verification", label: "Verification" },
+    { to: "/municipality/departments", label: "Departments" },
+    { to: "/profile", label: "Profile" },
+  ],
+};
+
+const defaultNavItems = [
+  { to: "/", label: "Home" },
   { to: "/feed", label: "Feed" },
-  { to: "/profile", label: "Profile" },
 ];
 
 export function AppShell({ title, subtitle, children }: AppShellProps) {
-  const signOut = useSessionStore((state) => state.signOut);
-  const user = useSessionStore((state) => state.user);
+  const navigate = useNavigate();
+  const signOut = useSessionStore((s) => s.signOut);
+  const user = useSessionStore((s) => s.user);
+
+  const navItems = user ? (roleNavItems[user.role] ?? defaultNavItems) : defaultNavItems;
+
+  async function handleSignOut() {
+    try {
+      await apiRequest("/api/auth/logout", { method: "POST" });
+    } catch {
+      // sign out locally even if API call fails
+    }
+    signOut();
+    navigate("/");
+  }
 
   return (
     <div className="min-h-screen">
@@ -53,24 +85,21 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
                 <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
                   {user.role}
                 </span>
-                <Button onClick={signOut} variant="outline">
+                <Button onClick={handleSignOut} variant="outline">
                   Sign out
                 </Button>
               </>
             ) : (
-              <Button onClick={() => undefined} variant="ghost">
-                Phase 0 shell
-              </Button>
+              <Link to="/auth/login">
+                <Button variant="ghost">Sign in</Button>
+              </Link>
             )}
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary">
-            Phase 0 foundation
-          </p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-4xl font-semibold tracking-tight">{title}</h1>
         </div>
         {children}
       </main>

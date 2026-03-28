@@ -7,7 +7,7 @@ import { LandingPage } from "@/pages/shared/landing-page";
 
 describe("Dispatch web shell", () => {
   beforeEach(() => {
-    useSessionStore.setState({ accessToken: null, user: null });
+    useSessionStore.setState({ accessToken: null, user: null, refreshToken: null, department: null });
   });
 
   it("renders the landing page shell", () => {

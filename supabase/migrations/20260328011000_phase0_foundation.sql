@@ -44,6 +44,18 @@ begin
 end;
 $$;
 
+create table if not exists public.users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  role public.user_role not null,
+  full_name text not null,
+  phone text,
+  avatar_url text,
+  is_verified boolean not null default false,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create or replace function public.current_app_role()
 returns public.user_role
 language sql
@@ -66,18 +78,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() = 'municipality'::public.user_role, false);
 $$;
-
-create table if not exists public.users (
-  id uuid primary key references auth.users(id) on delete cascade,
-  email text not null unique,
-  role public.user_role not null,
-  full_name text not null,
-  phone text,
-  avatar_url text,
-  is_verified boolean not null default false,
-  created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
-);
 
 create table if not exists public.departments (
   id uuid primary key default gen_random_uuid(),

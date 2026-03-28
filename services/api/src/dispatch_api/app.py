@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.config["JSON_SORT_KEYS"] = False
     app.config["SETTINGS"] = app_settings
 
-    CORS(app, resources={r"/api/*": {"origins": app_settings.cors_origins}})
+    CORS(app, resources={r"/api/*": {"origins": app_settings.cors_origins_list}})
 
     app.extensions["supabase_client"] = SupabaseClient(app_settings)
     app.extensions["storage_service"] = StorageService(app_settings)

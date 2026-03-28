@@ -85,10 +85,10 @@ class AuthService {
     String? fullName,
     String? phone,
   }) async {
-    final response = await _dio.put('/api/users/profile', data: {
-      ?'full_name': fullName,
-      ?'phone': phone,
-    });
+    final body = <String, dynamic>{};
+    if (fullName != null) body['full_name'] = fullName;
+    if (phone != null) body['phone'] = phone;
+    final response = await _dio.put('/api/users/profile', data: body);
     return response.data as Map<String, dynamic>;
   }
 
@@ -101,14 +101,15 @@ class AuthService {
     double? latitude,
     double? longitude,
   }) async {
-    final response = await _dio.post('/api/reports', data: {
+    final body = <String, dynamic>{
       'description': description,
       'category': category,
       'severity': severity,
-      ?'address': address,
-      ?'latitude': latitude,
-      ?'longitude': longitude,
-    });
+    };
+    if (address != null) body['address'] = address;
+    if (latitude != null) body['latitude'] = latitude;
+    if (longitude != null) body['longitude'] = longitude;
+    final response = await _dio.post('/api/reports', data: body);
     return response.data as Map<String, dynamic>;
   }
 

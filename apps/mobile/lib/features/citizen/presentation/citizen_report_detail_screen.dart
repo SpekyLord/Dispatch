@@ -1,6 +1,7 @@
 // Report detail — full report view with photo gallery and status timeline.
 
 import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/features/shared/presentation/location_map.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -117,6 +118,17 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
                         'Severity: ${_report!['severity'] ?? 'medium'}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black45),
                       ),
+                      // Location map
+                      if (_report!['latitude'] != null && _report!['longitude'] != null) ...[
+                        const SizedBox(height: 16),
+                        Text('Location', style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 8),
+                        LocationMap(
+                          latitude: (_report!['latitude'] as num).toDouble(),
+                          longitude: (_report!['longitude'] as num).toDouble(),
+                          zoom: 15.0,
+                        ),
+                      ],
                       // Images
                       if ((_report!['image_urls'] as List?)?.isNotEmpty == true) ...[
                         const SizedBox(height: 16),

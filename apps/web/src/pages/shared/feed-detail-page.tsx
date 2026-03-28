@@ -1,11 +1,13 @@
 // Feed post detail — full view of a single department announcement.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Post = {
   id: string;
@@ -28,16 +30,49 @@ const categoryStyles: Record<string, { bg: string; text: string }> = {
 
 export function FeedDetailPage() {
   const { postId } = useParams<{ postId: string }>();
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!postId) return;
-    apiRequest<{ post: Post }>(`/api/feed/${postId}`)
+  const fetchPost = useCallback((showLoader = true) => {
+    if (!postId) {
+      return Promise.resolve();
+    }
+    if (showLoader) {
+      setLoading(true);
+    }
+
+    return apiRequest<{ post: Post }>(`/api/feed/${postId}`)
       .then((res) => setPost(res.post))
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
   }, [postId]);
+
+  useEffect(() => {
+    if (!postId) return;
+    queueMicrotask(() => {
+      void fetchPost();
+    });
+  }, [postId, fetchPost]);
+
+  useEffect(() => {
+    if (!postId) {
+      return;
+    }
+
+    const subscription = subscribeToTable(
+      "posts",
+      () => {
+        void fetchPost(false);
+      },
+      { accessToken, filter: `id=eq.${postId}` },
+    );
+    return () => subscription.unsubscribe();
+  }, [accessToken, postId, fetchPost]);
 
   if (loading) {
     return (

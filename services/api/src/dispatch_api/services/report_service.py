@@ -165,6 +165,27 @@ class ReportService:
 
         return visible_reports
 
+    def list_municipality_escalated_reports(self) -> list[dict[str, Any]]:
+        self.scan_pending_timeouts()
+
+        responses = self._latest_responses_by_report()
+        escalated_reports: list[dict[str, Any]] = []
+        for report in self._all_reports():
+            if not report.get("is_escalated") or report.get("status") == "resolved":
+                continue
+
+            escalated_reports.append(
+                {
+                    **report,
+                    "response_summary": self._build_response_summary(
+                        report=report,
+                        latest_responses=responses.get(report["id"], {}),
+                    ),
+                }
+            )
+
+        return escalated_reports
+
     def get_department_response_roster(
         self,
         *,
@@ -574,6 +595,27 @@ class ReportService:
         department: dict[str, Any],
         latest_responses: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
+        routing = CATEGORY_ROUTING.get(report.get("category", "other"), CATEGORY_ROUTING["other"])
+        visible_via = "primary"
+        if report.get("is_escalated") and department.get("type") in routing["escalation"]:
+            visible_via = "escalation"
+
+        return {
+            **report,
+            "visible_via": visible_via,
+            "current_response": latest_responses.get(department["id"]),
+            "response_summary": self._build_response_summary(
+                report=report,
+                latest_responses=latest_responses,
+            ),
+        }
+
+    def _build_response_summary(
+        self,
+        *,
+        report: dict[str, Any],
+        latest_responses: dict[str, dict[str, Any]],
+    ) -> dict[str, int]:
         summary = {
             "accepted": 0,
             "declined": 0,
@@ -585,18 +627,7 @@ class ReportService:
             action = response.get("action")
             if action in {"accepted", "declined"}:
                 summary[action] += 1
-
-        routing = CATEGORY_ROUTING.get(report.get("category", "other"), CATEGORY_ROUTING["other"])
-        visible_via = "primary"
-        if report.get("is_escalated") and department.get("type") in routing["escalation"]:
-            visible_via = "escalation"
-
-        return {
-            **report,
-            "visible_via": visible_via,
-            "current_response": latest_responses.get(department["id"]),
-            "response_summary": summary,
-        }
+        return summary
 
     def _ensure_report_is_open(self, report: dict[str, Any]) -> None:
         if report.get("status") == "resolved":

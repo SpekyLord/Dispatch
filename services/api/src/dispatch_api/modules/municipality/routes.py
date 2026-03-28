@@ -9,8 +9,14 @@ from dispatch_api.auth import get_current_user, require_auth, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.municipality import blueprint
 from dispatch_api.services.notification_service import NotificationService
+from dispatch_api.services.report_service import ReportService
 
 VALID_VERIFICATION_ACTIONS = {"approved", "rejected"}
+
+
+def _report_service() -> ReportService:
+    client = current_app.extensions["supabase_client"]
+    return ReportService(client, NotificationService(client))
 
 
 @blueprint.get("/departments")
@@ -43,6 +49,14 @@ def list_pending_departments():
         use_service_role=True,
     )
     return jsonify({"departments": rows})
+
+
+@blueprint.get("/reports/escalated")
+@require_auth()
+@require_role("municipality")
+def list_escalated_reports():
+    reports = _report_service().list_municipality_escalated_reports()
+    return jsonify({"reports": reports})
 
 
 @blueprint.put("/departments/<dept_id>/verify")

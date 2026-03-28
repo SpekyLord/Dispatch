@@ -37,6 +37,7 @@ const roleNavItems: Record<string, NavItem[]> = {
   ],
   municipality: [
     { to: "/municipality", label: "Overview", icon: "dashboard" },
+    { to: "/municipality/reports/escalated", label: "Escalations", icon: "crisis_alert" },
     { to: "/municipality/verification", label: "Verification", icon: "verified_user" },
     { to: "/municipality/departments", label: "Departments", icon: "domain" },
     { to: "/notifications", label: "Notifications", icon: "notifications" },

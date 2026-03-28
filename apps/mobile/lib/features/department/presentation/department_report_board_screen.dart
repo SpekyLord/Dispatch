@@ -1,5 +1,6 @@
-// Department incident board — lists routed reports with status/category filters.
+import 'dart:async';
 
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_detail_screen.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ class DepartmentReportBoardScreen extends ConsumerStatefulWidget {
 
 class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBoardScreen> {
   List<Map<String, dynamic>> _reports = [];
+  List<RealtimeSubscriptionHandle> _subscriptions = [];
   bool _loading = true;
   String? _statusFilter;
   String? _categoryFilter;
@@ -22,23 +24,62 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
   void initState() {
     super.initState();
     _fetchReports();
+    _subscribeToRealtime();
   }
 
-  Future<void> _fetchReports() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.dispose());
+    }
+    super.dispose();
+  }
+
+  void _subscribeToRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    _subscriptions = [
+      realtime.subscribeToTable(
+        table: 'incident_reports',
+        onChange: () {
+          if (mounted) {
+            _fetchReports(showLoader: false);
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'department_responses',
+        onChange: () {
+          if (mounted) {
+            _fetchReports(showLoader: false);
+          }
+        },
+      ),
+    ];
+  }
+
+  Future<void> _fetchReports({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() => _loading = true);
+    }
     try {
       final authService = ref.read(authServiceProvider);
       final reports = await authService.getDepartmentReports(
         status: _statusFilter,
         category: _categoryFilter,
       );
-      if (mounted) setState(() { _reports = reports; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _reports = reports;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && showLoader) {
+        setState(() => _loading = false);
+      }
     }
   }
 
-  // Status badge colour
   Color _statusColor(String status) {
     return switch (status) {
       'pending' => Colors.orange,
@@ -49,7 +90,6 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
     };
   }
 
-  // Severity badge colour
   Color _severityColor(String severity) {
     return switch (severity) {
       'low' => Colors.green,
@@ -66,7 +106,6 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
       appBar: AppBar(
         title: const Text('Incident Board'),
         actions: [
-          // Status filter
           PopupMenuButton<String>(
             icon: const Icon(Icons.filter_list),
             tooltip: 'Filter by status',
@@ -89,7 +128,7 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
           : _reports.isEmpty
               ? const Center(child: Text('No reports match the current filters.'))
               : RefreshIndicator(
-                  onRefresh: _fetchReports,
+                  onRefresh: () => _fetchReports(),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _reports.length,
@@ -99,7 +138,8 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
                       final category = (report['category'] as String? ?? '').replaceAll('_', ' ');
                       final severity = report['severity'] as String? ?? 'medium';
                       final isEscalated = report['is_escalated'] == true;
-                      final ownAction = (report['current_response'] as Map<String, dynamic>?)?['action'] as String?;
+                      final ownAction =
+                          (report['current_response'] as Map<String, dynamic>?)?['action'] as String?;
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -107,10 +147,12 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
                           onTap: () async {
                             await Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => DepartmentReportDetailScreen(reportId: report['id'] as String),
+                                builder: (_) => DepartmentReportDetailScreen(
+                                  reportId: report['id'] as String,
+                                ),
                               ),
                             );
-                            _fetchReports();
+                            _fetchReports(showLoader: false);
                           },
                           title: Text(
                             (report['title'] as String?) ?? (report['description'] as String? ?? ''),
@@ -123,48 +165,75 @@ class _DepartmentReportBoardScreenState extends ConsumerState<DepartmentReportBo
                               spacing: 6,
                               runSpacing: 4,
                               children: [
-                                // Category chip
                                 Chip(
                                   label: Text(category, style: const TextStyle(fontSize: 10)),
                                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: VisualDensity.compact,
                                 ),
-                                // Status badge
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: _statusColor(status).withAlpha(30),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: Text(status, style: TextStyle(fontSize: 10, color: _statusColor(status), fontWeight: FontWeight.w600)),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _statusColor(status),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
-                                // Severity badge
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: _severityColor(severity).withAlpha(30),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: Text(severity, style: TextStyle(fontSize: 10, color: _severityColor(severity), fontWeight: FontWeight.w600)),
+                                  child: Text(
+                                    severity,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _severityColor(severity),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
-                                // Escalation badge
                                 if (isEscalated)
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
-                                    child: Text('ESCALATED', style: TextStyle(fontSize: 9, color: Colors.red.shade800, fontWeight: FontWeight.w700)),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'ESCALATED',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.red.shade800,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
-                                // Own action badge
                                 if (ownAction != null)
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: ownAction == 'accepted' ? Colors.green.shade50 : Colors.red.shade50,
+                                      color: ownAction == 'accepted'
+                                          ? Colors.green.shade50
+                                          : Colors.red.shade50,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
                                       'You $ownAction',
-                                      style: TextStyle(fontSize: 9, color: ownAction == 'accepted' ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: ownAction == 'accepted'
+                                            ? Colors.green.shade800
+                                            : Colors.red.shade800,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                               ],

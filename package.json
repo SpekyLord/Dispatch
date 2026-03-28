@@ -11,6 +11,7 @@
     "build:web": "corepack pnpm --filter @dispatch/web build",
     "lint:web": "corepack pnpm --filter @dispatch/web lint",
     "test:web": "corepack pnpm --filter @dispatch/web test",
+    "test:web:e2e": "corepack pnpm --filter @dispatch/web test:e2e",
     "check:web": "corepack pnpm --filter @dispatch/web check"
   }
 }

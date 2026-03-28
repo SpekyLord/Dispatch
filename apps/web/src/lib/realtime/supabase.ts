@@ -2,6 +2,13 @@ import { createClient, type RealtimeChannel, type SupabaseClient } from "@supaba
 
 let realtimeClient: SupabaseClient | null = null;
 
+export type RealtimeTable =
+  | "incident_reports"
+  | "department_responses"
+  | "report_status_history"
+  | "notifications"
+  | "posts";
+
 export function getRealtimeClient() {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -21,9 +28,21 @@ export function getRealtimeClient() {
   return realtimeClient;
 }
 
+function setRealtimeAuth(client: SupabaseClient, accessToken?: string | null) {
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const token = accessToken ?? anonKey;
+  if (token) {
+    client.realtime.setAuth(token);
+  }
+}
+
 export function subscribeToTable(
-  table: "incident_reports" | "department_responses" | "report_status_history" | "notifications" | "posts",
+  table: RealtimeTable,
   onChange: (payload: unknown) => void,
+  options?: {
+    accessToken?: string | null;
+    filter?: string;
+  },
 ) {
   const client = getRealtimeClient();
   if (!client) {
@@ -32,11 +51,27 @@ export function subscribeToTable(
     };
   }
 
+  setRealtimeAuth(client, options?.accessToken);
+
+  const postgresConfig: {
+    event: "*";
+    schema: "public";
+    table: RealtimeTable;
+    filter?: string;
+  } = {
+    event: "*",
+    schema: "public",
+    table,
+  };
+  if (options?.filter) {
+    postgresConfig.filter = options.filter;
+  }
+
   const channel = client
-    .channel(`phase0:${table}`)
+    .channel(`phase2:${table}:${options?.filter ?? "all"}:${Math.random().toString(36).slice(2)}`)
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table },
+      postgresConfig,
       (payload) => {
         onChange(payload);
       },

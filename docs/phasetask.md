@@ -120,7 +120,7 @@
 
 - [x] Phase 0 - Foundation and project bootstrap
 - [x] Phase 1 - Auth, verification, and citizen reporting (all build items, tests, docs, and verification complete)
-- [ ] Phase 2 - Department operations, feed, notifications, and realtime routing
+- [x] Phase 2 - Department operations, feed, notifications, and realtime routing
 - [ ] Phase 3 - Analytics, assessments, timeline, and product polish
 - [ ] Phase 4 - Mobile mesh networking and offline-first sync
 - [ ] Phase 5 - Stretch features
@@ -436,10 +436,10 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 
 #### Database / Supabase
 
-- [ ] Finalize `department_responses` as an append-only response log keyed by report and department, with latest response determining the department's current state.
-- [ ] Add indexes that support report board queries by category, status, escalation state, and recency.
-- [ ] Finalize `posts` and `notifications` tables plus any indexes needed for reverse-chronological feed and unread notification queries.
-- [ ] Ensure realtime is enabled and configured for the tables used in department boards, citizen status updates, feed refresh, and notifications.
+- [x] Finalize `department_responses` as an append-only response log keyed by report and department, with latest response determining the department's current state.
+- [x] Add indexes that support report board queries by category, status, escalation state, and recency.
+- [x] Finalize `posts` and `notifications` tables plus any indexes needed for reverse-chronological feed and unread notification queries.
+- [x] Ensure realtime is enabled and configured for the tables used in department boards, citizen status updates, feed refresh, and notifications.
 
 #### Flask API
 
@@ -468,7 +468,7 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - [x] Build announcement/post creation for verified departments only.
 - [x] Build the public feed for citizens with filterable post categories and detail pages.
 - [x] Build an in-app notification center with unread state and mark-as-read actions.
-- [ ] Add a simple municipality unattended-incidents view focused on escalated emergencies only. Full analytics comes in Phase 3.
+- [x] Add a simple municipality unattended-incidents view focused on escalated emergencies only. Full analytics comes in Phase 3.
 
 #### Mobile App
 
@@ -477,23 +477,23 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - [x] Build mobile announcement creation for verified departments.
 - [x] Build mobile citizen feed browsing and feed detail views.
 - [x] Build mobile in-app notifications with unread counts.
-- [ ] Upgrade citizen report detail screens from refresh-based tracking to live updates while the app is active.
+- [x] Upgrade citizen report detail screens from refresh-based tracking to live updates while the app is active.
 
 #### Realtime / Offline Transport
 
-- [ ] Subscribe web and mobile clients to live report updates, department response changes, feed changes, and notifications.
-- [ ] Ensure citizen status views update within the PRD's realtime expectation once departments act on a report.
-- [ ] Ensure sibling departments see accept and decline events in near real time.
-- [ ] Keep all realtime handling online-only in this phase. Mesh delivery still belongs to Phase 4.
+- [x] Subscribe web and mobile clients to live report updates, department response changes, feed changes, and notifications.
+- [x] Ensure citizen status views update within the PRD's realtime expectation once departments act on a report.
+- [x] Ensure sibling departments see accept and decline events in near real time.
+- [x] Keep all realtime handling online-only in this phase. Mesh delivery still belongs to Phase 4.
 
 #### Tests
 
 - [x] Add unit tests for keyword categorization covering both English and Filipino trigger phrases from the PRD.
 - [x] Add API tests for routing visibility, accept flow, decline flow, multiple-accept flow, escalation by all-decline, and escalation by timeout.
 - [x] Add API tests that confirm department decline does not set `incident_reports.status = rejected`.
-- [ ] Add web tests for the department board, feed, and notifications center.
-- [ ] Add mobile tests for department report actions, citizen live status tracking, and notifications.
-- [ ] Add at least one end-to-end flow where a citizen submits a report, a relevant department accepts it, status changes to `responding`, and the citizen sees the updates.
+- [x] Add web tests for the department board, feed, and notifications center.
+- [x] Add mobile tests for department report actions, citizen live status tracking, and notifications.
+- [x] Add at least one end-to-end flow where a citizen submits a report, a relevant department accepts it, status changes to `responding`, and the citizen sees the updates.
 
 #### Docs
 
@@ -512,7 +512,7 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - [x] Only verified departments can create public posts.
 - [x] Citizens can browse the feed on web and mobile, but cannot comment or react.
 - [x] In-app notifications are created, displayed, and can be marked read.
-- [ ] Citizen report detail screens update live after department actions.
+- [x] Citizen report detail screens update live after department actions.
 
 ### Notes / Update Log
 
@@ -525,6 +525,11 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - Completed: built all Phase 2 web pages (department report board with status/category filters, report detail with accept/decline/status-progression and response roster, post creation form, feed list/detail with category filter, notification center with mark-read); built all Phase 2 mobile screens (department report board, report detail with accept/decline dialogs and status buttons, post creation, citizen feed list/detail, notifications with unread counts); updated web router with new routes, updated app-shell navigation for all roles to include incident board and notifications; extended mobile auth_service with 10 new API methods for department reports, posts, feed, and notifications; updated department home screens (web/mobile) to link to new features; added feed/notification shortcuts to citizen home screen.
 - Deviations: municipality unattended-incidents view deferred (escalated reports are visible via notifications to municipality users for now). Realtime client subscriptions not yet wired (manual refresh used). Live citizen report detail updates not yet implemented (refresh-based). Department profile management reuses the existing Phase 1 rejected-view edit form on the department home page rather than a separate dedicated page.
 - Carryover: municipality unattended-incidents view, realtime client subscriptions for web and mobile, live citizen report detail updates, web/mobile tests for Phase 2 screens, end-to-end smoke test.
+- Date: `2026-03-29` (completion update)
+- Completed: added the Phase 2 Supabase follow-up migration for realtime-friendly RLS and escalated/feed indexes; added the municipality escalated-incidents API and web screen; wired web and mobile realtime subscriptions for incident boards, report detail views, feed pages, and notifications with refetch-on-event behavior; fixed the citizen status-history field mismatch so both clients consume the live API payload correctly; added Phase 2 web RTL coverage, mobile `flutter_test` coverage, and a Playwright browser smoke covering citizen submit -> department accept -> responding -> citizen detail verification.
+- Deviations: the Playwright smoke uses a stateful mocked API with realtime disabled at the browser harness layer, while live update behavior is verified separately through the web/mobile realtime callback tests; municipality still has the intentionally narrow escalations-only view from Phase 2, not the broader Phase 3 analytics dashboard.
+- Blockers: none for Phase 2 exit criteria in this workspace.
+- Carryover: move to Phase 3 scope for municipality-wide analytics, assessment workflows, bilingual UI, and broader dashboard/reporting polish.
 
 ### Exit Criteria
 

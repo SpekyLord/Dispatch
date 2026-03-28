@@ -7,6 +7,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type DeptReport = {
   id: string;
@@ -49,25 +51,55 @@ const severityColors: Record<string, string> = {
 };
 
 export function DepartmentReportsPage() {
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [reports, setReports] = useState<DeptReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
-  function fetchReports() {
-    setLoading(true);
+  function fetchReports(showLoader = true) {
+    if (showLoader) {
+      setLoading(true);
+    }
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
     if (categoryFilter) params.set("category", categoryFilter);
     const qs = params.toString();
-    apiRequest<{ reports: DeptReport[] }>(`/api/departments/reports${qs ? `?${qs}` : ""}`)
+    return apiRequest<{ reports: DeptReport[] }>(`/api/departments/reports${qs ? `?${qs}` : ""}`)
       .then((res) => setReports(res.reports))
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchReports(); }, [statusFilter, categoryFilter]);
+
+  useEffect(() => {
+    const reportSubscription = subscribeToTable(
+      "incident_reports",
+      () => {
+        void fetchReports(false);
+      },
+      { accessToken },
+    );
+    const responseSubscription = subscribeToTable(
+      "department_responses",
+      () => {
+        void fetchReports(false);
+      },
+      { accessToken },
+    );
+
+    return () => {
+      reportSubscription.unsubscribe();
+      responseSubscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, statusFilter, categoryFilter]);
 
   return (
     <AppShell subtitle="Incident response" title="Incident Board">
@@ -98,7 +130,7 @@ export function DepartmentReportsPage() {
           <option value="structural">Structural</option>
           <option value="other">Other</option>
         </select>
-        <Button variant="ghost" onClick={fetchReports}>
+        <Button variant="ghost" onClick={() => { void fetchReports(); }}>
           <span className="material-symbols-outlined text-[16px] mr-1">refresh</span>
           Refresh
         </Button>

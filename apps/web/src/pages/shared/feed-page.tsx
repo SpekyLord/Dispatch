@@ -1,11 +1,13 @@
 // Public feed — lists department announcements with category filter and post detail view.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Post = {
   id: string;
@@ -28,20 +30,42 @@ const categoryStyles: Record<string, { bg: string; text: string; icon: string }>
 };
 
 export function FeedPage() {
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("");
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    setLoading(true);
+  const fetchPosts = useCallback((showLoader = true) => {
+    if (showLoader) {
+      setLoading(true);
+    }
     const qs = categoryFilter ? `?category=${categoryFilter}` : "";
-    apiRequest<{ posts: Post[] }>(`/api/feed${qs}`)
+    return apiRequest<{ posts: Post[] }>(`/api/feed${qs}`)
       .then((res) => setPosts(res.posts))
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
   }, [categoryFilter]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchPosts();
+    });
+  }, [fetchPosts]);
+
+  useEffect(() => {
+    const subscription = subscribeToTable(
+      "posts",
+      () => {
+        void fetchPosts(false);
+      },
+      { accessToken },
+    );
+    return () => subscription.unsubscribe();
+  }, [accessToken, fetchPosts]);
 
   return (
     <AppShell subtitle="Public information" title="Community Feed">

@@ -1,11 +1,13 @@
-// Department report detail — view report info, accept/decline, status progression, response roster.
+import 'dart:async';
 
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class DepartmentReportDetailScreen extends ConsumerStatefulWidget {
   const DepartmentReportDetailScreen({required this.reportId, super.key});
+
   final String reportId;
 
   @override
@@ -16,6 +18,7 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
   Map<String, dynamic>? _report;
   List<Map<String, dynamic>> _history = [];
   List<Map<String, dynamic>> _roster = [];
+  List<RealtimeSubscriptionHandle> _subscriptions = [];
   bool _loading = true;
   bool _actionLoading = false;
   String? _error;
@@ -24,13 +27,60 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
   void initState() {
     super.initState();
     _fetchAll();
+    _subscribeToRealtime();
   }
 
-  Future<void> _fetchAll() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.dispose());
+    }
+    super.dispose();
+  }
+
+  void _subscribeToRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    _subscriptions = [
+      realtime.subscribeToTable(
+        table: 'incident_reports',
+        eqColumn: 'id',
+        eqValue: widget.reportId,
+        onChange: () {
+          if (mounted) {
+            _fetchAll(showLoader: false);
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'department_responses',
+        eqColumn: 'report_id',
+        eqValue: widget.reportId,
+        onChange: () {
+          if (mounted) {
+            _fetchAll(showLoader: false);
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'report_status_history',
+        eqColumn: 'report_id',
+        eqValue: widget.reportId,
+        onChange: () {
+          if (mounted) {
+            _fetchAll(showLoader: false);
+          }
+        },
+      ),
+    ];
+  }
+
+  Future<void> _fetchAll({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() => _loading = true);
+    }
+
     try {
       final auth = ref.read(authServiceProvider);
-      // Fetch report detail and response roster in parallel
       final results = await Future.wait([
         auth.getReport(widget.reportId),
         auth.getReportResponses(widget.reportId),
@@ -48,16 +98,23 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
-  // Accept report
   Future<void> _acceptReport() async {
-    setState(() { _actionLoading = true; _error = null; });
+    setState(() {
+      _actionLoading = true;
+      _error = null;
+    });
     try {
       await ref.read(authServiceProvider).acceptReport(widget.reportId);
-      await _fetchAll();
+      await _fetchAll(showLoader: false);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -65,7 +122,6 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     }
   }
 
-  // Decline with reason dialog
   Future<void> _showDeclineDialog() async {
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
@@ -74,7 +130,10 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
         title: const Text('Decline Report'),
         content: TextField(
           controller: reasonCtrl,
-          decoration: const InputDecoration(labelText: 'Reason (required)', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'Reason (required)',
+            border: OutlineInputBorder(),
+          ),
           maxLines: 3,
         ),
         actions: [
@@ -88,10 +147,16 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     );
     if (reason == null || reason.isEmpty) return;
 
-    setState(() { _actionLoading = true; _error = null; });
+    setState(() {
+      _actionLoading = true;
+      _error = null;
+    });
     try {
-      await ref.read(authServiceProvider).declineReport(widget.reportId, declineReason: reason);
-      await _fetchAll();
+      await ref.read(authServiceProvider).declineReport(
+            widget.reportId,
+            declineReason: reason,
+          );
+      await _fetchAll(showLoader: false);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -99,12 +164,17 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     }
   }
 
-  // Update status (responding / resolved)
   Future<void> _updateStatus(String newStatus) async {
-    setState(() { _actionLoading = true; _error = null; });
+    setState(() {
+      _actionLoading = true;
+      _error = null;
+    });
     try {
-      await ref.read(authServiceProvider).updateReportStatus(widget.reportId, status: newStatus);
-      await _fetchAll();
+      await ref.read(authServiceProvider).updateReportStatus(
+            widget.reportId,
+            status: newStatus,
+          );
+      await _fetchAll(showLoader: false);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -131,7 +201,7 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
           : _report == null
               ? const Center(child: Text('Report not found.'))
               : RefreshIndicator(
-                  onRefresh: _fetchAll,
+                  onRefresh: () => _fetchAll(),
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
@@ -139,54 +209,69 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                         Container(
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                          child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                          ),
                         ),
-
-                      // Status + severity header
                       _buildHeader(),
                       const SizedBox(height: 16),
-
-                      // Description
-                      Text(_report!['title'] as String? ?? '', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(
+                        _report!['title'] as String? ?? '',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                       const SizedBox(height: 8),
-                      Text(_report!['description'] as String? ?? '', style: const TextStyle(fontSize: 14, height: 1.5)),
+                      Text(
+                        _report!['description'] as String? ?? '',
+                        style: const TextStyle(fontSize: 14, height: 1.5),
+                      ),
                       const SizedBox(height: 8),
                       if (_report!['address'] != null) ...[
-                        Row(children: [
-                          const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Expanded(child: Text(_report!['address'] as String, style: const TextStyle(fontSize: 12, color: Colors.grey))),
-                        ]),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _report!['address'] as String,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 16),
                       ],
-
-                      // Images
-                      if (_report!['image_urls'] != null && (_report!['image_urls'] as List).isNotEmpty) ...[
+                      if (_report!['image_urls'] != null &&
+                          (_report!['image_urls'] as List).isNotEmpty) ...[
                         SizedBox(
                           height: 140,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: (_report!['image_urls'] as List).length,
-                            separatorBuilder: (context2, index2) => const SizedBox(width: 8),
+                            separatorBuilder: (context, index) => const SizedBox(width: 8),
                             itemBuilder: (_, i) => ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network((_report!['image_urls'] as List)[i] as String, height: 140, fit: BoxFit.cover),
+                              child: Image.network(
+                                (_report!['image_urls'] as List)[i] as String,
+                                height: 140,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
                       ],
-
-                      // Action buttons
                       _buildActions(),
                       const SizedBox(height: 24),
-
-                      // Response roster
                       _buildRoster(),
                       const SizedBox(height: 24),
-
-                      // Status history
                       _buildHistory(),
                     ],
                   ),
@@ -204,13 +289,39 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       spacing: 8,
       runSpacing: 6,
       children: [
-        Chip(label: Text(status.toUpperCase(), style: TextStyle(fontSize: 10, color: _statusColor(status), fontWeight: FontWeight.w700)),
-          backgroundColor: _statusColor(status).withAlpha(25), visualDensity: VisualDensity.compact),
-        Chip(label: Text(category, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
-        Chip(label: Text(severity, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+        Chip(
+          label: Text(
+            status.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              color: _statusColor(status),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          backgroundColor: _statusColor(status).withAlpha(25),
+          visualDensity: VisualDensity.compact,
+        ),
+        Chip(
+          label: Text(category, style: const TextStyle(fontSize: 10)),
+          visualDensity: VisualDensity.compact,
+        ),
+        Chip(
+          label: Text(severity, style: const TextStyle(fontSize: 10)),
+          visualDensity: VisualDensity.compact,
+        ),
         if (isEscalated)
-          Chip(label: Text('ESCALATED', style: TextStyle(fontSize: 9, color: Colors.red.shade800, fontWeight: FontWeight.w700)),
-            backgroundColor: Colors.red.shade50, visualDensity: VisualDensity.compact),
+          Chip(
+            label: Text(
+              'ESCALATED',
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.red.shade800,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            backgroundColor: Colors.red.shade50,
+            visualDensity: VisualDensity.compact,
+          ),
       ],
     );
   }
@@ -219,14 +330,13 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     final status = _report!['status'] as String? ?? 'pending';
     if (status == 'resolved') return const SizedBox.shrink();
 
-    // Check if this department has already responded
     final ownResponse = _roster.cast<Map<String, dynamic>?>().firstWhere(
-      (r) => r?['is_requesting_department'] == true, orElse: () => null,
-    );
+          (r) => r?['is_requesting_department'] == true,
+          orElse: () => null,
+        );
     final ownState = ownResponse?['state'] as String?;
 
     if (ownState == null || ownState == 'pending') {
-      // Show accept/decline
       return Row(
         children: [
           Expanded(
@@ -249,11 +359,17 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     }
 
     if (ownState == 'accepted') {
-      // Show status progression buttons
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('You accepted this report', style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+          Text(
+            'You accepted this report',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.green.shade700,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           if (status == 'accepted')
             FilledButton.icon(
@@ -271,15 +387,24 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       );
     }
 
-    // Already declined
-    return Text('You declined this report.', style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontStyle: FontStyle.italic));
+    return Text(
+      'You declined this report.',
+      style: TextStyle(
+        fontSize: 12,
+        color: Colors.red.shade700,
+        fontStyle: FontStyle.italic,
+      ),
+    );
   }
 
   Widget _buildRoster() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Department Responses', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(
+          'Department Responses',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 8),
         if (_roster.isEmpty)
           const Text('No departments notified yet.', style: TextStyle(fontSize: 13, color: Colors.grey)),
@@ -291,22 +416,50 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
             child: ListTile(
               dense: true,
               title: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: r['department_name'] as String? ?? 'Unknown'),
-                  if (isYou) const TextSpan(text: ' (you)', style: TextStyle(color: Color(0xFFD97757), fontSize: 11)),
-                ]),
+                TextSpan(
+                  children: [
+                    TextSpan(text: r['department_name'] as String? ?? 'Unknown'),
+                    if (isYou)
+                      const TextSpan(
+                        text: ' (you)',
+                        style: TextStyle(color: Color(0xFFD97757), fontSize: 11),
+                      ),
+                  ],
+                ),
               ),
               subtitle: r['decline_reason'] != null
-                  ? Text('Reason: ${r['decline_reason']}', style: TextStyle(fontSize: 11, color: Colors.red.shade700))
-                  : Text(r['department_type'] as String? ?? '', style: const TextStyle(fontSize: 11)),
+                  ? Text(
+                      'Reason: ${r['decline_reason']}',
+                      style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                    )
+                  : Text(
+                      r['department_type'] as String? ?? '',
+                      style: const TextStyle(fontSize: 11),
+                    ),
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _statusColor(state == 'accepted' ? 'accepted' : state == 'declined' ? 'pending' : 'pending').withAlpha(25),
+                  color: _statusColor(
+                    state == 'accepted'
+                        ? 'accepted'
+                        : state == 'declined'
+                            ? 'pending'
+                            : 'pending',
+                  ).withAlpha(25),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(state, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
-                  color: state == 'accepted' ? Colors.green : state == 'declined' ? Colors.red : Colors.orange)),
+                child: Text(
+                  state,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: state == 'accepted'
+                        ? Colors.green
+                        : state == 'declined'
+                            ? Colors.red
+                            : Colors.orange,
+                  ),
+                ),
               ),
             ),
           );
@@ -319,7 +472,10 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Status History', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(
+          'Status History',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 8),
         if (_history.isEmpty)
           const Text('No status changes recorded.', style: TextStyle(fontSize: 13, color: Colors.grey)),
@@ -331,7 +487,8 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 8, height: 8,
+                  width: 8,
+                  height: 8,
                   margin: const EdgeInsets.only(top: 5, right: 10),
                   decoration: BoxDecoration(shape: BoxShape.circle, color: _statusColor(newStatus)),
                 ),
@@ -339,10 +496,23 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(newStatus.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _statusColor(newStatus))),
+                      Text(
+                        newStatus.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _statusColor(newStatus),
+                        ),
+                      ),
                       if (entry['notes'] != null)
-                        Text(entry['notes'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                      Text(entry['created_at'] as String? ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          entry['notes'] as String,
+                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      Text(
+                        entry['created_at'] as String? ?? '',
+                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),

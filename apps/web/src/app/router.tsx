@@ -15,6 +15,7 @@ import { DepartmentCreatePostPage } from "@/pages/department/department-create-p
 import { MunicipalityHomePage } from "@/pages/municipality/municipality-home-page";
 import { MunicipalityVerificationPage } from "@/pages/municipality/municipality-verification-page";
 import { MunicipalityDepartmentsPage } from "@/pages/municipality/municipality-departments-page";
+import { MunicipalityEscalatedReportsPage } from "@/pages/municipality/municipality-escalated-reports-page";
 import { FeedPage } from "@/pages/shared/feed-page";
 import { FeedDetailPage } from "@/pages/shared/feed-detail-page";
 import { LandingPage } from "@/pages/shared/landing-page";
@@ -47,6 +48,7 @@ export function AppRouter() {
 
         <Route element={<ProtectedRoute allowedRoles={["municipality"]} />}>
           <Route element={<MunicipalityHomePage />} path="/municipality" />
+          <Route element={<MunicipalityEscalatedReportsPage />} path="/municipality/reports/escalated" />
           <Route element={<MunicipalityVerificationPage />} path="/municipality/verification" />
           <Route element={<MunicipalityDepartmentsPage />} path="/municipality/departments" />
         </Route>

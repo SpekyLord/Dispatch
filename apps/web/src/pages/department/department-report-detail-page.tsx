@@ -7,6 +7,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Report = {
   id: string;
@@ -55,6 +57,7 @@ const rosterStateStyles: Record<string, string> = {
 
 export function DepartmentReportDetailPage() {
   const { reportId } = useParams<{ reportId: string }>();
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [report, setReport] = useState<Report | null>(null);
   const [history, setHistory] = useState<StatusEntry[]>([]);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
@@ -66,10 +69,12 @@ export function DepartmentReportDetailPage() {
   const [showDeclineForm, setShowDeclineForm] = useState(false);
 
   // Fetch report, status history, and response roster
-  function fetchAll() {
+  function fetchAll(showLoader = true) {
     if (!reportId) return;
-    setLoading(true);
-    Promise.all([
+    if (showLoader) {
+      setLoading(true);
+    }
+    return Promise.all([
       apiRequest<{ report: Report; status_history: StatusEntry[] }>(`/api/reports/${reportId}`),
       apiRequest<{ report: Report; responses: RosterEntry[] }>(`/api/departments/reports/${reportId}/responses`),
     ])
@@ -77,12 +82,54 @@ export function DepartmentReportDetailPage() {
         setReport(detail.report);
         setHistory(detail.status_history);
         setRoster(rosterRes.responses);
+        setError(null);
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load report.");
+      })
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
   }
 
   useEffect(() => { fetchAll(); }, [reportId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!reportId) {
+      return;
+    }
+
+    const reportSubscription = subscribeToTable(
+      "incident_reports",
+      () => {
+        void fetchAll(false);
+      },
+      { accessToken, filter: `id=eq.${reportId}` },
+    );
+    const responseSubscription = subscribeToTable(
+      "department_responses",
+      () => {
+        void fetchAll(false);
+      },
+      { accessToken, filter: `report_id=eq.${reportId}` },
+    );
+    const historySubscription = subscribeToTable(
+      "report_status_history",
+      () => {
+        void fetchAll(false);
+      },
+      { accessToken, filter: `report_id=eq.${reportId}` },
+    );
+
+    return () => {
+      reportSubscription.unsubscribe();
+      responseSubscription.unsubscribe();
+      historySubscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, reportId]);
 
   // Accept report
   async function handleAccept() {
@@ -93,7 +140,7 @@ export function DepartmentReportDetailPage() {
         body: JSON.stringify({ notes: notes.trim() || undefined }),
       });
       setNotes("");
-      fetchAll();
+      void fetchAll(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed.");
     } finally { setActionLoading(false); }
@@ -109,7 +156,7 @@ export function DepartmentReportDetailPage() {
         body: JSON.stringify({ decline_reason: declineReason.trim(), notes: notes.trim() || undefined }),
       });
       setDeclineReason(""); setNotes(""); setShowDeclineForm(false);
-      fetchAll();
+      void fetchAll(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed.");
     } finally { setActionLoading(false); }
@@ -124,7 +171,7 @@ export function DepartmentReportDetailPage() {
         body: JSON.stringify({ status: newStatus, notes: notes.trim() || undefined }),
       });
       setNotes("");
-      fetchAll();
+      void fetchAll(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed.");
     } finally { setActionLoading(false); }

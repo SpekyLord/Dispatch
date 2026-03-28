@@ -1,5 +1,6 @@
-// Report detail — full report view with photo gallery and status timeline.
+import 'dart:async';
 
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/features/shared/presentation/location_map.dart';
 import 'package:flutter/material.dart';
@@ -17,15 +18,55 @@ class CitizenReportDetailScreen extends ConsumerStatefulWidget {
 class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailScreen> {
   Map<String, dynamic>? _report;
   List<dynamic> _history = [];
+  List<RealtimeSubscriptionHandle> _subscriptions = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
     _fetch();
+    _subscribeToRealtime();
   }
 
-  Future<void> _fetch() async {
+  @override
+  void dispose() {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.dispose());
+    }
+    super.dispose();
+  }
+
+  void _subscribeToRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    _subscriptions = [
+      realtime.subscribeToTable(
+        table: 'incident_reports',
+        eqColumn: 'id',
+        eqValue: widget.reportId,
+        onChange: () {
+          if (mounted) {
+            _fetch(showLoader: false);
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'report_status_history',
+        eqColumn: 'report_id',
+        eqValue: widget.reportId,
+        onChange: () {
+          if (mounted) {
+            _fetch(showLoader: false);
+          }
+        },
+      ),
+    ];
+  }
+
+  Future<void> _fetch({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() => _loading = true);
+    }
+
     try {
       final authService = ref.read(authServiceProvider);
       final data = await authService.getReport(widget.reportId);
@@ -37,7 +78,9 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && showLoader) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -60,18 +103,16 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
           : _report == null
               ? const Center(child: Text('Report not found.'))
               : RefreshIndicator(
-                  onRefresh: _fetch,
+                  onRefresh: () => _fetch(),
                   child: ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
-                      // Status badge
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: _statusColor(_report!['status'] as String? ?? 'pending')
-                                  .withAlpha(30),
+                              color: _statusColor(_report!['status'] as String? ?? 'pending').withAlpha(30),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -94,31 +135,43 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
                           if (_report!['is_escalated'] == true) ...[
                             const SizedBox(width: 8),
                             Chip(
-                              label: const Text('ESCALATED', style: TextStyle(fontSize: 11, color: Colors.red)),
-                              color: WidgetStatePropertyAll(const Color(0x20FF0000)),
+                              label: const Text(
+                                'ESCALATED',
+                                style: TextStyle(fontSize: 11, color: Colors.red),
+                              ),
+                              color: const WidgetStatePropertyAll(Color(0x20FF0000)),
                               visualDensity: VisualDensity.compact,
                             ),
                           ],
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Description
                       Text(
                         _report!['description'] as String? ?? '',
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                       const SizedBox(height: 12),
                       if (_report!['address'] != null)
-                        Text(
-                          '📍 ${_report!['address']}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on, size: 14, color: Colors.black54),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _report!['address'] as String,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: Colors.black54),
+                              ),
+                            ),
+                          ],
                         ),
                       const SizedBox(height: 8),
                       Text(
                         'Severity: ${_report!['severity'] ?? 'medium'}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black45),
                       ),
-                      // Location map
                       if (_report!['latitude'] != null && _report!['longitude'] != null) ...[
                         const SizedBox(height: 16),
                         Text('Location', style: Theme.of(context).textTheme.titleSmall),
@@ -129,7 +182,6 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
                           zoom: 15.0,
                         ),
                       ],
-                      // Images
                       if ((_report!['image_urls'] as List?)?.isNotEmpty == true) ...[
                         const SizedBox(height: 16),
                         Text('Photos', style: Theme.of(context).textTheme.titleSmall),
@@ -156,46 +208,61 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
                           ),
                         ),
                       ],
-                      // Status history
                       const SizedBox(height: 24),
                       Text('Status History', style: Theme.of(context).textTheme.titleSmall),
                       const SizedBox(height: 8),
                       if (_history.isEmpty)
-                        const Text('No status updates yet.', style: TextStyle(color: Colors.black45))
+                        const Text(
+                          'No status updates yet.',
+                          style: TextStyle(color: Colors.black45),
+                        )
                       else
                         for (final entry in _history)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                left: BorderSide(
-                                  color: _statusColor((entry as Map)['status'] as String? ?? ''),
-                                  width: 3,
-                                ),
-                              ),
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  ((entry)['status'] as String? ?? '').toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: _statusColor((entry)['status'] as String? ?? ''),
+                          Builder(
+                            builder: (context) {
+                              final historyEntry = entry as Map;
+                              final status = (historyEntry['new_status'] as String?) ??
+                                  (historyEntry['status'] as String?) ??
+                                  '';
+                              final note = historyEntry['notes'] ?? historyEntry['note'];
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: _statusColor(status),
+                                      width: 3,
+                                    ),
                                   ),
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                if ((entry)['note'] != null)
-                                  Text((entry)['note'] as String, style: const TextStyle(fontSize: 13)),
-                                Text(
-                                  (entry)['created_at'] as String? ?? '',
-                                  style: const TextStyle(fontSize: 11, color: Colors.black45),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      status.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: _statusColor(status),
+                                      ),
+                                    ),
+                                    if (note != null)
+                                      Text(
+                                        note as String,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    Text(
+                                      historyEntry['created_at'] as String? ?? '',
+                                      style: const TextStyle(fontSize: 11, color: Colors.black45),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            },
                           ),
                     ],
                   ),

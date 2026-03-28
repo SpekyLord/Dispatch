@@ -124,7 +124,7 @@ def settings() -> Settings:
     return Settings.model_validate(
         {
             "dispatch_env": "test",
-            "cors_origins": ["http://localhost:5173"],
+            "cors_origins": "http://localhost:5173",
             "supabase_url": "https://example.supabase.co",
             "supabase_anon_key": "anon-key",
             "supabase_service_role_key": "service-role-key",
@@ -661,3 +661,83 @@ def test_department_status_updates_progress_from_accepted_to_responding_to_resol
     assert fake._db["incident_reports"][0]["status"] == "resolved"
     history_statuses = [row["new_status"] for row in fake._db["report_status_history"]]
     assert history_statuses == ["responding", "resolved"]
+
+
+def test_municipality_escalated_reports_endpoint_returns_open_escalations_with_summary(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="municipality-1", email="admin@example.com", role="municipality"),
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire-1",
+                    "user_id": "dept-fire-user-1",
+                    "type": "fire",
+                    "name": "BFP One",
+                    "verification_status": "approved",
+                },
+                {
+                    "id": "dept-fire-2",
+                    "user_id": "dept-fire-user-2",
+                    "type": "fire",
+                    "name": "BFP Two",
+                    "verification_status": "approved",
+                },
+                {
+                    "id": "dept-disaster",
+                    "user_id": "dept-disaster-user",
+                    "type": "disaster",
+                    "name": "MDRRMO",
+                    "verification_status": "approved",
+                },
+            ],
+            "incident_reports": [
+                {
+                    "id": "report-escalated-open",
+                    "reporter_id": "citizen-1",
+                    "category": "fire",
+                    "status": "pending",
+                    "severity": "critical",
+                    "is_escalated": True,
+                    "created_at": iso_now_minus(20),
+                },
+                {
+                    "id": "report-escalated-resolved",
+                    "reporter_id": "citizen-1",
+                    "category": "fire",
+                    "status": "resolved",
+                    "severity": "medium",
+                    "is_escalated": True,
+                    "created_at": iso_now_minus(10),
+                },
+            ],
+            "department_responses": [
+                {
+                    "id": "response-1",
+                    "report_id": "report-escalated-open",
+                    "department_id": "dept-fire-1",
+                    "action": "accepted",
+                    "responded_at": iso_now_minus(19),
+                },
+                {
+                    "id": "response-2",
+                    "report_id": "report-escalated-open",
+                    "department_id": "dept-fire-2",
+                    "action": "declined",
+                    "decline_reason": "Units unavailable",
+                    "responded_at": iso_now_minus(18),
+                },
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        response = client.get("/api/municipality/reports/escalated", headers=auth_header())
+
+    assert response.status_code == 200
+    assert [report["id"] for report in response.json["reports"]] == ["report-escalated-open"]
+    assert response.json["reports"][0]["response_summary"] == {
+        "accepted": 1,
+        "declined": 1,
+        "pending": 1,
+    }

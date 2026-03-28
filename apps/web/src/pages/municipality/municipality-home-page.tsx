@@ -83,6 +83,25 @@ export function MunicipalityHomePage() {
             metrics will be available in Phase 3.
           </p>
         </Card>
+
+        <Card className="md:col-span-12 bg-[#fff5ef] border-[#f4c7b7]/40">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#B25A3B]">
+                Phase 2 Escalations
+              </p>
+              <h2 className="mt-2 font-headline text-2xl text-on-surface">Unattended Incident Queue</h2>
+              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">
+                Review escalated incidents that still need attention. This stays intentionally narrow in
+                Phase 2 so municipality users can focus on unattended emergencies before the full reports
+                dashboard lands in Phase 3.
+              </p>
+            </div>
+            <Link to="/municipality/reports/escalated">
+              <Button variant="secondary">Open Escalations</Button>
+            </Link>
+          </div>
+        </Card>
       </div>
     </AppShell>
   );

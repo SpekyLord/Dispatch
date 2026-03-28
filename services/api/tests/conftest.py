@@ -15,7 +15,7 @@ def settings() -> Settings:
     return Settings.model_validate(
         {
             "dispatch_env": "test",
-            "cors_origins": ["http://localhost:5173"],
+            "cors_origins": "http://localhost:5173",
             "supabase_url": "https://example.supabase.co",
             "supabase_anon_key": "anon-key",
             "supabase_service_role_key": "service-role-key",

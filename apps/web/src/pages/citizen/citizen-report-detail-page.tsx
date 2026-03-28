@@ -5,6 +5,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { LocationMap } from "@/components/maps/location-map";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 /**
  * Phase 1 — Citizen report detail page.
@@ -12,7 +14,14 @@ import { apiRequest } from "@/lib/api/client";
  * status history timeline, and location map sidebar.
  */
 
-type StatusHistory = { id: string; status: string; note?: string; created_at: string };
+type StatusHistory = {
+  id: string;
+  status?: string;
+  new_status?: string;
+  note?: string;
+  notes?: string;
+  created_at: string;
+};
 type Report = {
   id: string; description: string; category: string; severity: string;
   status: string; address?: string; latitude?: number; longitude?: number;
@@ -33,18 +42,70 @@ const categoryIcons: Record<string, string> = {
 
 export function CitizenReportDetailPage() {
   const { reportId } = useParams<{ reportId: string }>();
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [report, setReport] = useState<Report | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function fetchReport(showLoader = true) {
+    if (!reportId) {
+      return Promise.resolve();
+    }
+    if (showLoader) {
+      setLoading(true);
+    }
+
+    return apiRequest<{ report: Report; status_history: StatusHistory[] }>(`/api/reports/${reportId}`)
+      .then((res) => {
+        setReport(res.report);
+        setHistory(res.status_history);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load report.");
+      })
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
+  }
+
   useEffect(() => {
-    if (!reportId) return;
-    apiRequest<{ report: Report; status_history: StatusHistory[] }>(`/api/reports/${reportId}`)
-      .then((res) => { setReport(res.report); setHistory(res.status_history); })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load report."))
-      .finally(() => setLoading(false));
+    if (!reportId) {
+      return;
+    }
+    void fetchReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportId]);
+
+  useEffect(() => {
+    if (!reportId) {
+      return;
+    }
+
+    const reportSubscription = subscribeToTable(
+      "incident_reports",
+      () => {
+        void fetchReport(false);
+      },
+      { accessToken, filter: `id=eq.${reportId}` },
+    );
+    const historySubscription = subscribeToTable(
+      "report_status_history",
+      () => {
+        void fetchReport(false);
+      },
+      { accessToken, filter: `report_id=eq.${reportId}` },
+    );
+
+    return () => {
+      reportSubscription.unsubscribe();
+      historySubscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, reportId]);
 
   if (loading) {
     return (
@@ -144,15 +205,20 @@ export function CitizenReportDetailPage() {
             ) : (
               <div className="space-y-4">
                 {history.map((h) => {
-                  const hs = statusStyles[h.status] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
+                  const historyStatus = h.new_status ?? h.status ?? "pending";
+                  const historyNote = h.notes ?? h.note;
+                  const hs = statusStyles[historyStatus] ?? {
+                    bg: "bg-surface-container-highest",
+                    text: "text-on-surface-variant",
+                  };
                   return (
                     <div key={h.id} className="flex gap-4 border-l-[3px] border-outline-variant/20 pl-5 relative">
                       <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-surface-container-highest border-2 border-outline-variant" />
                       <div>
                         <span className={`inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${hs.bg} ${hs.text}`}>
-                          {h.status}
+                          {historyStatus}
                         </span>
-                        {h.note && <p className="mt-1 text-sm text-on-surface-variant">{h.note}</p>}
+                        {historyNote && <p className="mt-1 text-sm text-on-surface-variant">{historyNote}</p>}
                         <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
                           {new Date(h.created_at).toLocaleString()}
                         </p>

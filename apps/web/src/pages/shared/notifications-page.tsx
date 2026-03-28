@@ -6,6 +6,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/auth/session-store";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Notification = {
   id: string;
@@ -27,19 +29,45 @@ const typeIcons: Record<string, string> = {
 };
 
 export function NotificationsPage() {
+  const accessToken = useSessionStore((state) => state.accessToken);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    apiRequest<{ notifications: Notification[]; unread_count: number }>("/api/notifications")
+  function fetchNotifications(showLoader = true) {
+    if (showLoader) {
+      setLoading(true);
+    }
+
+    return apiRequest<{ notifications: Notification[]; unread_count: number }>("/api/notifications")
       .then((res) => {
         setNotifications(res.notifications);
         setUnreadCount(res.unread_count);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoader) {
+          setLoading(false);
+        }
+      });
+  }
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchNotifications();
+    });
   }, []);
+
+  useEffect(() => {
+    const subscription = subscribeToTable(
+      "notifications",
+      () => {
+        void fetchNotifications(false);
+      },
+      { accessToken },
+    );
+    return () => subscription.unsubscribe();
+  }, [accessToken]);
 
   // Mark single notification read — optimistic local update
   async function markRead(id: string) {
@@ -47,6 +75,7 @@ export function NotificationsPage() {
     setUnreadCount((c) => Math.max(0, c - 1));
     try {
       await apiRequest(`/api/notifications/${id}/read`, { method: "PUT" });
+      void fetchNotifications(false);
     } catch { /* ignore */ }
   }
 
@@ -56,6 +85,7 @@ export function NotificationsPage() {
     setUnreadCount(0);
     try {
       await apiRequest("/api/notifications/read-all", { method: "PUT" });
+      void fetchNotifications(false);
     } catch { /* ignore */ }
   }
 

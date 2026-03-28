@@ -155,4 +155,97 @@ class AuthService {
     final data = (response.data as Map<String, dynamic>)['department'] as Map<String, dynamic>;
     return DepartmentInfo.fromJson(data);
   }
+
+  // --- Department reports (Phase 2) ---
+
+  // Fetch reports routed to this department, with optional status/category filters
+  Future<List<Map<String, dynamic>>> getDepartmentReports({String? status, String? category}) async {
+    final params = <String, dynamic>{};
+    if (status != null) params['status'] = status;
+    if (category != null) params['category'] = category;
+    final response = await _dio.get('/api/departments/reports', queryParameters: params);
+    return (response.data['reports'] as List).cast<Map<String, dynamic>>();
+  }
+
+  // Accept a report on behalf of this department
+  Future<Map<String, dynamic>> acceptReport(String reportId, {String? notes}) async {
+    final body = <String, dynamic>{};
+    if (notes != null) body['notes'] = notes;
+    final response = await _dio.post('/api/departments/reports/$reportId/accept', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  // Decline a report — decline_reason is required
+  Future<Map<String, dynamic>> declineReport(String reportId, {required String declineReason, String? notes}) async {
+    final body = <String, dynamic>{'decline_reason': declineReason};
+    if (notes != null) body['notes'] = notes;
+    final response = await _dio.post('/api/departments/reports/$reportId/decline', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  // Get response roster for a report
+  Future<Map<String, dynamic>> getReportResponses(String reportId) async {
+    final response = await _dio.get('/api/departments/reports/$reportId/responses');
+    return response.data as Map<String, dynamic>;
+  }
+
+  // Update report status (responding / resolved)
+  Future<Map<String, dynamic>> updateReportStatus(String reportId, {required String status, String? notes}) async {
+    final body = <String, dynamic>{'status': status};
+    if (notes != null) body['notes'] = notes;
+    final response = await _dio.put('/api/departments/reports/$reportId/status', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  // --- Department posts (Phase 2) ---
+
+  // Create a new department announcement
+  Future<Map<String, dynamic>> createPost({
+    required String title,
+    required String content,
+    required String category,
+    bool isPinned = false,
+  }) async {
+    final response = await _dio.post('/api/departments/posts', data: {
+      'title': title,
+      'content': content,
+      'category': category,
+      'is_pinned': isPinned,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  // --- Feed (Phase 2) ---
+
+  // List public feed posts with optional category filter
+  Future<List<Map<String, dynamic>>> getFeedPosts({String? category}) async {
+    final params = <String, dynamic>{};
+    if (category != null) params['category'] = category;
+    final response = await _dio.get('/api/feed', queryParameters: params);
+    return (response.data['posts'] as List).cast<Map<String, dynamic>>();
+  }
+
+  // Get a single feed post by ID
+  Future<Map<String, dynamic>> getFeedPost(String postId) async {
+    final response = await _dio.get('/api/feed/$postId');
+    return (response.data as Map<String, dynamic>)['post'] as Map<String, dynamic>;
+  }
+
+  // --- Notifications (Phase 2) ---
+
+  // List all notifications for current user
+  Future<Map<String, dynamic>> getNotifications() async {
+    final response = await _dio.get('/api/notifications');
+    return response.data as Map<String, dynamic>;
+  }
+
+  // Mark a single notification as read
+  Future<void> markNotificationRead(String notificationId) async {
+    await _dio.put('/api/notifications/$notificationId/read');
+  }
+
+  // Mark all notifications as read
+  Future<void> markAllNotificationsRead() async {
+    await _dio.put('/api/notifications/read-all');
+  }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
@@ -96,14 +97,44 @@ export function DepartmentHomePage() {
         </Card>
 
         <Card className="md:col-span-7 bg-surface-container">
-          <h2 className="font-headline text-2xl text-on-surface mb-2">Incident Board</h2>
-          <p className="text-sm text-on-surface-variant leading-relaxed italic">
-            The department incident board with accept/decline actions and real-time
-            routing will be available in Phase 2.
-          </p>
-          <div className="mt-8 flex items-center gap-3 text-xs text-on-surface-variant">
-            <span className="material-symbols-outlined text-[16px]">info</span>
-            Phase 2 feature — department operations, feed, and notifications.
+          <h2 className="font-headline text-2xl text-on-surface mb-2">Quick Actions</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link to="/department/reports">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-lowest hover:shadow-glass transition-all cursor-pointer">
+                <span className="material-symbols-outlined text-secondary">assignment</span>
+                <div>
+                  <p className="text-sm font-semibold text-on-surface">Incident Board</p>
+                  <p className="text-xs text-on-surface-variant">View and respond to reports</p>
+                </div>
+              </div>
+            </Link>
+            <Link to="/department/posts/new">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-lowest hover:shadow-glass transition-all cursor-pointer">
+                <span className="material-symbols-outlined text-secondary">campaign</span>
+                <div>
+                  <p className="text-sm font-semibold text-on-surface">Create Post</p>
+                  <p className="text-xs text-on-surface-variant">Publish an announcement</p>
+                </div>
+              </div>
+            </Link>
+            <Link to="/notifications">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-lowest hover:shadow-glass transition-all cursor-pointer">
+                <span className="material-symbols-outlined text-secondary">notifications</span>
+                <div>
+                  <p className="text-sm font-semibold text-on-surface">Notifications</p>
+                  <p className="text-xs text-on-surface-variant">Check alerts and updates</p>
+                </div>
+              </div>
+            </Link>
+            <Link to="/feed">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-surface-container-lowest hover:shadow-glass transition-all cursor-pointer">
+                <span className="material-symbols-outlined text-secondary">newspaper</span>
+                <div>
+                  <p className="text-sm font-semibold text-on-surface">Community Feed</p>
+                  <p className="text-xs text-on-surface-variant">Browse public announcements</p>
+                </div>
+              </div>
+            </Link>
           </div>
         </Card>
       </div>

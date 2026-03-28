@@ -1,22 +1,113 @@
+// Public feed — lists department announcements with category filter and post detail view.
+
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { apiRequest } from "@/lib/api/client";
 
-/**
- * Phase 1 — Feed page placeholder.
- * Will contain verified-department announcements in Phase 2.
- */
+type Post = {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  is_pinned: boolean;
+  created_at: string;
+  image_urls?: string[];
+  department?: { id: string; name: string; type: string } | null;
+};
+
+// Category badge styles
+const categoryStyles: Record<string, { bg: string; text: string; icon: string }> = {
+  alert: { bg: "bg-red-100", text: "text-red-800", icon: "warning" },
+  warning: { bg: "bg-orange-100", text: "text-orange-800", icon: "error_outline" },
+  safety_tip: { bg: "bg-blue-100", text: "text-blue-800", icon: "health_and_safety" },
+  update: { bg: "bg-green-100", text: "text-green-800", icon: "info" },
+  situational_report: { bg: "bg-purple-100", text: "text-purple-800", icon: "summarize" },
+};
 
 export function FeedPage() {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState("");
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setLoading(true);
+    const qs = categoryFilter ? `?category=${categoryFilter}` : "";
+    apiRequest<{ posts: Post[] }>(`/api/feed${qs}`)
+      .then((res) => setPosts(res.posts))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [categoryFilter]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   return (
     <AppShell subtitle="Public information" title="Community Feed">
-      <Card className="py-16 text-center">
-        <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">newspaper</span>
-        <h3 className="font-headline text-xl text-on-surface mb-2">Coming in Phase 2</h3>
-        <p className="text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
-          Verified-department announcements, safety alerts, situational reports, and
-          community updates will appear here once department operations are live.
-        </p>
-      </Card>
+      {/* Category filter */}
+      <div className="flex items-center gap-3 mb-8">
+        <select
+          className="aegis-input w-auto min-w-[160px]"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+        >
+          <option value="">All categories</option>
+          <option value="alert">Alerts</option>
+          <option value="warning">Warnings</option>
+          <option value="safety_tip">Safety Tips</option>
+          <option value="update">Updates</option>
+          <option value="situational_report">Situational Reports</option>
+        </select>
+        <span className="text-xs text-on-surface-variant">{posts.length} post{posts.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {loading ? (
+        <Card className="py-16 text-center text-on-surface-variant">
+          <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
+          Loading feed...
+        </Card>
+      ) : posts.length === 0 ? (
+        <Card className="py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">newspaper</span>
+          <p className="text-on-surface-variant">No announcements yet. Check back later.</p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {posts.map((post) => {
+            const catStyle = categoryStyles[post.category] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant", icon: "article" };
+            return (
+              <Link key={post.id} to={`/feed/${post.id}`}>
+                <Card className="hover:shadow-glass transition-all hover:-translate-y-0.5 cursor-pointer">
+                  <div className="flex items-start gap-4">
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${catStyle.bg} ${catStyle.text}`}>
+                      <span className="material-symbols-outlined">{catStyle.icon}</span>
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-on-surface">
+                          {post.is_pinned && <span className="material-symbols-outlined text-[14px] text-[#D97757] mr-1 align-middle">push_pin</span>}
+                          {post.title}
+                        </h3>
+                        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${catStyle.bg} ${catStyle.text}`}>
+                          {post.category.replace("_", " ")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{post.content}</p>
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-outline">
+                        {post.department && (
+                          <span className="font-medium capitalize">{post.department.name}</span>
+                        )}
+                        <span>{new Date(post.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </AppShell>
   );
 }

@@ -455,22 +455,22 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 
 #### Web App
 
-- [ ] Build the department report board with filters, urgent/unattended visual state, and clear current-status badges.
-- [ ] Build report detail views that show photos, description, location, current report status, and the full current response roster from sibling departments.
-- [ ] Build accept and decline actions with required decline reason and clear follow-up status controls.
-- [ ] Build department profile management for operational details.
-- [ ] Build announcement/post creation for verified departments only.
-- [ ] Build the public feed for citizens with filterable post categories and detail pages.
-- [ ] Build an in-app notification center with unread state and mark-as-read actions.
+- [x] Build the department report board with filters, urgent/unattended visual state, and clear current-status badges.
+- [x] Build report detail views that show photos, description, location, current report status, and the full current response roster from sibling departments.
+- [x] Build accept and decline actions with required decline reason and clear follow-up status controls.
+- [x] Build department profile management for operational details.
+- [x] Build announcement/post creation for verified departments only.
+- [x] Build the public feed for citizens with filterable post categories and detail pages.
+- [x] Build an in-app notification center with unread state and mark-as-read actions.
 - [ ] Add a simple municipality unattended-incidents view focused on escalated emergencies only. Full analytics comes in Phase 3.
 
 #### Mobile App
 
-- [ ] Build the department mobile report board and report detail screens with accept, decline, and status-update actions.
-- [ ] Build mobile department profile management.
-- [ ] Build mobile announcement creation for verified departments.
-- [ ] Build mobile citizen feed browsing and feed detail views.
-- [ ] Build mobile in-app notifications with unread counts.
+- [x] Build the department mobile report board and report detail screens with accept, decline, and status-update actions.
+- [x] Build mobile department profile management.
+- [x] Build mobile announcement creation for verified departments.
+- [x] Build mobile citizen feed browsing and feed detail views.
+- [x] Build mobile in-app notifications with unread counts.
 - [ ] Upgrade citizen report detail screens from refresh-based tracking to live updates while the app is active.
 
 #### Realtime / Offline Transport
@@ -504,7 +504,7 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - [x] If all relevant departments decline, the report escalates immediately and municipality users can see it.
 - [x] If no one accepts within 120 seconds, the report escalates automatically.
 - [x] Only verified departments can create public posts.
-- [ ] Citizens can browse the feed on web and mobile, but cannot comment or react.
+- [x] Citizens can browse the feed on web and mobile, but cannot comment or react.
 - [x] In-app notifications are created, displayed, and can be marked read.
 - [ ] Citizen report detail screens update live after department actions.
 
@@ -515,6 +515,10 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - Deviations: post images currently use URL-based payload fields rather than a dedicated upload endpoint, and municipality escalation visibility is delivered through notifications plus the new timeout-scan utility instead of a full municipality report board.
 - Blockers: this workspace still does not have live Supabase credentials, so hosted PostgREST, realtime subscriptions, and production RLS behavior were not exercised against a real project from here.
 - Carryover: web and mobile Phase 2 screens, realtime client subscriptions, richer media upload flows for posts, and end-to-end user-interface verification remain for later slices.
+- Date: `2026-03-29`
+- Completed: built all Phase 2 web pages (department report board with status/category filters, report detail with accept/decline/status-progression and response roster, post creation form, feed list/detail with category filter, notification center with mark-read); built all Phase 2 mobile screens (department report board, report detail with accept/decline dialogs and status buttons, post creation, citizen feed list/detail, notifications with unread counts); updated web router with new routes, updated app-shell navigation for all roles to include incident board and notifications; extended mobile auth_service with 10 new API methods for department reports, posts, feed, and notifications; updated department home screens (web/mobile) to link to new features; added feed/notification shortcuts to citizen home screen.
+- Deviations: municipality unattended-incidents view deferred (escalated reports are visible via notifications to municipality users for now). Realtime client subscriptions not yet wired (manual refresh used). Live citizen report detail updates not yet implemented (refresh-based). Department profile management reuses the existing Phase 1 rejected-view edit form on the department home page rather than a separate dedicated page.
+- Carryover: municipality unattended-incidents view, realtime client subscriptions for web and mobile, live citizen report detail updates, web/mobile tests for Phase 2 screens, end-to-end smoke test.
 
 ### Exit Criteria
 

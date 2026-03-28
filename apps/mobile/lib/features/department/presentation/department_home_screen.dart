@@ -3,6 +3,10 @@
 
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
+import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -241,12 +245,52 @@ class _ApprovedView extends StatelessWidget {
         const SizedBox(height: 12),
         _DeptDetails(dept: dept),
         const SizedBox(height: 24),
+        // Quick action cards for Phase 2 features
         Card(
           child: ListTile(
+            leading: const Icon(Icons.assignment),
             title: const Text('Incident Board'),
-            subtitle: const Text('Accept/decline actions will be available in Phase 2.'),
+            subtitle: const Text('View and respond to reports'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {},
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DepartmentReportBoardScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.campaign),
+            title: const Text('Create Post'),
+            subtitle: const Text('Publish an announcement'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DepartmentCreatePostScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.newspaper),
+            title: const Text('Community Feed'),
+            subtitle: const Text('Browse public announcements'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.notifications),
+            title: const Text('Notifications'),
+            subtitle: const Text('Check alerts and updates'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
           ),
         ),
       ],

@@ -4,6 +4,8 @@ import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,6 +48,23 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       appBar: AppBar(
         title: const Text('My Reports'),
         actions: [
+          // Feed shortcut
+          IconButton(
+            icon: const Icon(Icons.newspaper),
+            tooltip: 'Feed',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
+            ),
+          ),
+          // Notifications shortcut
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Notifications',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+          // Profile shortcut
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () => Navigator.of(context).push(

@@ -25,17 +25,21 @@ const roleNavItems: Record<string, NavItem[]> = {
     { to: "/citizen", label: "My Reports", icon: "description" },
     { to: "/citizen/report/new", label: "New Report", icon: "add_circle" },
     { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },
   ],
   department: [
     { to: "/department", label: "Dashboard", icon: "dashboard" },
+    { to: "/department/reports", label: "Incident Board", icon: "assignment" },
     { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },
   ],
   municipality: [
     { to: "/municipality", label: "Overview", icon: "dashboard" },
     { to: "/municipality/verification", label: "Verification", icon: "verified_user" },
     { to: "/municipality/departments", label: "Departments", icon: "domain" },
+    { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },
   ],
 };

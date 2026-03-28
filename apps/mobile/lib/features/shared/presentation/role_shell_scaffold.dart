@@ -1,3 +1,5 @@
+// Shared scaffold for role placeholder screens — AppBar + kicker label + body.
+
 import 'package:flutter/material.dart';
 
 class RoleShellScaffold extends StatelessWidget {

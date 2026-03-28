@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 
+/**
+ * Phase 1 — Profile page.
+ * Aegis-styled form for editing full name and phone number.
+ */
+
 export function ProfilePage() {
   const user = useSessionStore((s) => s.user);
   const updateUser = useSessionStore((s) => s.updateUser);
@@ -18,31 +23,22 @@ export function ProfilePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
-
+    setSaving(true); setError(null); setSuccess(false);
     try {
       const res = await apiRequest<{ profile: { full_name: string; phone: string } }>(
-        "/api/users/profile",
-        {
-          method: "PUT",
-          body: JSON.stringify({ full_name: fullName, phone }),
-        },
+        "/api/users/profile", { method: "PUT", body: JSON.stringify({ full_name: fullName, phone }) },
       );
       updateUser({ full_name: res.profile.full_name, phone: res.profile.phone });
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update profile.");
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   if (!user) {
     return (
       <AppShell subtitle="Profile" title="Not signed in">
-        <Card className="py-10 text-center text-muted-foreground">No active session.</Card>
+        <Card className="py-16 text-center text-on-surface-variant">No active session.</Card>
       </AppShell>
     );
   }
@@ -50,54 +46,48 @@ export function ProfilePage() {
   return (
     <AppShell subtitle="Manage your profile" title="Profile">
       <Card className="mx-auto max-w-lg">
-        <div className="mb-4">
-          <p className="text-sm text-muted-foreground">{user.email}</p>
-          <span className="mt-1 inline-block rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            {user.role}
-          </span>
+        {/* User meta */}
+        <div className="mb-6 pb-6 border-b border-outline-variant/10">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center">
+              <span className="material-symbols-outlined text-on-surface-variant text-2xl">account_circle</span>
+            </div>
+            <div>
+              <p className="text-sm text-on-surface-variant">{user.email}</p>
+              <span className="inline-block mt-1 rounded-md bg-secondary-container px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#89391e]">
+                {user.role}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit}>
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="rounded-md bg-error-container/20 border border-error/20 px-4 py-3 text-sm text-error">{error}</div>
           )}
           {success && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="rounded-md bg-[#d4edda] border border-[#155724]/20 px-4 py-3 text-sm text-[#155724]">
               Profile updated successfully.
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="profileName">
-              Full name
-            </label>
-            <input
-              id="profileName"
-              type="text"
-              className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
+          <div>
+            <label className="aegis-label" htmlFor="profileName">Full Name</label>
+            <input id="profileName" type="text" className="aegis-input"
+              value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="profilePhone">
-              Phone number
-            </label>
-            <input
-              id="profilePhone"
-              type="tel"
-              className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
+          <div>
+            <label className="aegis-label" htmlFor="profilePhone">Phone Number</label>
+            <input id="profilePhone" type="tel" className="aegis-input"
+              value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
 
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save Changes"}
-          </Button>
+          <div className="pt-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
         </form>
       </Card>
     </AppShell>

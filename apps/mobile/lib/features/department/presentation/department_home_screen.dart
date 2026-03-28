@@ -1,3 +1,6 @@
+// Department home — shows pending/rejected/approved view based on verification status.
+// Rejected view has inline edit + resubmit form (API auto-moves back to pending).
+
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:flutter/material.dart';

@@ -5,26 +5,27 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 
+/**
+ * Phase 1 — Municipality verification queue.
+ * Aegis-styled list of pending departments with approve/reject actions.
+ * Reject requires a mandatory reason input.
+ */
+
 type Department = {
-  id: string;
-  user_id: string;
-  name: string;
-  type: string;
-  verification_status: string;
-  rejection_reason?: string | null;
-  contact_number?: string | null;
-  address?: string | null;
-  area_of_responsibility?: string | null;
-  created_at: string;
+  id: string; user_id: string; name: string; type: string;
+  verification_status: string; rejection_reason?: string | null;
+  contact_number?: string | null; address?: string | null;
+  area_of_responsibility?: string | null; created_at: string;
 };
 
 const typeLabels: Record<string, string> = {
-  fire: "Fire (BFP)",
-  police: "Police (PNP)",
-  medical: "Medical",
-  disaster: "Disaster Response (MDRRMO)",
-  rescue: "Rescue",
-  other: "Other",
+  fire: "Fire (BFP)", police: "Police (PNP)", medical: "Medical",
+  disaster: "MDRRMO", rescue: "Rescue", other: "Other",
+};
+
+const typeIcons: Record<string, string> = {
+  fire: "local_fire_department", police: "shield", medical: "medical_services",
+  disaster: "storm", rescue: "health_and_safety", other: "domain",
 };
 
 export function MunicipalityVerificationPage() {
@@ -42,23 +43,16 @@ export function MunicipalityVerificationPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => {
-    fetchPending();
-  }, []);
+  useEffect(() => { fetchPending(); }, []);
 
   async function handleApprove(deptId: string) {
     setActionLoading(deptId);
     try {
       await apiRequest(`/api/municipality/departments/${deptId}/verify`, {
-        method: "PUT",
-        body: JSON.stringify({ action: "approved" }),
+        method: "PUT", body: JSON.stringify({ action: "approved" }),
       });
       setDepartments((prev) => prev.filter((d) => d.id !== deptId));
-    } catch {
-      // error handled silently
-    } finally {
-      setActionLoading(null);
-    }
+    } catch { /* silent */ } finally { setActionLoading(null); }
   }
 
   async function handleReject(deptId: string) {
@@ -67,102 +61,98 @@ export function MunicipalityVerificationPage() {
     setActionLoading(deptId);
     try {
       await apiRequest(`/api/municipality/departments/${deptId}/verify`, {
-        method: "PUT",
-        body: JSON.stringify({ action: "rejected", rejection_reason: reason }),
+        method: "PUT", body: JSON.stringify({ action: "rejected", rejection_reason: reason }),
       });
       setDepartments((prev) => prev.filter((d) => d.id !== deptId));
       setShowRejectForm(null);
-    } catch {
-      // error handled silently
-    } finally {
-      setActionLoading(null);
-    }
+    } catch { /* silent */ } finally { setActionLoading(null); }
   }
 
   return (
     <AppShell subtitle="Department verification" title="Verification Queue">
       {loading ? (
-        <Card className="py-10 text-center text-muted-foreground">Loading…</Card>
+        <Card className="py-16 text-center text-on-surface-variant">
+          <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
+        </Card>
       ) : departments.length === 0 ? (
-        <Card className="py-10 text-center text-muted-foreground">
-          No departments pending verification.
+        <Card className="py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">task_alt</span>
+          <p className="text-on-surface-variant">No departments pending verification.</p>
         </Card>
       ) : (
         <div className="space-y-4">
           {departments.map((dept) => (
             <Card key={dept.id}>
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold">{dept.name}</h3>
-                  <span className="mt-1 inline-block rounded bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
-                    {typeLabels[dept.type] ?? dept.type}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+                    <span className="material-symbols-outlined">{typeIcons[dept.type] ?? "domain"}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-on-surface">{dept.name}</h3>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      {typeLabels[dept.type] ?? dept.type}
+                    </span>
+                  </div>
                 </div>
-                <span className="shrink-0 rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800">
+                <span className="rounded-md bg-[#ffdbd0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#89391e]">
                   Pending
                 </span>
               </div>
 
-              <div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+              <div className="mt-4 grid gap-3 text-sm text-on-surface-variant md:grid-cols-2">
                 {dept.contact_number && (
-                  <p>
-                    <span className="font-medium text-foreground">Contact:</span>{" "}
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[14px]">call</span>
                     {dept.contact_number}
-                  </p>
+                  </div>
                 )}
                 {dept.address && (
-                  <p>
-                    <span className="font-medium text-foreground">Address:</span> {dept.address}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[14px]">location_on</span>
+                    {dept.address}
+                  </div>
                 )}
                 {dept.area_of_responsibility && (
-                  <p className="md:col-span-2">
-                    <span className="font-medium text-foreground">Area:</span>{" "}
+                  <div className="flex items-center gap-2 md:col-span-2">
+                    <span className="material-symbols-outlined text-[14px]">map</span>
                     {dept.area_of_responsibility}
-                  </p>
+                  </div>
                 )}
-                <p>
-                  <span className="font-medium text-foreground">Applied:</span>{" "}
-                  {new Date(dept.created_at).toLocaleDateString()}
-                </p>
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">calendar_today</span>
+                  Applied {new Date(dept.created_at).toLocaleDateString()}
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  onClick={() => handleApprove(dept.id)}
-                  disabled={actionLoading === dept.id}
-                >
-                  {actionLoading === dept.id ? "Processing…" : "Approve"}
+              <div className="mt-6 flex flex-wrap gap-3 border-t border-outline-variant/10 pt-4">
+                <Button onClick={() => handleApprove(dept.id)} disabled={actionLoading === dept.id}>
+                  {actionLoading === dept.id ? "Processing..." : "Approve"}
                 </Button>
+
                 {showRejectForm === dept.id ? (
                   <div className="flex flex-1 gap-2">
                     <input
                       type="text"
-                      className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                      className="aegis-input flex-1"
                       placeholder="Reason for rejection (required)"
                       value={rejectionInputs[dept.id] ?? ""}
-                      onChange={(e) =>
-                        setRejectionInputs((prev) => ({ ...prev, [dept.id]: e.target.value }))
-                      }
+                      onChange={(e) => setRejectionInputs((prev) => ({ ...prev, [dept.id]: e.target.value }))}
                     />
                     <Button
                       variant="outline"
-                      className="border-red-300 text-red-600 hover:bg-red-50"
+                      className="border-error/30 text-error hover:bg-error-container/10"
                       onClick={() => handleReject(dept.id)}
-                      disabled={
-                        actionLoading === dept.id || !(rejectionInputs[dept.id] || "").trim()
-                      }
+                      disabled={actionLoading === dept.id || !(rejectionInputs[dept.id] || "").trim()}
                     >
-                      Confirm Reject
+                      Confirm
                     </Button>
-                    <Button variant="ghost" onClick={() => setShowRejectForm(null)}>
-                      Cancel
-                    </Button>
+                    <Button variant="ghost" onClick={() => setShowRejectForm(null)}>Cancel</Button>
                   </div>
                 ) : (
                   <Button
                     variant="outline"
-                    className="border-red-300 text-red-600 hover:bg-red-50"
+                    className="border-error/30 text-error hover:bg-error-container/10"
                     onClick={() => setShowRejectForm(dept.id)}
                     disabled={actionLoading === dept.id}
                   >

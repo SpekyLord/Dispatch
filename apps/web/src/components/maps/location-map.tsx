@@ -1,5 +1,10 @@
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 
+/**
+ * Phase 1 — Location map component.
+ * Aegis-styled Leaflet wrapper with muted tile layer.
+ */
+
 type LocationMapProps = {
   latitude?: number;
   longitude?: number;
@@ -7,7 +12,7 @@ type LocationMapProps = {
 
 export function LocationMap({ latitude = 14.5995, longitude = 120.9842 }: LocationMapProps) {
   return (
-    <div className="overflow-hidden rounded-[1.25rem] border border-border">
+    <div className="overflow-hidden rounded-xl border border-outline-variant/10">
       <MapContainer
         center={[latitude, longitude]}
         className="h-64 w-full"

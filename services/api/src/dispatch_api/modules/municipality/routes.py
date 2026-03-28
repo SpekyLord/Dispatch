@@ -1,3 +1,5 @@
+# Municipality routes: list departments, review pending, approve/reject verification
+
 from __future__ import annotations
 
 from http import HTTPStatus
@@ -15,9 +17,11 @@ VALID_VERIFICATION_ACTIONS = {"approved", "rejected"}
 @require_auth()
 @require_role("municipality")
 def list_departments():
+    """List all departments. Supports ?status= filter."""
     client = current_app.extensions["supabase_client"]
     params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
 
+    # Optional status filter
     status_filter = request.args.get("status")
     if status_filter:
         params["verification_status"] = f"eq.{status_filter}"
@@ -30,6 +34,7 @@ def list_departments():
 @require_auth()
 @require_role("municipality")
 def list_pending_departments():
+    """List pending departments, oldest first (FIFO review queue)."""
     client = current_app.extensions["supabase_client"]
     rows = client.db_query(
         "departments",
@@ -47,6 +52,7 @@ def list_pending_departments():
 @require_auth()
 @require_role("municipality")
 def verify_department(dept_id: str):
+    """Approve or reject a department. Rejection requires a reason string."""
     body = request.get_json(silent=True) or {}
     action = (body.get("action") or "").strip()
 
@@ -56,6 +62,7 @@ def verify_department(dept_id: str):
             code="validation_error",
         )
 
+    # Rejection requires an explanation
     if action == "rejected":
         reason = (body.get("rejection_reason") or "").strip()
         if not reason:
@@ -66,7 +73,7 @@ def verify_department(dept_id: str):
 
     client = current_app.extensions["supabase_client"]
 
-    # Verify the department exists
+    # Check department exists
     existing = client.db_query(
         "departments",
         params={"select": "id,verification_status", "id": f"eq.{dept_id}"},
@@ -75,6 +82,7 @@ def verify_department(dept_id: str):
     if not existing:
         raise ApiError("Department not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND)
 
+    # On approve: clear old rejection_reason. On reject: store the reason.
     update_data: dict[str, str | None] = {"verification_status": action}
     if action == "rejected":
         update_data["rejection_reason"] = body.get("rejection_reason", "").strip()

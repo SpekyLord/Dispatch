@@ -1,3 +1,5 @@
+// API service — wraps Dio for all backend calls. Token managed by SessionController.
+
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:dio/dio.dart';
@@ -22,6 +24,8 @@ class AuthService {
     }
   }
 
+  // --- Auth ---
+
   Future<Map<String, dynamic>> register({
     required String email,
     required String password,
@@ -33,6 +37,7 @@ class AuthService {
     String? address,
     String? areaOfResponsibility,
   }) async {
+    // Build body imperatively to avoid Dart null-aware element lint issues
     final body = <String, dynamic>{
       'email': email,
       'password': password,
@@ -67,7 +72,7 @@ class AuthService {
     try {
       await _dio.post('/api/auth/logout');
     } catch (_) {
-      // sign out locally even if API fails
+      // Sign out locally even if API fails
     }
   }
 
@@ -76,11 +81,14 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
+  // --- User profile ---
+
   Future<Map<String, dynamic>> getProfile() async {
     final response = await _dio.get('/api/users/profile');
     return response.data as Map<String, dynamic>;
   }
 
+  // Only include non-null fields in the request
   Future<Map<String, dynamic>> updateProfile({
     String? fullName,
     String? phone,
@@ -92,7 +100,8 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  // Reports
+  // --- Reports ---
+
   Future<Map<String, dynamic>> createReport({
     required String description,
     required String category,
@@ -132,13 +141,15 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  // Department
+  // --- Department ---
+
   Future<DepartmentInfo> getDepartmentProfile() async {
     final response = await _dio.get('/api/departments/profile');
     final data = (response.data as Map<String, dynamic>)['department'] as Map<String, dynamic>;
     return DepartmentInfo.fromJson(data);
   }
 
+  // API auto-moves rejected departments back to pending on update
   Future<DepartmentInfo> updateDepartmentProfile(Map<String, dynamic> updates) async {
     final response = await _dio.put('/api/departments/profile', data: updates);
     final data = (response.data as Map<String, dynamic>)['department'] as Map<String, dynamic>;

@@ -1,3 +1,6 @@
+// Session store — Zustand global auth state persisted to localStorage.
+// Zustand (not React Context) so we can read state outside components (e.g. API client).
+
 import { create } from "zustand";
 
 export type AppRole = "citizen" | "department" | "municipality";
@@ -11,6 +14,7 @@ export type SessionUser = {
   avatar_url?: string | null;
 };
 
+// Department info — verification_status drives UI (pending/rejected/approved views)
 export type DepartmentInfo = {
   id: string;
   user_id: string;
@@ -41,6 +45,7 @@ type SessionState = {
 
 const STORAGE_KEY = "dispatch_session";
 
+// Restore session from localStorage on app load
 function loadPersistedSession(): Pick<
   SessionState,
   "user" | "accessToken" | "refreshToken" | "department"
@@ -57,11 +62,12 @@ function loadPersistedSession(): Pick<
       };
     }
   } catch {
-    // ignore
+    // ignore — corrupted or unavailable
   }
   return { user: null, accessToken: null, refreshToken: null, department: null };
 }
 
+// Save to localStorage if valid session, otherwise clear it
 function persistSession(state: {
   user: SessionUser | null;
   accessToken: string | null;

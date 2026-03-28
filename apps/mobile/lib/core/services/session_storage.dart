@@ -1,3 +1,5 @@
+// File-based session persistence. Saves JSON to system temp dir.
+
 import 'dart:convert';
 import 'dart:io';
 

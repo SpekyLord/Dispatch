@@ -6,13 +6,20 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore, type DepartmentInfo } from "@/lib/auth/session-store";
 
+/**
+ * Phase 1 — Department home page.
+ * Shows different Aegis-styled views based on verification status:
+ *  - pending:  hourglass icon + awaiting message
+ *  - rejected: alert card + edit/resubmit form
+ *  - approved: verified badge + department profile + Phase 2 placeholder
+ */
+
 export function DepartmentHomePage() {
   const department = useSessionStore((s) => s.department);
   const setDepartment = useSessionStore((s) => s.setDepartment);
   const [loading, setLoading] = useState(!department);
   const [editMode, setEditMode] = useState(false);
 
-  // Fetch fresh department data
   useEffect(() => {
     apiRequest<{ department: DepartmentInfo }>("/api/departments/profile")
       .then((res) => setDepartment(res.department))
@@ -22,8 +29,10 @@ export function DepartmentHomePage() {
 
   if (loading) {
     return (
-      <AppShell subtitle="Department" title="Loading…">
-        <Card className="py-10 text-center text-muted-foreground">Loading department data…</Card>
+      <AppShell subtitle="Department" title="Loading...">
+        <Card className="py-16 text-center text-on-surface-variant">
+          <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
+        </Card>
       </AppShell>
     );
   }
@@ -31,7 +40,7 @@ export function DepartmentHomePage() {
   if (!department) {
     return (
       <AppShell subtitle="Department" title="No Department Profile">
-        <Card className="py-10 text-center text-muted-foreground">
+        <Card className="py-16 text-center text-on-surface-variant">
           No department profile found. Contact the administrator.
         </Card>
       </AppShell>
@@ -40,35 +49,26 @@ export function DepartmentHomePage() {
 
   const status = department.verification_status;
 
+  /* ── Pending view ── */
   if (status === "pending") {
     return (
       <AppShell subtitle="Awaiting verification" title="Department Registration">
-        <Card className="mx-auto max-w-xl text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 text-2xl">
-            ⏳
+        <Card className="mx-auto max-w-xl text-center py-12">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-[#ffdbd0] mb-6">
+            <span className="material-symbols-outlined text-3xl text-secondary">hourglass_empty</span>
           </div>
-          <h2 className="text-xl font-semibold">Awaiting Verification</h2>
-          <p className="mt-2 text-muted-foreground">
+          <h2 className="font-headline text-2xl text-on-surface">Awaiting Verification</h2>
+          <p className="mt-3 text-on-surface-variant max-w-md mx-auto">
             Your department registration for <strong>{department.name}</strong> is pending
-            municipality approval. You will be able to access operational features once approved.
+            municipality approval. Operational features unlock once approved.
           </p>
-          <div className="mt-6 rounded-lg bg-muted/50 p-4 text-left text-sm">
-            <p><span className="font-medium">Type:</span> {department.type}</p>
-            {department.contact_number && (
-              <p><span className="font-medium">Contact:</span> {department.contact_number}</p>
-            )}
-            {department.address && (
-              <p><span className="font-medium">Address:</span> {department.address}</p>
-            )}
-            {department.area_of_responsibility && (
-              <p><span className="font-medium">Area:</span> {department.area_of_responsibility}</p>
-            )}
-          </div>
+          <DeptDetails department={department} />
         </Card>
       </AppShell>
     );
   }
 
+  /* ── Rejected view ── */
   if (status === "rejected") {
     return (
       <AppShell subtitle="Verification rejected" title="Department Registration">
@@ -82,47 +82,71 @@ export function DepartmentHomePage() {
     );
   }
 
-  // Approved
+  /* ── Approved view ── */
   return (
     <AppShell subtitle="Responder operations" title={department.name}>
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <span className="inline-block rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+      <div className="grid gap-6 md:grid-cols-12">
+        <Card className="md:col-span-5">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-[#d4edda] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#155724]">
+            <span className="material-symbols-outlined text-[14px]">verified</span>
             Verified
           </span>
-          <h2 className="mt-3 text-xl font-semibold">Department Profile</h2>
-          <div className="mt-3 space-y-1 text-sm text-muted-foreground">
-            <p><span className="font-medium text-foreground">Type:</span> {department.type}</p>
-            {department.contact_number && (
-              <p><span className="font-medium text-foreground">Contact:</span> {department.contact_number}</p>
-            )}
-            {department.address && (
-              <p><span className="font-medium text-foreground">Address:</span> {department.address}</p>
-            )}
-          </div>
+          <h2 className="mt-4 font-headline text-2xl text-on-surface">Department Profile</h2>
+          <DeptDetails department={department} />
         </Card>
 
-        <Card>
-          <h2 className="text-xl font-semibold">Incident Board</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The department incident board with accept/decline actions will be available in Phase 2.
+        <Card className="md:col-span-7 bg-surface-container">
+          <h2 className="font-headline text-2xl text-on-surface mb-2">Incident Board</h2>
+          <p className="text-sm text-on-surface-variant leading-relaxed italic">
+            The department incident board with accept/decline actions and real-time
+            routing will be available in Phase 2.
           </p>
+          <div className="mt-8 flex items-center gap-3 text-xs text-on-surface-variant">
+            <span className="material-symbols-outlined text-[16px]">info</span>
+            Phase 2 feature — department operations, feed, and notifications.
+          </div>
         </Card>
       </div>
     </AppShell>
   );
 }
 
+/* ── Shared department details block ── */
+function DeptDetails({ department }: { department: DepartmentInfo }) {
+  return (
+    <div className="mt-6 rounded-lg bg-surface-container p-5 text-left text-sm space-y-2">
+      <div className="flex justify-between">
+        <span className="text-on-surface-variant">Type</span>
+        <span className="font-medium text-on-surface capitalize">{department.type}</span>
+      </div>
+      {department.contact_number && (
+        <div className="flex justify-between">
+          <span className="text-on-surface-variant">Contact</span>
+          <span className="font-medium text-on-surface">{department.contact_number}</span>
+        </div>
+      )}
+      {department.address && (
+        <div className="flex justify-between">
+          <span className="text-on-surface-variant">Address</span>
+          <span className="font-medium text-on-surface">{department.address}</span>
+        </div>
+      )}
+      {department.area_of_responsibility && (
+        <div className="flex justify-between">
+          <span className="text-on-surface-variant">Area</span>
+          <span className="font-medium text-on-surface">{department.area_of_responsibility}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Rejected view with edit/resubmit form ── */
 function DepartmentRejectedView({
-  department,
-  onUpdated,
-  editMode,
-  setEditMode,
+  department, onUpdated, editMode, setEditMode,
 }: {
-  department: DepartmentInfo;
-  onUpdated: (d: DepartmentInfo) => void;
-  editMode: boolean;
-  setEditMode: (v: boolean) => void;
+  department: DepartmentInfo; onUpdated: (d: DepartmentInfo) => void;
+  editMode: boolean; setEditMode: (v: boolean) => void;
 }) {
   const [name, setName] = useState(department.name);
   const [contactNumber, setContactNumber] = useState(department.contact_number ?? "");
@@ -133,89 +157,73 @@ function DepartmentRejectedView({
 
   async function handleResubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const res = await apiRequest<{ department: DepartmentInfo }>("/api/departments/profile", {
         method: "PUT",
-        body: JSON.stringify({
-          name,
-          contact_number: contactNumber,
-          address,
-          area_of_responsibility: area,
-        }),
+        body: JSON.stringify({ name, contact_number: contactNumber, address, area_of_responsibility: area }),
       });
       onUpdated(res.department);
       setEditMode(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update.");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   return (
     <Card className="mx-auto max-w-xl">
-      <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-2xl">
-        ✕
+      <div className="text-center mb-6">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-error-container/20 mb-4">
+          <span className="material-symbols-outlined text-3xl text-error">close</span>
+        </div>
+        <h2 className="font-headline text-2xl text-on-surface">Registration Rejected</h2>
       </div>
-      <h2 className="text-xl font-semibold">Registration Rejected</h2>
+
       {department.rejection_reason && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="font-medium">Reason:</span> {department.rejection_reason}
+        <div className="rounded-md bg-error-container/15 border border-error/15 px-4 py-3 text-sm text-error mb-6">
+          <span className="font-semibold">Reason:</span> {department.rejection_reason}
         </div>
       )}
 
       {editMode ? (
-        <form className="mt-4 space-y-3" onSubmit={handleResubmit}>
+        <form className="space-y-4" onSubmit={handleResubmit}>
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="rounded-md bg-error-container/20 border border-error/20 px-4 py-3 text-sm text-error">{error}</div>
           )}
-          <input
-            type="text"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm"
-            placeholder="Organization name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            type="text"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm"
-            placeholder="Contact number"
-            value={contactNumber}
-            onChange={(e) => setContactNumber(e.target.value)}
-          />
-          <input
-            type="text"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm"
-            placeholder="Address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
-          <input
-            type="text"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm"
-            placeholder="Area of responsibility"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-          />
-          <div className="flex gap-2">
+          <div>
+            <label className="aegis-label">Organization Name</label>
+            <input type="text" className="aegis-input" placeholder="Organization name"
+              value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className="aegis-label">Contact Number</label>
+            <input type="text" className="aegis-input" placeholder="Contact number"
+              value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
+          </div>
+          <div>
+            <label className="aegis-label">Address</label>
+            <input type="text" className="aegis-input" placeholder="Address"
+              value={address} onChange={(e) => setAddress(e.target.value)} />
+          </div>
+          <div>
+            <label className="aegis-label">Area of Responsibility</label>
+            <input type="text" className="aegis-input" placeholder="Area of responsibility"
+              value={area} onChange={(e) => setArea(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-2">
             <Button type="submit" disabled={loading}>
-              {loading ? "Submitting…" : "Resubmit for Verification"}
+              {loading ? "Submitting..." : "Resubmit for Verification"}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setEditMode(false)}>
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setEditMode(false)}>Cancel</Button>
           </div>
         </form>
       ) : (
-        <div className="mt-4">
-          <p className="text-sm text-muted-foreground">
-            You can update your department details and resubmit for verification.
+        <div className="text-center">
+          <p className="text-sm text-on-surface-variant mb-6">
+            Update your department details and resubmit for verification.
           </p>
-          <Button className="mt-4" onClick={() => setEditMode(true)}>
+          <Button variant="secondary" onClick={() => setEditMode(true)}>
+            <span className="material-symbols-outlined text-[16px] mr-2">edit</span>
             Edit & Resubmit
           </Button>
         </div>

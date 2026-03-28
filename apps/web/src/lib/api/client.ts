@@ -1,3 +1,6 @@
+// API client — auto-injects auth token, throws ApiError on non-2xx responses.
+// apiRequest() for JSON, apiUpload() for multipart (no Content-Type so browser sets boundary).
+
 import { useSessionStore } from "@/lib/auth/session-store";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:5000";
@@ -13,6 +16,7 @@ export class ApiError extends Error {
   }
 }
 
+// JSON request with auth token
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = useSessionStore.getState().accessToken;
   const headers: Record<string, string> = {
@@ -40,6 +44,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   return response.json() as Promise<T>;
 }
 
+// File upload — omits Content-Type so browser can set multipart boundary
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   const token = useSessionStore.getState().accessToken;
   const headers: Record<string, string> = {};

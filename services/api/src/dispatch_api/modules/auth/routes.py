@@ -1,3 +1,5 @@
+# Auth routes: register, login, logout, session restore (/me)
+
 from __future__ import annotations
 
 from http import HTTPStatus
@@ -8,11 +10,13 @@ from dispatch_api.auth import get_current_user, require_auth
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.auth import blueprint
 
+# Municipality accounts are pre-seeded, not self-registered
 VALID_ROLES = {"citizen", "department"}
 
 
 @blueprint.post("/register")
 def register():
+    """Create a new citizen or department account and return the access token."""
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     password = body.get("password") or ""
@@ -31,7 +35,7 @@ def register():
 
     client = current_app.extensions["supabase_client"]
 
-    # Sign up via Supabase Auth
+    # Create user in Supabase Auth (role stored in user_metadata for JWT access)
     result = client.sign_up(
         email=email,
         password=password,
@@ -50,7 +54,7 @@ def register():
     if not user_id:
         raise ApiError("Registration failed.", code="registration_failed")
 
-    # Create the application-level user row
+    # Mirror to app users table (may already exist via DB trigger)
     try:
         client.db_insert(
             "users",
@@ -63,9 +67,9 @@ def register():
             use_service_role=True,
         )
     except Exception:
-        pass  # Row may already exist via trigger
+        pass  # Row may already exist via DB trigger
 
-    # If the role is department, also create a department record
+    # For departments: create a departments row starting as "pending"
     dept_data = None
     if role == "department":
         org_name = (body.get("organization_name") or "").strip()
@@ -117,6 +121,7 @@ def register():
 
 @blueprint.post("/login")
 def login():
+    """Authenticate and return tokens + profile + department info."""
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     password = body.get("password") or ""
@@ -139,11 +144,12 @@ def login():
     user_id = user_payload.get("id", "")
     user_email = user_payload.get("email", email)
 
+    # Role priority: app_metadata > user_metadata > users table
     role = user_payload.get("app_metadata", {}).get("role") or user_payload.get(
         "user_metadata", {}
     ).get("role")
 
-    # Fetch application profile
+    # Fetch app-level profile for extra fields (full_name, phone, etc.)
     profile = None
     try:
         rows = client.db_query(
@@ -157,7 +163,7 @@ def login():
     except Exception:
         pass
 
-    # Fetch department info if department role
+    # Eagerly load department info so the client has verification status on login
     department = None
     if role == "department":
         try:
@@ -191,6 +197,7 @@ def login():
 @blueprint.post("/logout")
 @require_auth()
 def logout():
+    """Invalidate the Supabase session server-side."""
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
     client = current_app.extensions["supabase_client"]
     client.sign_out(token)
@@ -200,10 +207,12 @@ def logout():
 @blueprint.get("/me")
 @require_auth()
 def me():
+    """Return current user profile + department info. Used for session restore on reload."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
 
+    # Fetch app-level profile
     profile = None
     try:
         rows = client.db_query(
@@ -216,6 +225,7 @@ def me():
     except Exception:
         pass
 
+    # Load department info if applicable
     department = None
     if user.role == "department":
         try:

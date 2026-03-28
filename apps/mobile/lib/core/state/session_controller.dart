@@ -1,10 +1,12 @@
+// Session controller — manages auth state, coordinates API + local storage.
+// Returns null on success, error string on failure.
+
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/session_storage.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
-
 final sessionStorageProvider = Provider<SessionStorage>((ref) => SessionStorage());
 
 final sessionControllerProvider =
@@ -23,6 +25,7 @@ class SessionController extends StateNotifier<SessionState> {
   final SessionStorage _storage;
   final AuthService _authService;
 
+  // Restore saved session from disk on cold start
   Future<void> _restore() async {
     final restored = await _storage.load();
     state = restored;
@@ -31,6 +34,7 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
+  // Returns null on success, error string on failure
   Future<String?> login({required String email, required String password}) async {
     try {
       final result = await _authService.login(email: email, password: password);
@@ -43,6 +47,7 @@ class SessionController extends StateNotifier<SessionState> {
 
       _authService.setToken(token);
 
+      // Parse department data if present (department-role users only)
       DepartmentInfo? dept;
       final deptData = result['department'] as Map<String, dynamic>?;
       if (deptData != null) {
@@ -65,6 +70,7 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
+  // Returns null on success (or if email confirmation needed), error string on failure
   Future<String?> register({
     required String email,
     required String password,
@@ -93,8 +99,9 @@ class SessionController extends StateNotifier<SessionState> {
       final user = result['user'] as Map<String, dynamic>? ?? {};
       final roleValue = AppRole.values.where((r) => r.name == role).firstOrNull;
 
+      // No token = email confirmation required, not an error
       if (token == null || roleValue == null) {
-        return null; // email confirmation needed
+        return null;
       }
 
       _authService.setToken(token);
@@ -125,6 +132,7 @@ class SessionController extends StateNotifier<SessionState> {
     _storage.save(state);
   }
 
+  // Rebuild full state instead of copyWith (copyWith can't set fields to null)
   void updateFullName(String name) {
     state = SessionState(
       accessToken: state.accessToken,
@@ -145,6 +153,7 @@ class SessionController extends StateNotifier<SessionState> {
     await _storage.clear();
   }
 
+  // Try to parse the server error message from Dio's exception string
   String _extractError(Exception e) {
     if (e.toString().contains('DioException')) {
       final str = e.toString();

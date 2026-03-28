@@ -1,5 +1,6 @@
 enum AppRole { citizen, department, municipality }
 
+/// Mirrors the `departments` table. verificationStatus drives UI routing.
 class DepartmentInfo {
   const DepartmentInfo({
     required this.id,
@@ -46,6 +47,7 @@ class DepartmentInfo {
       };
 }
 
+/// Auth session state — serializable to JSON for file-based persistence.
 class SessionState {
   const SessionState({
     this.accessToken,
@@ -65,6 +67,7 @@ class SessionState {
   final String? fullName;
   final DepartmentInfo? department;
 
+  // Need both role and token to be considered logged in
   bool get isAuthenticated => role != null && accessToken != null;
 
   SessionState copyWith({

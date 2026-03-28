@@ -17,7 +17,7 @@ describe("Dispatch web shell", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/Dispatch now has its first working platform shell/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cultivating resilience through community-driven response/i)).toBeInTheDocument();
   });
 
   it("redirects protected routes when no session exists", () => {

@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { apiRequest } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+
+/**
+ * Phase 1 — Aegis-styled application shell.
+ * Fixed top nav bar + collapsible side nav (desktop only) matching the
+ * Relief Registry / Aegis Risk dashboard layout.
+ */
 
 type AppShellProps = {
   title: string;
@@ -12,97 +17,186 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-const roleNavItems: Record<string, { to: string; label: string }[]> = {
+/* Navigation config per role — icon uses Material Symbols name */
+type NavItem = { to: string; label: string; icon: string };
+
+const roleNavItems: Record<string, NavItem[]> = {
   citizen: [
-    { to: "/citizen", label: "My Reports" },
-    { to: "/feed", label: "Feed" },
-    { to: "/profile", label: "Profile" },
+    { to: "/citizen", label: "My Reports", icon: "description" },
+    { to: "/citizen/report/new", label: "New Report", icon: "add_circle" },
+    { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/profile", label: "Profile", icon: "person" },
   ],
   department: [
-    { to: "/department", label: "Dashboard" },
-    { to: "/feed", label: "Feed" },
-    { to: "/profile", label: "Profile" },
+    { to: "/department", label: "Dashboard", icon: "dashboard" },
+    { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/profile", label: "Profile", icon: "person" },
   ],
   municipality: [
-    { to: "/municipality", label: "Overview" },
-    { to: "/municipality/verification", label: "Verification" },
-    { to: "/municipality/departments", label: "Departments" },
-    { to: "/profile", label: "Profile" },
+    { to: "/municipality", label: "Overview", icon: "dashboard" },
+    { to: "/municipality/verification", label: "Verification", icon: "verified_user" },
+    { to: "/municipality/departments", label: "Departments", icon: "domain" },
+    { to: "/profile", label: "Profile", icon: "person" },
   ],
 };
 
-const defaultNavItems = [
-  { to: "/", label: "Home" },
-  { to: "/feed", label: "Feed" },
-];
+const roleSidebarTitle: Record<string, { title: string; subtitle: string }> = {
+  citizen: { title: "Citizen Hub", subtitle: "Incident Reporting" },
+  department: { title: "Dept. Ops", subtitle: "Response Command" },
+  municipality: { title: "Municipal Admin", subtitle: "Regional Oversight" },
+};
 
 export function AppShell({ title, subtitle, children }: AppShellProps) {
   const navigate = useNavigate();
   const signOut = useSessionStore((s) => s.signOut);
   const user = useSessionStore((s) => s.user);
 
-  const navItems = user ? (roleNavItems[user.role] ?? defaultNavItems) : defaultNavItems;
+  const navItems = user ? (roleNavItems[user.role] ?? []) : [];
+  const sidebarMeta = user ? (roleSidebarTitle[user.role] ?? { title: "Dispatch", subtitle: "" }) : { title: "Dispatch", subtitle: "" };
 
   async function handleSignOut() {
     try {
       await apiRequest("/api/auth/logout", { method: "POST" });
     } catch {
-      // sign out locally even if API call fails
+      /* sign out locally even if API call fails */
     }
     signOut();
     navigate("/");
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-border/70 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div>
-            <Link className="text-lg font-semibold tracking-tight" to="/">
-              Dispatch
-            </Link>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </div>
-          <nav className="hidden items-center gap-2 md:flex">
-            {navItems.map((item) => (
+    <div className="min-h-screen bg-surface">
+      {/* ── Top Nav Bar ── */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#fffcf7] flex justify-between items-center w-full px-8 py-4">
+        <div className="flex items-center gap-8">
+          <Link to="/" className="text-2xl font-headline italic text-on-surface">
+            Dispatch
+          </Link>
+          {/* Top nav links — hidden on mobile */}
+          <nav className="hidden md:flex items-center gap-6">
+            {navItems.slice(0, 3).map((item) => (
               <NavLink
                 key={item.to}
+                to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                    isActive && "bg-muted text-foreground",
+                    "text-on-surface-variant hover:text-on-surface transition-colors duration-300 text-sm font-medium",
+                    isActive && "text-[#D97757] font-semibold border-b-2 border-[#D97757] pb-1",
                   )
                 }
-                to={item.to}
               >
                 {item.label}
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-                  {user.role}
-                </span>
-                <Button onClick={handleSignOut} variant="outline">
-                  Sign out
-                </Button>
-              </>
-            ) : (
-              <Link to="/auth/login">
-                <Button variant="ghost">Sign in</Button>
-              </Link>
-            )}
-          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {user ? (
+            <>
+              <span className="hidden sm:inline-block text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                {user.full_name ?? user.email}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="p-2 hover:bg-surface-container-high rounded-lg transition-colors"
+                title="Sign out"
+              >
+                <span className="material-symbols-outlined text-on-surface-variant">logout</span>
+              </button>
+              <button className="p-2 hover:bg-surface-container-high rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-on-surface-variant">account_circle</span>
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/auth/login"
+              className="text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-4xl font-semibold tracking-tight">{title}</h1>
+
+      {/* ── Side Nav Bar (desktop only) ── */}
+      {user && (
+        <aside className="hidden lg:flex flex-col h-screen fixed left-0 top-0 pt-24 pb-8 px-4 border-r border-outline-variant/15 bg-surface-container w-64 z-40">
+          <div className="mb-8 px-4">
+            <h2 className="font-headline text-xl text-on-surface">{sidebarMeta.title}</h2>
+            <p className="text-xs text-on-surface-variant font-medium uppercase tracking-widest mt-1">
+              {sidebarMeta.subtitle}
+            </p>
+          </div>
+
+          <nav className="flex-1 flex flex-col gap-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/citizen" || item.to === "/department" || item.to === "/municipality"}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
+                    isActive
+                      ? "bg-surface-container-lowest text-[#D97757] shadow-sm"
+                      : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface",
+                  )
+                }
+              >
+                <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="mt-auto border-t border-outline-variant/10 pt-4">
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-3 text-on-surface-variant px-4 py-3 hover:bg-surface-container-low rounded-lg transition-all w-full text-sm font-medium"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+              Sign out
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* ── Main Content ── */}
+      <main className={cn("pt-24 min-h-screen", user && "lg:pl-64")}>
+        <div className="max-w-[1200px] mx-auto p-8">
+          {/* Page header */}
+          <section className="mb-10">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#D97757] mb-2">
+              {subtitle}
+            </p>
+            <h1 className="font-headline text-4xl lg:text-5xl font-bold tracking-tight text-on-surface">
+              {title}
+            </h1>
+          </section>
+          {children}
         </div>
-        {children}
       </main>
+
+      {/* ── Mobile Bottom Nav ── */}
+      {user && (
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 glass-panel border-t border-outline-variant/10 flex justify-around items-center py-3 px-2 z-50">
+          {navItems.slice(0, 4).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-col items-center gap-1",
+                  isActive ? "text-[#D97757]" : "text-on-surface-variant",
+                )
+              }
+            >
+              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
+              <span className="text-[10px] font-bold uppercase tracking-tighter">{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+// Report detail — full report view with photo gallery and status timeline.
+
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

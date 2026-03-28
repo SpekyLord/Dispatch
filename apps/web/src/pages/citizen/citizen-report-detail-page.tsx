@@ -4,36 +4,31 @@ import { Link, useParams } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { LocationMap } from "@/components/maps/location-map";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 
-type StatusHistory = {
-  id: string;
-  status: string;
-  note?: string;
-  created_at: string;
-};
+/**
+ * Phase 1 — Citizen report detail page.
+ * Aegis-styled bento layout: incident info card, images gallery,
+ * status history timeline, and location map sidebar.
+ */
 
+type StatusHistory = { id: string; status: string; note?: string; created_at: string };
 type Report = {
-  id: string;
-  description: string;
-  category: string;
-  severity: string;
-  status: string;
-  address?: string;
-  latitude?: number;
-  longitude?: number;
-  is_escalated: boolean;
-  image_urls?: string[];
-  created_at: string;
-  updated_at: string;
+  id: string; description: string; category: string; severity: string;
+  status: string; address?: string; latitude?: number; longitude?: number;
+  is_escalated: boolean; image_urls?: string[]; created_at: string; updated_at: string;
 };
 
-const statusColors: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  accepted: "bg-blue-100 text-blue-800",
-  responding: "bg-purple-100 text-purple-800",
-  resolved: "bg-green-100 text-green-800",
+const statusStyles: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "bg-[#ffdbd0]", text: "text-[#89391e]" },
+  accepted: { bg: "bg-tertiary-container", text: "text-[#3a4e6a]" },
+  responding: { bg: "bg-[#e5e2de]", text: "text-[#52524f]" },
+  resolved: { bg: "bg-[#d4edda]", text: "text-[#155724]" },
+};
+
+const categoryIcons: Record<string, string> = {
+  fire: "local_fire_department", flood: "water_drop", earthquake: "vibration",
+  road_accident: "car_crash", medical: "medical_services", structural: "domain_disabled", other: "emergency",
 };
 
 export function CitizenReportDetailPage() {
@@ -46,18 +41,17 @@ export function CitizenReportDetailPage() {
   useEffect(() => {
     if (!reportId) return;
     apiRequest<{ report: Report; status_history: StatusHistory[] }>(`/api/reports/${reportId}`)
-      .then((res) => {
-        setReport(res.report);
-        setHistory(res.status_history);
-      })
+      .then((res) => { setReport(res.report); setHistory(res.status_history); })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load report."))
       .finally(() => setLoading(false));
   }, [reportId]);
 
   if (loading) {
     return (
-      <AppShell subtitle="Report details" title="Loading…">
-        <Card className="py-10 text-center text-muted-foreground">Loading report…</Card>
+      <AppShell subtitle="Report details" title="Loading...">
+        <Card className="py-16 text-center text-on-surface-variant">
+          <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
+        </Card>
       </AppShell>
     );
   }
@@ -65,113 +59,151 @@ export function CitizenReportDetailPage() {
   if (error || !report) {
     return (
       <AppShell subtitle="Report details" title="Error">
-        <Card className="py-10 text-center text-red-600">{error ?? "Report not found."}</Card>
+        <Card className="py-16 text-center text-error">{error ?? "Report not found."}</Card>
       </AppShell>
     );
   }
 
+  const style = statusStyles[report.status] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
+
   return (
     <AppShell subtitle="Report details" title={`Report #${report.id.slice(0, 8)}`}>
-      <div className="mb-4">
-        <Link to="/citizen">
-          <Button variant="outline" className="text-sm">
-            ← Back to reports
-          </Button>
+      {/* Back link */}
+      <div className="mb-6">
+        <Link to="/citizen" className="inline-flex items-center gap-1 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+          <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+          Back to reports
         </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Main content — left 8 cols */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Incident details card */}
           <Card>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold">Incident Details</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Submitted {new Date(report.created_at).toLocaleString()}
-                </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+                  <span className="material-symbols-outlined">{categoryIcons[report.category] ?? "emergency"}</span>
+                </div>
+                <div>
+                  <h2 className="font-headline text-2xl text-on-surface">Incident Details</h2>
+                  <p className="text-[10px] uppercase tracking-widest text-on-surface-variant mt-0.5">
+                    Submitted {new Date(report.created_at).toLocaleString()}
+                  </p>
+                </div>
               </div>
-              <span
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusColors[report.status] ?? "bg-gray-100 text-gray-800"}`}
-              >
+              <span className={`rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest ${style.bg} ${style.text}`}>
                 {report.status}
               </span>
             </div>
 
-            <p className="mt-4">{report.description}</p>
+            <p className="mt-6 text-on-surface leading-relaxed">{report.description}</p>
 
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              <span className="rounded bg-muted px-2.5 py-1 font-medium capitalize">
+            <div className="mt-6 flex flex-wrap gap-2">
+              <span className="rounded bg-surface-container-highest px-3 py-1 text-xs font-medium capitalize text-on-surface-variant">
                 {report.category.replace("_", " ")}
               </span>
-              <span className="rounded bg-muted px-2.5 py-1 capitalize">{report.severity}</span>
+              <span className="rounded bg-surface-container-highest px-3 py-1 text-xs capitalize text-on-surface-variant">
+                {report.severity}
+              </span>
               {report.is_escalated && (
-                <span className="rounded bg-red-100 px-2.5 py-1 font-medium text-red-700">
+                <span className="rounded bg-error-container/30 px-3 py-1 text-xs font-semibold text-error">
+                  <span className="material-symbols-outlined text-[12px] align-middle mr-1">warning</span>
                   Escalated
                 </span>
               )}
             </div>
 
             {report.address && (
-              <p className="mt-3 text-sm text-muted-foreground">📍 {report.address}</p>
+              <div className="mt-4 flex items-center gap-2 text-sm text-on-surface-variant">
+                <span className="material-symbols-outlined text-[16px]">location_on</span>
+                {report.address}
+              </div>
             )}
           </Card>
 
           {/* Images */}
           {report.image_urls && report.image_urls.length > 0 && (
             <Card>
-              <h3 className="mb-3 font-medium">Attached Photos</h3>
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+              <h3 className="font-headline text-xl mb-4">Attached Evidence</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {report.image_urls.map((url, i) => (
-                  <img
-                    key={i}
-                    src={url}
-                    alt={`Report image ${i + 1}`}
-                    className="rounded-lg border border-border object-cover aspect-square"
-                  />
+                  <img key={i} src={url} alt={`Report image ${i + 1}`}
+                    className="rounded-lg border border-outline-variant/10 object-cover aspect-square" />
                 ))}
               </div>
             </Card>
           )}
 
-          {/* Status History */}
+          {/* Status history timeline */}
           <Card>
-            <h3 className="mb-3 font-medium">Status History</h3>
+            <h3 className="font-headline text-xl mb-6">Status History</h3>
             {history.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No status updates yet.</p>
+              <p className="text-sm text-on-surface-variant">No status updates yet.</p>
             ) : (
-              <div className="space-y-3">
-                {history.map((h) => (
-                  <div
-                    key={h.id}
-                    className="flex items-start gap-3 border-l-2 border-border pl-4"
-                  >
-                    <div>
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColors[h.status] ?? "bg-gray-100 text-gray-800"}`}
-                      >
-                        {h.status}
-                      </span>
-                      {h.note && <p className="mt-1 text-sm text-muted-foreground">{h.note}</p>}
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {new Date(h.created_at).toLocaleString()}
-                      </p>
+              <div className="space-y-4">
+                {history.map((h) => {
+                  const hs = statusStyles[h.status] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
+                  return (
+                    <div key={h.id} className="flex gap-4 border-l-[3px] border-outline-variant/20 pl-5 relative">
+                      <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-surface-container-highest border-2 border-outline-variant" />
+                      <div>
+                        <span className={`inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${hs.bg} ${hs.text}`}>
+                          {h.status}
+                        </span>
+                        {h.note && <p className="mt-1 text-sm text-on-surface-variant">{h.note}</p>}
+                        <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
+                          {new Date(h.created_at).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
         </div>
 
-        {/* Map */}
-        <div>
+        {/* Sidebar — right 4 cols */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Map */}
           {report.latitude && report.longitude ? (
-            <LocationMap latitude={report.latitude} longitude={report.longitude} />
+            <div className="rounded-xl overflow-hidden border border-outline-variant/10 shadow-spotlight">
+              <LocationMap latitude={report.latitude} longitude={report.longitude} />
+            </div>
           ) : (
-            <Card className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              No GPS coordinates available
+            <Card className="flex flex-col items-center justify-center h-64 text-on-surface-variant">
+              <span className="material-symbols-outlined text-3xl mb-2">map</span>
+              <p className="text-sm">No GPS coordinates available</p>
             </Card>
           )}
+
+          {/* Quick stats */}
+          <Card className="bg-surface-container">
+            <h3 className="font-headline text-lg mb-4">Report Summary</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Status</span>
+                <span className="font-semibold capitalize text-on-surface">{report.status}</span>
+              </div>
+              <div className="h-px bg-outline-variant/15" />
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Category</span>
+                <span className="font-medium capitalize text-on-surface">{report.category.replace("_", " ")}</span>
+              </div>
+              <div className="h-px bg-outline-variant/15" />
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Severity</span>
+                <span className="font-medium capitalize text-on-surface">{report.severity}</span>
+              </div>
+              <div className="h-px bg-outline-variant/15" />
+              <div className="flex justify-between">
+                <span className="text-on-surface-variant">Escalated</span>
+                <span className="font-medium text-on-surface">{report.is_escalated ? "Yes" : "No"}</span>
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
     </AppShell>

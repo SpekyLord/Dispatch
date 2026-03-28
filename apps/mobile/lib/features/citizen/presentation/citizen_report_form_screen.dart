@@ -1,7 +1,10 @@
+// Report form — submit a new incident. Pops with true on success.
+
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// Must match VALID_CATEGORIES in reports/routes.py
 const _categories = [
   ('fire', 'Fire'),
   ('flood', 'Flood'),

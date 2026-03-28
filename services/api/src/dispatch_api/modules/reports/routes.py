@@ -25,6 +25,7 @@ MAX_IMAGES_PER_REPORT = 3
 @require_auth()
 @require_role("citizen")
 def create_report():
+    """Create a new incident report. Starts as pending with an initial status history entry."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
     body = request.get_json(silent=True) or {}
@@ -59,6 +60,7 @@ def create_report():
         "image_urls": body.get("image_urls", []),
     }
 
+    # Location is optional — not all users grant GPS access
     if latitude is not None and longitude is not None:
         report_data["latitude"] = latitude
         report_data["longitude"] = longitude
@@ -72,7 +74,7 @@ def create_report():
 
     report = rows[0]
 
-    # Create initial status history entry
+    # Seed status history — best-effort, don't fail the request if this errors
     try:
         client.db_insert(
             "report_status_history",
@@ -95,6 +97,7 @@ def create_report():
 @require_auth()
 @require_role("citizen")
 def list_reports():
+    """List the citizen's own reports. Supports ?status= and ?category= filters."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
 
@@ -104,7 +107,6 @@ def list_reports():
         "order": "created_at.desc",
     }
 
-    # Optional filters
     status_filter = request.args.get("status")
     if status_filter:
         params["status"] = f"eq.{status_filter}"
@@ -120,6 +122,7 @@ def list_reports():
 @blueprint.get("/<report_id>")
 @require_auth()
 def get_report(report_id: str):
+    """Get a report + status history. Citizens can only view their own reports."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
 
@@ -134,7 +137,7 @@ def get_report(report_id: str):
 
     report = rows[0]
 
-    # Citizens can only view their own reports
+    # Citizens can only see their own; departments/municipality can see all
     if user.role == "citizen" and report.get("reporter_id") != user.id:
         raise ApiError(
             "You do not have permission to view this report.",
@@ -142,7 +145,7 @@ def get_report(report_id: str):
             status_code=HTTPStatus.FORBIDDEN,
         )
 
-    # Fetch status history
+    # Fetch timeline (oldest first for chronological display)
     history = []
     try:
         history = client.db_query(
@@ -164,11 +167,12 @@ def get_report(report_id: str):
 @require_auth()
 @require_role("citizen")
 def upload_report_image(report_id: str):
+    """Upload a photo to a report. Max 3 images per report."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
     storage = current_app.extensions["storage_service"]
 
-    # Verify the report belongs to the user
+    # Verify ownership
     rows = client.db_query(
         "incident_reports",
         params={"select": "id,reporter_id,image_urls", "id": f"eq.{report_id}"},
@@ -181,6 +185,7 @@ def upload_report_image(report_id: str):
     if report.get("reporter_id") != user.id:
         raise ApiError("Forbidden.", code="forbidden", status_code=HTTPStatus.FORBIDDEN)
 
+    # Enforce image limit
     existing_images = report.get("image_urls") or []
     if len(existing_images) >= MAX_IMAGES_PER_REPORT:
         raise ApiError(
@@ -195,8 +200,10 @@ def upload_report_image(report_id: str):
     content_type = file.content_type or "application/octet-stream"
     file_data = file.read()
 
+    # Validate type and size
     storage.validate_upload(content_type=content_type, size_bytes=len(file_data))
 
+    # Upload to Supabase Storage (path: {user_id}/reports/{uuid}_{filename})
     object_path = storage.build_object_path(
         owner_id=user.id,
         domain="reports",
@@ -210,6 +217,7 @@ def upload_report_image(report_id: str):
         content_type=content_type,
     )
 
+    # Append new URL to the image_urls array and write it back
     public_url = client.storage_public_url(bucket="report-images", object_path=object_path)
 
     updated_images = [*existing_images, public_url]

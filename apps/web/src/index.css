@@ -2,35 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Phase 1 — Aegis Risk design-system tokens.
+ * Warm scholarly palette: cream backgrounds, olive text, terracotta accents.
+ */
 :root {
-  --background: 38 67% 97%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --muted: 32 50% 92%;
-  --muted-foreground: 216 16% 40%;
-  --border: 30 28% 83%;
-  --primary: 12 83% 54%;
-  --primary-foreground: 0 0% 100%;
-  --accent: 199 89% 48%;
-  --accent-foreground: 0 0% 100%;
-  --ring: 12 83% 54%;
-  --radius: 1rem;
+  --background: #fffcf7;
+  --foreground: #373831;
+  --card: #ffffff;
+  --card-foreground: #373831;
+  --muted: #f0eee5;
+  --muted-foreground: #64655d;
+  --border: #babab0;
+  --primary: #5f5e5c;
+  --primary-foreground: #faf7f3;
+  --accent: #a14b2f;
+  --accent-foreground: #ffffff;
+  --ring: rgba(81, 101, 131, 0.4);
 }
 
 * {
-  @apply border-border;
+  border-color: var(--border);
 }
 
 body {
-  @apply bg-background text-foreground antialiased;
-  background-image:
-    radial-gradient(circle at top left, rgba(255, 183, 77, 0.28), transparent 24%),
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 18%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 240, 0.94));
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Material Symbols baseline */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  vertical-align: middle;
+}
+
+/* Scholarly headline treatment */
+h1,
+h2,
+h3 {
+  font-family: "Newsreader", serif;
+}
+
+/* Glass panel effect for overlays */
+.glass-panel {
+  background: rgba(255, 252, 247, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Form focus ring — Aegis style */
+.aegis-input {
+  @apply w-full border-none rounded-md px-4 py-3 text-sm transition-all outline-none;
+  background-color: #eae9de;
+  color: #373831;
+}
+.aegis-input::placeholder {
+  color: rgba(186, 186, 176, 0.6);
+}
+.aegis-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(199, 219, 254, 0.2);
+}
+
+/* Label style — tiny uppercase tracking */
+.aegis-label {
+  @apply block text-[11px] font-bold uppercase tracking-widest mb-2 ml-1;
+  color: #64655d;
 }

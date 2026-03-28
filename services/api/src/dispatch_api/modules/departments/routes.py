@@ -8,6 +8,7 @@ from dispatch_api.modules.departments import blueprint
 
 
 def _get_department_for_user(client, user_id: str):
+    """Fetch the department row linked to this user. Uses service_role to bypass RLS."""
     rows = client.db_query(
         "departments",
         params={"select": "*", "user_id": f"eq.{user_id}"},
@@ -19,6 +20,7 @@ def _get_department_for_user(client, user_id: str):
 
 
 def _require_verified_department(dept: dict) -> None:
+    """Block access if the department isn't approved yet. Reusable guard for Phase 2."""
     if dept.get("verification_status") != "approved":
         raise ApiError(
             "Your department has not been verified yet. Contact the municipality for approval.",
@@ -31,6 +33,7 @@ def _require_verified_department(dept: dict) -> None:
 @require_auth()
 @require_role("department")
 def get_department_profile():
+    """Return the authenticated department's profile."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
     dept = _get_department_for_user(client, user.id)
@@ -41,11 +44,13 @@ def get_department_profile():
 @require_auth()
 @require_role("department")
 def update_department_profile():
+    """Update department profile. Auto-resubmits rejected departments back to pending."""
     user = get_current_user()
     client = current_app.extensions["supabase_client"]
     dept = _get_department_for_user(client, user.id)
     body = request.get_json(silent=True) or {}
 
+    # Only allow safe fields — block id, user_id, verification_status from direct edits
     allowed_fields = {
         "name",
         "type",
@@ -58,7 +63,7 @@ def update_department_profile():
     if not update_data:
         raise ApiError("No valid fields to update.", code="validation_error")
 
-    # If department was rejected and is updating details, move back to pending
+    # Auto-resubmit: editing a rejected profile moves it back to pending
     if dept.get("verification_status") == "rejected":
         update_data["verification_status"] = "pending"
         update_data["rejection_reason"] = None

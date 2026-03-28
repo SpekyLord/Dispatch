@@ -6,15 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 
-type Department = {
-  id: string;
-  name: string;
-  type: string;
-  verification_status: string;
-  contact_number?: string;
-  address?: string;
-  created_at: string;
-};
+/**
+ * Phase 1 — Municipality overview dashboard.
+ * Aegis-styled bento cards: pending verification count, total departments,
+ * and an analytics placeholder (Phase 3).
+ */
+
+type Department = { id: string; name: string; type: string; verification_status: string };
 
 export function MunicipalityHomePage() {
   const [pendingCount, setPendingCount] = useState(0);
@@ -26,43 +24,63 @@ export function MunicipalityHomePage() {
       apiRequest<{ departments: Department[] }>("/api/municipality/departments/pending"),
       apiRequest<{ departments: Department[] }>("/api/municipality/departments"),
     ])
-      .then(([pending, all]) => {
-        setPendingCount(pending.departments.length);
-        setTotalCount(all.departments.length);
-      })
+      .then(([pending, all]) => { setPendingCount(pending.departments.length); setTotalCount(all.departments.length); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <AppShell subtitle="Administrative dashboard" title="Municipality Overview">
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
-            Pending verification
+    <AppShell subtitle="Administrative dashboard" title="Regional Stability">
+      <div className="grid gap-6 md:grid-cols-12">
+        {/* Pending verification card */}
+        <Card className="md:col-span-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+              <span className="material-symbols-outlined">pending_actions</span>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+              Pending Verification
+            </p>
+          </div>
+          <p className="text-5xl font-headline italic text-on-surface mb-6">
+            {loading ? "..." : pendingCount}
           </p>
-          <p className="mt-2 text-4xl font-semibold">{loading ? "…" : pendingCount}</p>
-          <Link to="/municipality/verification" className="mt-4 inline-block">
-            <Button>Review Queue</Button>
+          <Link to="/municipality/verification">
+            <Button variant="secondary" className="w-full">Review Queue</Button>
           </Link>
         </Card>
 
-        <Card>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
-            Total departments
+        {/* Total departments card */}
+        <Card className="md:col-span-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-tertiary-container flex items-center justify-center text-tertiary">
+              <span className="material-symbols-outlined">domain</span>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+              Total Departments
+            </p>
+          </div>
+          <p className="text-5xl font-headline italic text-on-surface mb-6">
+            {loading ? "..." : totalCount}
           </p>
-          <p className="mt-2 text-4xl font-semibold">{loading ? "…" : totalCount}</p>
-          <Link to="/municipality/departments" className="mt-4 inline-block">
-            <Button variant="outline">View All</Button>
+          <Link to="/municipality/departments">
+            <Button variant="outline" className="w-full">View All</Button>
           </Link>
         </Card>
 
-        <Card>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-            Analytics
-          </p>
-          <p className="mt-2 text-lg text-muted-foreground">
-            Analytics dashboard will be available in Phase 3.
+        {/* Analytics placeholder — Phase 3 */}
+        <Card className="md:col-span-4 bg-surface-container">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+              <span className="material-symbols-outlined">analytics</span>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+              Analytics
+            </p>
+          </div>
+          <p className="text-sm text-on-surface-variant leading-relaxed italic mt-2">
+            Analytics dashboard with incident trends, department performance, and community resilience
+            metrics will be available in Phase 3.
           </p>
         </Card>
       </div>

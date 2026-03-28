@@ -1,3 +1,5 @@
+// Auth gate — toggles between login and register screens.
+
 import 'package:dispatch_mobile/features/auth/presentation/login_screen.dart';
 import 'package:dispatch_mobile/features/auth/presentation/register_screen.dart';
 import 'package:flutter/material.dart';

@@ -86,8 +86,8 @@ class AuthService {
     String? phone,
   }) async {
     final response = await _dio.put('/api/users/profile', data: {
-      if (fullName case final v?) 'full_name': v,
-      if (phone case final v?) 'phone': v,
+      ?'full_name': fullName,
+      ?'phone': phone,
     });
     return response.data as Map<String, dynamic>;
   }
@@ -105,9 +105,9 @@ class AuthService {
       'description': description,
       'category': category,
       'severity': severity,
-      if (address case final v?) 'address': v,
-      if (latitude case final v?) 'latitude': v,
-      if (longitude case final v?) 'longitude': v,
+      ?'address': address,
+      ?'latitude': latitude,
+      ?'longitude': longitude,
     });
     return response.data as Map<String, dynamic>;
   }

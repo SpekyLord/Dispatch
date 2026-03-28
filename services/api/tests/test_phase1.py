@@ -442,7 +442,7 @@ class TestReports:
             assert report["status"] == "pending"
             assert report["is_escalated"] is False
 
-    def test_create_report_requires_category(self, settings):
+    def test_create_report_auto_categorizes_when_category_is_missing(self, settings):
         user = FakeUser(id="citizen-1", email="c@e.com", role="citizen")
         fake = FakeSupabaseClient(user=user)
         app = make_app(settings, fake)
@@ -452,7 +452,8 @@ class TestReports:
                 headers=auth_header(),
                 json={"description": "Something happened"},
             )
-            assert resp.status_code == 400
+            assert resp.status_code == 201
+            assert resp.json["report"]["category"] == "other"
 
     def test_create_report_requires_description(self, settings):
         user = FakeUser(id="citizen-1", email="c@e.com", role="citizen")
@@ -483,7 +484,14 @@ class TestReports:
         fake = FakeSupabaseClient(
             user=user,
             db_rows={
-                "incident_reports": [{"id": "r1", "description": "Fire", "status": "pending"}]
+                "incident_reports": [
+                    {
+                        "id": "r1",
+                        "reporter_id": "citizen-1",
+                        "description": "Fire",
+                        "status": "pending",
+                    }
+                ]
             },
         )
         app = make_app(settings, fake)
@@ -545,4 +553,4 @@ class TestReports:
             # Check that status history insert was made
             history_inserts = [i for i in fake._inserts if i[0] == "report_status_history"]
             assert len(history_inserts) == 1
-            assert history_inserts[0][1]["status"] == "pending"
+            assert history_inserts[0][1]["new_status"] == "pending"

@@ -437,21 +437,21 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 
 #### Flask API
 
-- [ ] Implement the PRD keyword-based categorization rules for English and Filipino trigger words.
-- [ ] Preserve manual override: if the user manually selects a category, keep it as the final stored category unless a future admin recategorization feature is explicitly added.
-- [ ] Implement the category-to-department routing rules exactly as listed in this file.
-- [ ] Implement the department incident board query so verified departments see only relevant reports, plus escalated catch-all visibility when applicable.
-- [ ] Implement accept and decline actions so a department can publish a current response with optional notes and required decline reason when declining.
-- [ ] Allow multiple departments to accept the same report for coordinated response.
-- [ ] When the first department accepts, update the report status to `accepted` and record status history.
-- [ ] Implement report status progression from `accepted` to `responding` to `resolved` through department actions.
-- [ ] Implement escalation logic so reports escalate immediately after all relevant departments have latest-state declines, or after 120 seconds with no acceptance.
-- [ ] Implement the 120-second no-acceptance scan as a cron-compatible API command or background scan service without introducing Celery/Redis.
-- [ ] When a report escalates, set `is_escalated = true`, expose it to `disaster` departments if needed, and notify municipality users.
-- [ ] Implement verified-department-only post creation with optional image attachments.
-- [ ] Implement citizen/public feed list and detail retrieval.
-- [ ] Implement per-user in-app notifications for new reports, report updates, verification decisions, and announcements.
-- [ ] Backfill verification-decision notifications for Phase 1 workflow now that the notifications system exists.
+- [x] Implement the PRD keyword-based categorization rules for English and Filipino trigger words.
+- [x] Preserve manual override: if the user manually selects a category, keep it as the final stored category unless a future admin recategorization feature is explicitly added.
+- [x] Implement the category-to-department routing rules exactly as listed in this file.
+- [x] Implement the department incident board query so verified departments see only relevant reports, plus escalated catch-all visibility when applicable.
+- [x] Implement accept and decline actions so a department can publish a current response with optional notes and required decline reason when declining.
+- [x] Allow multiple departments to accept the same report for coordinated response.
+- [x] When the first department accepts, update the report status to `accepted` and record status history.
+- [x] Implement report status progression from `accepted` to `responding` to `resolved` through department actions.
+- [x] Implement escalation logic so reports escalate immediately after all relevant departments have latest-state declines, or after 120 seconds with no acceptance.
+- [x] Implement the 120-second no-acceptance scan as a cron-compatible API command or background scan service without introducing Celery/Redis.
+- [x] When a report escalates, set `is_escalated = true`, expose it to `disaster` departments if needed, and notify municipality users.
+- [x] Implement verified-department-only post creation with optional image attachments.
+- [x] Implement citizen/public feed list and detail retrieval.
+- [x] Implement per-user in-app notifications for new reports, report updates, verification decisions, and announcements.
+- [x] Backfill verification-decision notifications for Phase 1 workflow now that the notifications system exists.
 
 #### Web App
 
@@ -482,39 +482,39 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 
 #### Tests
 
-- [ ] Add unit tests for keyword categorization covering both English and Filipino trigger phrases from the PRD.
-- [ ] Add API tests for routing visibility, accept flow, decline flow, multiple-accept flow, escalation by all-decline, and escalation by timeout.
-- [ ] Add API tests that confirm department decline does not set `incident_reports.status = rejected`.
+- [x] Add unit tests for keyword categorization covering both English and Filipino trigger phrases from the PRD.
+- [x] Add API tests for routing visibility, accept flow, decline flow, multiple-accept flow, escalation by all-decline, and escalation by timeout.
+- [x] Add API tests that confirm department decline does not set `incident_reports.status = rejected`.
 - [ ] Add web tests for the department board, feed, and notifications center.
 - [ ] Add mobile tests for department report actions, citizen live status tracking, and notifications.
 - [ ] Add at least one end-to-end flow where a citizen submits a report, a relevant department accepts it, status changes to `responding`, and the citizen sees the updates.
 
 #### Docs
 
-- [ ] Document the category-routing matrix and escalation rules in developer-facing docs.
-- [ ] Document how the append-only department response model works.
-- [ ] Document notification triggers and the meaning of each notification type.
+- [x] Document the category-routing matrix and escalation rules in developer-facing docs.
+- [x] Document how the append-only department response model works.
+- [x] Document notification triggers and the meaning of each notification type.
 
 ### Verification Checklist
 
-- [ ] Only relevant departments see a newly created report before escalation.
-- [ ] Departments can see each other's current accept or decline states and decline reasons.
-- [ ] More than one department can accept the same report.
-- [ ] The first acceptance moves the report to `accepted`, later department status updates can move it to `responding` and `resolved`, and all changes create status-history entries.
-- [ ] If all relevant departments decline, the report escalates immediately and municipality users can see it.
-- [ ] If no one accepts within 120 seconds, the report escalates automatically.
-- [ ] Only verified departments can create public posts.
+- [x] Only relevant departments see a newly created report before escalation.
+- [x] Departments can see each other's current accept or decline states and decline reasons.
+- [x] More than one department can accept the same report.
+- [x] The first acceptance moves the report to `accepted`, later department status updates can move it to `responding` and `resolved`, and all changes create status-history entries.
+- [x] If all relevant departments decline, the report escalates immediately and municipality users can see it.
+- [x] If no one accepts within 120 seconds, the report escalates automatically.
+- [x] Only verified departments can create public posts.
 - [ ] Citizens can browse the feed on web and mobile, but cannot comment or react.
-- [ ] In-app notifications are created, displayed, and can be marked read.
+- [x] In-app notifications are created, displayed, and can be marked read.
 - [ ] Citizen report detail screens update live after department actions.
 
 ### Notes / Update Log
 
-- Date:
-- Completed:
-- Deviations:
-- Blockers:
-- Carryover:
+- Date: `2026-03-28`
+- Completed: implemented the Phase 2 Flask API for rule-based English and Filipino categorization, manual category override, category-based department visibility, append-only accept and decline responses, status progression, escalation by all-decline or 120-second timeout, municipality timeout scanning, verified-department post creation, public feed retrieval, and in-app notifications for report updates, announcements, and verification decisions.
+- Deviations: post images currently use URL-based payload fields rather than a dedicated upload endpoint, and municipality escalation visibility is delivered through notifications plus the new timeout-scan utility instead of a full municipality report board.
+- Blockers: this workspace still does not have live Supabase credentials, so hosted PostgREST, realtime subscriptions, and production RLS behavior were not exercised against a real project from here.
+- Carryover: web and mobile Phase 2 screens, realtime client subscriptions, richer media upload flows for posts, and end-to-end user-interface verification remain for later slices.
 
 ### Exit Criteria
 
@@ -877,3 +877,6 @@ Add non-MVP improvements only after the MVP phases are stable and verified.
 
 - Stretch work is additive, optional, and does not compromise the MVP emergency coordination workflow.
 - Every added feature has a clear operational reason and verification coverage.
+
+
+

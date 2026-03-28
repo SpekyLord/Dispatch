@@ -1,14 +1,14 @@
-# Municipality routes: list departments, review pending, approve/reject verification
-
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from http import HTTPStatus
 
 from flask import current_app, jsonify, request
 
-from dispatch_api.auth import require_auth, require_role
+from dispatch_api.auth import get_current_user, require_auth, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.municipality import blueprint
+from dispatch_api.services.notification_service import NotificationService
 
 VALID_VERIFICATION_ACTIONS = {"approved", "rejected"}
 
@@ -17,11 +17,9 @@ VALID_VERIFICATION_ACTIONS = {"approved", "rejected"}
 @require_auth()
 @require_role("municipality")
 def list_departments():
-    """List all departments. Supports ?status= filter."""
     client = current_app.extensions["supabase_client"]
     params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
 
-    # Optional status filter
     status_filter = request.args.get("status")
     if status_filter:
         params["verification_status"] = f"eq.{status_filter}"
@@ -34,7 +32,6 @@ def list_departments():
 @require_auth()
 @require_role("municipality")
 def list_pending_departments():
-    """List pending departments, oldest first (FIFO review queue)."""
     client = current_app.extensions["supabase_client"]
     rows = client.db_query(
         "departments",
@@ -52,7 +49,7 @@ def list_pending_departments():
 @require_auth()
 @require_role("municipality")
 def verify_department(dept_id: str):
-    """Approve or reject a department. Rejection requires a reason string."""
+    reviewer = get_current_user()
     body = request.get_json(silent=True) or {}
     action = (body.get("action") or "").strip()
 
@@ -62,41 +59,48 @@ def verify_department(dept_id: str):
             code="validation_error",
         )
 
-    # Rejection requires an explanation
-    if action == "rejected":
-        reason = (body.get("rejection_reason") or "").strip()
-        if not reason:
-            raise ApiError(
-                "A rejection reason is required when rejecting a department.",
-                code="validation_error",
-            )
+    rejection_reason = (body.get("rejection_reason") or "").strip()
+    if action == "rejected" and not rejection_reason:
+        raise ApiError(
+            "A rejection reason is required when rejecting a department.",
+            code="validation_error",
+        )
 
     client = current_app.extensions["supabase_client"]
-
-    # Check department exists
     existing = client.db_query(
         "departments",
-        params={"select": "id,verification_status", "id": f"eq.{dept_id}"},
+        params={"select": "*", "id": f"eq.{dept_id}"},
         use_service_role=True,
     )
     if not existing:
         raise ApiError("Department not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND)
 
-    # On approve: clear old rejection_reason. On reject: store the reason.
-    update_data: dict[str, str | None] = {"verification_status": action}
-    if action == "rejected":
-        update_data["rejection_reason"] = body.get("rejection_reason", "").strip()
-    else:
-        update_data["rejection_reason"] = None
-
+    update_data = {
+        "verification_status": action,
+        "rejection_reason": rejection_reason or None,
+        "verified_by": reviewer.id if action == "approved" else None,
+        "verified_at": datetime.now(tz=UTC).isoformat() if action == "approved" else None,
+    }
     rows = client.db_update(
         "departments",
         data=update_data,
         params={"id": f"eq.{dept_id}"},
         use_service_role=True,
     )
-
     if not rows:
         raise ApiError("Failed to update department.", code="update_failed")
 
-    return jsonify({"department": rows[0]})
+    department = rows[0]
+    if existing[0].get("user_id"):
+        client.db_update(
+            "users",
+            data={"is_verified": action == "approved"},
+            params={"id": f"eq.{existing[0]['user_id']}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+
+    if department.get("user_id"):
+        NotificationService(client).notify_verification_decision(department=department)
+
+    return jsonify({"department": department})

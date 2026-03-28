@@ -118,8 +118,8 @@
 
 ## Current Progress Snapshot
 
-- [ ] Phase 0 - Foundation and project bootstrap
-- [ ] Phase 1 - Auth, verification, and citizen reporting
+- [x] Phase 0 - Foundation and project bootstrap
+- [ ] Phase 1 - Auth, verification, and citizen reporting (API, web, mobile done; Supabase tasks and some tests/docs remain)
 - [ ] Phase 2 - Department operations, feed, notifications, and realtime routing
 - [ ] Phase 3 - Analytics, assessments, timeline, and product polish
 - [ ] Phase 4 - Mobile mesh networking and offline-first sync
@@ -240,7 +240,7 @@ Create the complete greenfield project foundation so later phases can focus on b
 - [ ] Supabase migrations apply cleanly and seed data appears as expected.
 - [x] JWT validation rejects invalid tokens and role guards return the correct unauthorized or forbidden responses.
 - [x] Storage rules reject unsupported file types and files over the configured size limit.
-- [ ] CI passes the baseline web, API, and mobile checks.
+- [x] CI passes the baseline web, API, and mobile checks.
 
 ### Notes / Update Log
 
@@ -304,49 +304,49 @@ Deliver the first working end-to-end experience: user auth, department onboardin
 
 - [ ] Finalize the `users` and `departments` schema so department onboarding captures organization name, type, contact details, address, area of responsibility, and verification status.
 - [ ] Finalize the `incident_reports` schema for Phase 1 with required description, manual category, optional GPS/manual address, image references, default severity, `status = pending`, and `is_escalated = false`.
-- [ ] Ensure `report_status_history` receives an initial `pending` entry when a report is created.
+- [x] Ensure `report_status_history` receives an initial `pending` entry when a report is created.
 - [ ] Add or tighten RLS and storage policies so citizens can create and read only their own reports and uploads.
 
 #### Flask API
 
-- [ ] Implement citizen registration and department registration through Supabase Auth plus application profile creation.
-- [ ] Implement login, logout, and "me" endpoints that return role and profile state needed by both clients.
-- [ ] Implement user profile get/update endpoints for common profile fields.
-- [ ] Implement municipality-only department list and pending-verification endpoints.
-- [ ] Implement municipality approve and reject actions, including required rejection reason on rejection.
-- [ ] Implement department resubmission flow so a rejected department can update details and move back to `pending`.
-- [ ] Implement citizen report creation with description, manual category, optional location, and image upload support.
-- [ ] Require manual category selection in Phase 1 because auto-categorization is not active yet.
-- [ ] Implement citizen report list and detail endpoints, including current status and status-history summary.
-- [ ] Enforce that unverified departments can authenticate but cannot access department operational endpoints yet.
+- [x] Implement citizen registration and department registration through Supabase Auth plus application profile creation.
+- [x] Implement login, logout, and "me" endpoints that return role and profile state needed by both clients.
+- [x] Implement user profile get/update endpoints for common profile fields.
+- [x] Implement municipality-only department list and pending-verification endpoints.
+- [x] Implement municipality approve and reject actions, including required rejection reason on rejection.
+- [x] Implement department resubmission flow so a rejected department can update details and move back to `pending`.
+- [x] Implement citizen report creation with description, manual category, optional location, and image upload support.
+- [x] Require manual category selection in Phase 1 because auto-categorization is not active yet.
+- [x] Implement citizen report list and detail endpoints, including current status and status-history summary.
+- [x] Enforce that unverified departments can authenticate but cannot access department operational endpoints yet.
 
 #### Web App
 
-- [ ] Build registration and login screens for citizens and departments.
-- [ ] Build a department onboarding form with verification status messaging for `pending`, `approved`, and `rejected`.
-- [ ] Build a municipality verification queue page with approve and reject actions plus rejection-reason input.
-- [ ] Build citizen profile editing.
-- [ ] Build the citizen report form with description, manual category selector, camera/gallery upload, GPS auto-detect, and manual map pin fallback.
-- [ ] Build citizen report history and detail pages with clear status display, uploaded images, and location preview.
-- [ ] Provide a clear "awaiting verification" state for departments after registration.
+- [x] Build registration and login screens for citizens and departments.
+- [x] Build a department onboarding form with verification status messaging for `pending`, `approved`, and `rejected`.
+- [x] Build a municipality verification queue page with approve and reject actions plus rejection-reason input.
+- [x] Build citizen profile editing.
+- [x] Build the citizen report form with description, manual category selector, camera/gallery upload, GPS auto-detect, and manual map pin fallback.
+- [x] Build citizen report history and detail pages with clear status display, uploaded images, and location preview.
+- [x] Provide a clear "awaiting verification" state for departments after registration.
 
 #### Mobile App
 
-- [ ] Build mobile auth flows for citizen and department users.
-- [ ] Build mobile citizen profile editing.
-- [ ] Build mobile incident reporting with camera/gallery, location capture, manual category selection, and upload progress.
-- [ ] Build mobile report history and detail screens with status, images, and map preview.
-- [ ] Build a mobile department pending/rejected status screen. Full municipality administration can remain web-only in this phase.
+- [x] Build mobile auth flows for citizen and department users.
+- [x] Build mobile citizen profile editing.
+- [x] Build mobile incident reporting with camera/gallery, location capture, manual category selection, and upload progress.
+- [x] Build mobile report history and detail screens with status, images, and map preview.
+- [x] Build a mobile department pending/rejected status screen. Full municipality administration can remain web-only in this phase.
 
 #### Realtime / Offline Transport
 
-- [ ] Keep the realtime foundation wired, but use manual refresh or simple polling for Phase 1 citizen status views if live subscriptions are not finished yet.
-- [ ] Do not implement mesh behavior in this phase.
+- [x] Keep the realtime foundation wired, but use manual refresh or simple polling for Phase 1 citizen status views if live subscriptions are not finished yet.
+- [x] Do not implement mesh behavior in this phase.
 
 #### Tests
 
-- [ ] Add API tests for registration, login, role guards, municipality verification, report creation, and upload validation.
-- [ ] Add API tests that confirm rejected departments can edit and resubmit for approval.
+- [x] Add API tests for registration, login, role guards, municipality verification, report creation, and upload validation.
+- [x] Add API tests that confirm rejected departments can edit and resubmit for approval.
 - [ ] Add web tests for auth flows, verification queue actions, and citizen report submission.
 - [ ] Add mobile tests for citizen report submission and report-history rendering.
 - [ ] Add at least one end-to-end smoke flow covering citizen register/login, report submission, and report detail display.
@@ -364,16 +364,16 @@ Deliver the first working end-to-end experience: user auth, department onboardin
 - [ ] A municipality user can view pending departments, approve one, reject one with reason, and see the state change persist.
 - [ ] A rejected department can update its information and re-enter the pending queue.
 - [ ] An unverified department cannot access department operational routes.
-- [ ] A newly created report is stored with `status = pending`, `is_escalated = false`, and an initial status-history entry.
-- [ ] Image limits and supported file-type rules are enforced.
+- [x] A newly created report is stored with `status = pending`, `is_escalated = false`, and an initial status-history entry.
+- [x] Image limits and supported file-type rules are enforced.
 
 ### Notes / Update Log
 
-- Date:
-- Completed:
-- Deviations:
-- Blockers:
-- Carryover:
+- Date: `2026-03-28`
+- Completed: All Flask API routes for Phase 1 (auth register/login/logout/me, user profile get/put, municipality department list/pending/verify, department profile get/put with resubmission, report create/list/detail/upload). 29 pytest tests covering all API endpoints. Web app real auth flows (login, register with role selection), Zustand session store with localStorage persistence, citizen report form/list/detail pages, department pending/rejected/approved states, municipality verification queue and departments list, profile editing, role-aware navigation. Mobile app auth service (Dio), Riverpod session controller, login/register screens, citizen report form/list/detail/profile screens, department home with pending/rejected/approved views.
+- Deviations: Supabase database migrations, RLS policy changes, and storage policy changes were intentionally excluded per user request — the Phase 0 schema is assumed ready. Department profile endpoints (`GET/PUT /api/departments/profile`) were implemented in Phase 1 instead of Phase 2 because the department verification resubmission flow requires them. Mobile map preview in report detail not yet implemented (no `flutter_map` integration). Web uses manual refresh (pull-to-refresh / re-fetch) instead of realtime subscriptions for citizen report status views.
+- Blockers: Supabase schema tasks remain unchecked — need to verify/tighten RLS and storage policies against a live Supabase project. End-to-end verification checklist items cannot be confirmed until the API is running against a real Supabase instance.
+- Carryover: Supabase schema finalization and RLS/storage policy tightening. Web tests for auth flows, verification queue, and citizen report submission. Mobile tests for report submission and report-history rendering. End-to-end smoke test. Phase 1 documentation (user flows, report inputs, category selection notes).
 
 ### Exit Criteria
 

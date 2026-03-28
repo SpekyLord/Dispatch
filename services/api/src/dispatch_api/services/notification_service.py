@@ -189,4 +189,3 @@ class NotificationService:
 
     def _labelize(self, value: str) -> str:
         return value.replace("_", " ").strip().title()
-

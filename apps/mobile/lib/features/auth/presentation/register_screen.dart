@@ -174,7 +174,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _deptType,
+                      initialValue: _deptType,
                       decoration: const InputDecoration(
                         labelText: 'Department type',
                         border: OutlineInputBorder(),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+import io
 
 import pytest
 
@@ -74,6 +75,8 @@ class FakeSupabaseClient:
             item = deepcopy(row)
             self._counter += 1
             item.setdefault("id", f"{table}-{self._counter}")
+            if table == "department_feed_comment":
+                item.setdefault("comment_id", self._counter)
             item.setdefault("created_at", self._now())
             if table == "department_responses":
                 item.setdefault("responded_at", self._now())
@@ -92,6 +95,17 @@ class FakeSupabaseClient:
                 self._updates.append((table, deepcopy(data), deepcopy(params)))
                 updated.append(deepcopy(row))
         return updated if return_repr else []
+
+    def db_delete(self, table, *, params, token=None, use_service_role=False, return_repr=True):
+        deleted = []
+        kept = []
+        for row in self._db.get(table, []):
+            if self._matches(row, params):
+                deleted.append(deepcopy(row))
+            else:
+                kept.append(row)
+        self._db[table] = kept
+        return deleted if return_repr else []
 
     def storage_upload(self, *, bucket, object_path, file_data, content_type):
         return {"Key": object_path}
@@ -479,15 +493,174 @@ def test_verified_department_can_create_post_and_public_feed_can_read_it(setting
         create_response = client.post(
             "/api/departments/posts",
             headers=auth_header(),
-            json={"title": "Road Closure", "content": "Avoid the plaza.", "category": "alert"},
+            data={
+                "title": "Road Closure",
+                "content": "Avoid the plaza.",
+                "category": "alert",
+                "location": "Town Plaza",
+                "photos": [(io.BytesIO(b"\x89PNG\r\n\x1a\n"), "notice.png", "image/png")],
+                "attachments": [(io.BytesIO(b"%PDF-1.4"), "tips.pdf", "application/pdf")],
+            },
+            content_type="multipart/form-data",
+        )
+        feed_response = client.get("/api/feed")
+        detail_response = client.get(f"/api/feed/{create_response.json['post']['id']}")
+
+    assert create_response.status_code == 201
+    assert feed_response.status_code == 200
+    assert detail_response.status_code == 200
+    assert feed_response.json["posts"][0]["title"] == "Road Closure"
+    assert feed_response.json["posts"][0]["location"] == "Town Plaza"
+    assert len(feed_response.json["posts"][0]["photos"]) == 1
+    assert len(feed_response.json["posts"][0]["attachments"]) == 1
+    assert feed_response.json["posts"][0]["department"]["name"] == "BFP"
+    assert detail_response.json["post"]["location"] == "Town Plaza"
+    assert len(detail_response.json["post"]["photos"]) == 1
+    assert len(detail_response.json["post"]["attachments"]) == 1
+    assert fake._db["department_feed_posts"][0]["uploader"] == "dept-fire-user"
+    assert len(fake._db["department_feed_storage"]) == 2
+    assert any(notification["user_id"] == "citizen-1" for notification in fake._db["notifications"])
+
+
+def test_verified_department_can_create_text_only_post(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="dept-fire-user", email="fire@example.com", role="department"),
+        db_rows={
+            "users": [{"id": "citizen-1", "role": "citizen", "email": "citizen@example.com"}],
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        create_response = client.post(
+            "/api/departments/posts",
+            headers=auth_header(),
+            data={
+                "title": "Heat Advisory",
+                "content": "Stay hydrated and avoid open flames during peak heat hours.",
+                "category": "warning",
+                "location": "Central District",
+            },
+            content_type="multipart/form-data",
         )
         feed_response = client.get("/api/feed")
 
     assert create_response.status_code == 201
     assert feed_response.status_code == 200
-    assert feed_response.json["posts"][0]["title"] == "Road Closure"
-    assert feed_response.json["posts"][0]["department"]["name"] == "BFP"
-    assert any(notification["user_id"] == "citizen-1" for notification in fake._db["notifications"])
+    assert feed_response.json["posts"][0]["title"] == "Heat Advisory"
+    assert feed_response.json["posts"][0]["photos"] == []
+    assert feed_response.json["posts"][0]["attachments"] == []
+    assert "department_feed_storage" not in fake._db or fake._db["department_feed_storage"] == []
+
+
+def test_authenticated_user_can_create_feed_comment_and_public_can_read_it(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="citizen-1", email="citizen@example.com", role="citizen"),
+        db_rows={
+            "users": [
+                {"id": "citizen-1", "role": "citizen", "email": "citizen@example.com", "full_name": "Citizen One"}
+            ],
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-fire-user",
+                    "title": "Fire Safety",
+                    "content": "Keep exits clear.",
+                    "category": "safety_tip",
+                    "location": "Central Station",
+                    "created_at": iso_now_minus(5),
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        create_response = client.post(
+            "/api/feed/1/comments",
+            headers=auth_header(),
+            json={"comment": "We shared this with our block leaders."},
+        )
+        list_response = client.get("/api/feed/1/comments")
+        feed_response = client.get("/api/feed")
+
+    assert create_response.status_code == 201
+    assert create_response.json["comment"]["user_name"] == "Citizen One"
+    assert list_response.status_code == 200
+    assert list_response.json["comments"][0]["comment"] == "We shared this with our block leaders."
+    assert feed_response.status_code == 200
+    assert feed_response.json["posts"][0]["comment_count"] == 1
+
+
+def test_authenticated_user_can_toggle_feed_reaction_per_user(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="citizen-1", email="citizen@example.com", role="citizen"),
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-fire-user",
+                    "title": "Fire Safety",
+                    "content": "Keep exits clear.",
+                    "category": "safety_tip",
+                    "location": "Central Station",
+                    "reaction": 2,
+                    "created_at": iso_now_minus(5),
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        like_response = client.post("/api/feed/1/reaction", headers=auth_header())
+        feed_after_like = client.get("/api/feed", headers=auth_header())
+
+        assert like_response.status_code == 200
+        assert like_response.json["post"]["reaction"] == 3
+        assert like_response.json["post"]["liked_by_me"] is True
+        assert feed_after_like.status_code == 200
+        assert feed_after_like.json["posts"][0]["reaction"] == 3
+        assert feed_after_like.json["posts"][0]["liked_by_me"] is True
+        assert len(fake._db["department_feed_reactions"]) == 1
+
+        unlike_response = client.post("/api/feed/1/reaction", headers=auth_header())
+        feed_after_unlike = client.get("/api/feed", headers=auth_header())
+
+    assert unlike_response.status_code == 200
+    assert unlike_response.json["post"]["reaction"] == 2
+    assert unlike_response.json["post"]["liked_by_me"] is False
+    assert feed_after_unlike.status_code == 200
+    assert feed_after_unlike.json["posts"][0]["reaction"] == 2
+    assert feed_after_unlike.json["posts"][0]["liked_by_me"] is False
+    assert fake._db["department_feed_reactions"] == []
 
 
 def test_notification_endpoints_list_and_mark_items_read(settings):

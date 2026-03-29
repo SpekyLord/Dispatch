@@ -111,7 +111,7 @@
 |------|--------------------------|
 | Phase 0 | `GET /api/health`, `GET /api/ready`, auth middleware, role guards, validation layer, Supabase clients, storage helpers, realtime subscription helpers |
 | Phase 1 | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/users/profile`, `PUT /api/users/profile`, `GET /api/municipality/departments`, `GET /api/municipality/departments/pending`, `PUT /api/municipality/departments/:id/verify`, `POST /api/reports`, `GET /api/reports`, `GET /api/reports/:id`, `POST /api/reports/:id/upload` |
-| Phase 2 | `GET /api/departments/profile`, `PUT /api/departments/profile`, `GET /api/departments/reports`, `POST /api/departments/reports/:id/accept`, `POST /api/departments/reports/:id/decline`, `GET /api/departments/reports/:id/responses`, `PUT /api/departments/reports/:id/status`, `POST /api/departments/posts`, `GET /api/feed`, `GET /api/feed/:id`, `GET /api/notifications`, `PUT /api/notifications/:id/read`, `PUT /api/notifications/read-all` |
+| Phase 2 | `GET /api/departments/profile`, `PUT /api/departments/profile`, `GET /api/departments/view/:user_id`, `GET /api/departments/reports`, `POST /api/departments/reports/:id/accept`, `POST /api/departments/reports/:id/decline`, `GET /api/departments/reports/:id/responses`, `PUT /api/departments/reports/:id/status`, `POST /api/departments/posts`, `GET /api/feed`, `GET /api/feed/:id`, `GET /api/feed/:id/comments`, `POST /api/feed/:id/comments`, `POST /api/feed/:id/reaction`, `GET /api/notifications`, `PUT /api/notifications/:id/read`, `PUT /api/notifications/read-all` |
 | Phase 3 | `GET /api/municipality/reports`, `GET /api/municipality/analytics`, `POST /api/departments/assessments`, `GET /api/departments/assessments`, `GET /api/municipality/assessments`, expanded `GET /api/reports/:id` timeline payload |
 | Phase 4 | `POST /api/mesh/ingest`, `GET /api/mesh/sync-updates`, mesh packet envelope, gateway sync acknowledgement contract, mobile SQLite queue interfaces |
 | Phase 5 | ML categorization interfaces, push token registration, moderation endpoints, map visualization data endpoints, WiFi Direct large-payload tuning surfaces |
@@ -420,6 +420,7 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 
 - `GET /api/departments/profile`
 - `PUT /api/departments/profile`
+- `GET /api/departments/view/:user_id`
 - `GET /api/departments/reports`
 - `POST /api/departments/reports/:id/accept`
 - `POST /api/departments/reports/:id/decline`
@@ -428,6 +429,9 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - `POST /api/departments/posts`
 - `GET /api/feed`
 - `GET /api/feed/:id`
+- `GET /api/feed/:id/comments`
+- `POST /api/feed/:id/comments`
+- `POST /api/feed/:id/reaction`
 - `GET /api/notifications`
 - `PUT /api/notifications/:id/read`
 - `PUT /api/notifications/read-all`
@@ -530,6 +534,11 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - Deviations: the Playwright smoke uses a stateful mocked API with realtime disabled at the browser harness layer, while live update behavior is verified separately through the web/mobile realtime callback tests; municipality still has the intentionally narrow escalations-only view from Phase 2, not the broader Phase 3 analytics dashboard.
 - Blockers: none for Phase 2 exit criteria in this workspace.
 - Carryover: move to Phase 3 scope for municipality-wide analytics, assessment workflows, bilingual UI, and broader dashboard/reporting polish.
+- Date: `2026-03-29` (feed/profile follow-up)
+- Completed: shipped the temporary role-based News Feed pages for citizen, department, and municipality with the added nav entry; replaced placeholder feed content with Supabase-backed posts, comments, reactions, and attachment/media rendering; finished department-only publishing with dynamic post creation, photo upload, attachment upload, geolocation-based location capture, and the create-post modal flow; added persistent comments through `department_feed_comment`, per-user like/unlike persistence through `department_feed_reactions`, and reaction-count saving; completed the dynamic department profile page, edit-profile modal, uploaded `profile_picture` and `header_photo`, and the new public read-only publisher profile view; polished the feed UX with the attachment redesign, action-row repositioning, fixed modal headers, delayed interactive publisher hover cards, and clickable publisher name/photo navigation; fixed stale-token `403` handling so public feed requests do not crash and fixed text-only post publishing so files are no longer required.
+- Deviations: several News Feed and profile surfaces are still explicitly temporary or placeholder-labeled in UX copy and styling, but the underlying data flow is now database-backed where implemented; some hover-card actions remain presentation-first while broader social or moderation behavior is intentionally deferred.
+- Blockers: full web-suite verification still has the existing `@testing-library/user-event` dependency limitation, so some browser-facing checks remain partial in this workspace even though targeted API coverage was added during the slice.
+- Carryover: continue in Phase 3+ for broader municipality analytics, richer moderation and publisher-management tools, fuller social/feed interactions beyond comments and reactions, and any remaining temporary News Feed/profile polish that is not required for the Phase 2 MVP.
 
 ### Exit Criteria
 

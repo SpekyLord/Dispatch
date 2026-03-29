@@ -25,6 +25,7 @@ const roleNavItems: Record<string, NavItem[]> = {
     { to: "/citizen", label: "My Reports", icon: "description" },
     { to: "/citizen/report/new", label: "New Report", icon: "add_circle" },
     { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/citizen/news-feed", label: "News Feed", icon: "campaign" },
     { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },
   ],
@@ -32,14 +33,16 @@ const roleNavItems: Record<string, NavItem[]> = {
     { to: "/department", label: "Dashboard", icon: "dashboard" },
     { to: "/department/reports", label: "Incident Board", icon: "assignment" },
     { to: "/feed", label: "Feed", icon: "newspaper" },
+    { to: "/department/news-feed", label: "News Feed", icon: "campaign" },
     { to: "/notifications", label: "Notifications", icon: "notifications" },
-    { to: "/profile", label: "Profile", icon: "person" },
+    { to: "/department/profile", label: "Profile", icon: "person" },
   ],
   municipality: [
     { to: "/municipality", label: "Overview", icon: "dashboard" },
     { to: "/municipality/reports/escalated", label: "Escalations", icon: "crisis_alert" },
     { to: "/municipality/verification", label: "Verification", icon: "verified_user" },
     { to: "/municipality/departments", label: "Departments", icon: "domain" },
+    { to: "/municipality/news-feed", label: "News Feed", icon: "campaign" },
     { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },
   ],
@@ -78,14 +81,14 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
             Dispatch
           </Link>
           {/* Top nav links — hidden on mobile */}
-          <nav className="hidden md:flex items-center gap-6">
-            {navItems.slice(0, 3).map((item) => (
+          <nav className="hide-scrollbar hidden max-w-[52vw] items-center gap-4 overflow-x-auto whitespace-nowrap md:flex">
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "text-on-surface-variant hover:text-on-surface transition-colors duration-300 text-sm font-medium",
+                    "flex-shrink-0 text-on-surface-variant hover:text-on-surface transition-colors duration-300 text-sm font-medium",
                     isActive && "text-[#D97757] font-semibold border-b-2 border-[#D97757] pb-1",
                   )
                 }
@@ -184,14 +187,14 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
 
       {/* ── Mobile Bottom Nav ── */}
       {user && (
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 glass-panel border-t border-outline-variant/10 flex justify-around items-center py-3 px-2 z-50">
-          {navItems.slice(0, 4).map((item) => (
+        <nav className="hide-scrollbar lg:hidden fixed bottom-0 left-0 right-0 glass-panel border-t border-outline-variant/10 flex items-center gap-4 overflow-x-auto px-4 py-3 z-50">
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center gap-1",
+                  "flex min-w-[72px] flex-col items-center gap-1",
                   isActive ? "text-[#D97757]" : "text-on-surface-variant",
                 )
               }

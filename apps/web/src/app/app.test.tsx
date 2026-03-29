@@ -34,4 +34,26 @@ describe("Dispatch web shell", () => {
 
     expect(screen.getByText("login page")).toBeInTheDocument();
   });
+
+  it("redirects protected routes when the user exists but the access token is missing", () => {
+    useSessionStore.setState({
+      user: { id: "dept-1", email: "department@test.com", role: "department", full_name: "Department User" },
+      accessToken: null,
+      refreshToken: null,
+      department: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/department/news-feed"]}>
+        <Routes>
+          <Route element={<ProtectedRoute allowedRoles={["department"]} />}>
+            <Route element={<div>department news feed</div>} path="/department/news-feed" />
+          </Route>
+          <Route element={<div>login page</div>} path="/auth/login" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("login page")).toBeInTheDocument();
+  });
 });

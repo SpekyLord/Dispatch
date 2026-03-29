@@ -58,6 +58,15 @@ h3 {
   -webkit-backdrop-filter: blur(24px);
 }
 
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Form focus ring — Aegis style */
 .aegis-input {
   @apply w-full border-none rounded-md px-4 py-3 text-sm transition-all outline-none;

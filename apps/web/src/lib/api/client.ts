@@ -45,7 +45,11 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
 }
 
 // File upload — omits Content-Type so browser can set multipart boundary
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  init?: Omit<RequestInit, "body" | "headers">,
+): Promise<T> {
   const token = useSessionStore.getState().accessToken;
   const headers: Record<string, string> = {};
   if (token) {
@@ -53,7 +57,8 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
+    method: init?.method ?? "POST",
+    ...init,
     headers,
     body: formData,
   });

@@ -12,9 +12,10 @@ type ProtectedRouteProps = {
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const location = useLocation();
   const user = useSessionStore((state) => state.user);
+  const accessToken = useSessionStore((state) => state.accessToken);
 
   // Not logged in → send to login, save intended path for redirect back
-  if (!user) {
+  if (!user || !accessToken) {
     return <Navigate replace state={{ from: location.pathname }} to="/auth/login" />;
   }
 

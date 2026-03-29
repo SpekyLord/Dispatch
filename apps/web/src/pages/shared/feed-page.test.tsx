@@ -64,7 +64,7 @@ describe("FeedPage", () => {
       expect(screen.getByText("Flood Advisory")).toBeInTheDocument();
     });
     expect(screen.getByText("1 post")).toBeInTheDocument();
-    expect(realtimeMock.subscriptions.map((subscription) => subscription.table)).toEqual(["posts"]);
+    expect(realtimeMock.subscriptions.map((subscription) => subscription.table)).toEqual(["department_feed_posts"]);
 
     posts = [
       ...posts,

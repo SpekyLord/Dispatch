@@ -34,11 +34,31 @@ class SupabaseSeedClient:
         }
         return self._request("POST", "/auth/v1/admin/users", payload)
 
-    def upsert_table_rows(self, table: str, rows: list[dict]) -> list[dict]:
+    def find_user_row_by_email(self, email: str) -> dict | None:
+        encoded_email = urllib.parse.quote(email, safe="")
+        rows = self._request(
+            "GET",
+            f"/rest/v1/users?select=id,email,role&email=eq.{encoded_email}",
+        )
+        if not rows:
+            return None
+        return rows[0]
+
+    def upsert_table_rows(
+        self,
+        table: str,
+        rows: list[dict],
+        *,
+        on_conflict: str | None = None,
+    ) -> list[dict]:
         headers = {
             "Prefer": "resolution=merge-duplicates,return=representation",
         }
-        return self._request("POST", f"/rest/v1/{table}", rows, extra_headers=headers)
+        path = f"/rest/v1/{table}"
+        if on_conflict:
+            encoded_conflict = urllib.parse.quote(on_conflict, safe=",")
+            path = f"{path}?on_conflict={encoded_conflict}"
+        return self._request("POST", path, rows, extra_headers=headers)
 
     def _request(
         self,
@@ -86,6 +106,13 @@ def main() -> None:
             is_verified=True,
         ),
         SeedUser(
+            email="citizen.demo@dispatch.local",
+            password=default_password,
+            full_name="Demo Citizen",
+            role="citizen",
+            is_verified=False,
+        ),
+        SeedUser(
             email="fire.station@dispatch.local",
             password=default_password,
             full_name="BFP Station Commander",
@@ -124,7 +151,22 @@ def main() -> None:
     ]
 
     client = SupabaseSeedClient(supabase_url, service_role_key)
-    created_users = [client.create_auth_user(seed_user) for seed_user in seed_users]
+    created_users = []
+    for seed_user in seed_users:
+        try:
+            created_users.append(client.create_auth_user(seed_user))
+        except RuntimeError as error:
+            error_message = str(error).casefold()
+            if "already" not in error_message:
+                raise
+
+            existing_user = client.find_user_row_by_email(seed_user.email)
+            if not existing_user:
+                raise RuntimeError(
+                    f"Seed user {seed_user.email} already exists in auth, but no matching public.users row was found."
+                ) from error
+
+            created_users.append(existing_user)
     municipality_id = created_users[0]["id"]
 
     user_rows = []
@@ -155,8 +197,8 @@ def main() -> None:
                 }
             )
 
-    client.upsert_table_rows("users", user_rows)
-    client.upsert_table_rows("departments", department_rows)
+    client.upsert_table_rows("users", user_rows, on_conflict="id")
+    client.upsert_table_rows("departments", department_rows, on_conflict="user_id")
 
     print("Seed bootstrap complete.")
 

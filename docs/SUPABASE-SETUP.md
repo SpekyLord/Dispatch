@@ -32,6 +32,8 @@ Once the project is ready, go to **Settings > API** in the Supabase dashboard. Y
 
 The migration file at `supabase/migrations/20260328011000_phase0_foundation.sql` creates all enums, tables, functions, RLS policies, storage buckets, and realtime configuration.
 
+The Phase 2 follow-up migration at `supabase/migrations/20260329020000_phase2_realtime_access.sql` adds realtime-friendly access policies and supporting indexes for department routing, feed reads, and notifications.
+
 ### Option A: Supabase SQL Editor (Recommended)
 
 1. Open your project in the Supabase dashboard
@@ -39,6 +41,9 @@ The migration file at `supabase/migrations/20260328011000_phase0_foundation.sql`
 3. Click **New query**
 4. Copy and paste the contents of `supabase/migrations/20260328011000_phase0_foundation.sql`
 5. Click **Run**
+6. Create another query
+7. Copy and paste the contents of `supabase/migrations/20260329020000_phase2_realtime_access.sql`
+8. Click **Run**
 
 ### Option B: Supabase CLI
 
@@ -121,6 +126,7 @@ py -3.12 supabase/seed/bootstrap_seed.py
 | Email | Role | Department |
 |-------|------|------------|
 | `municipality.admin@dispatch.local` | Municipality | — |
+| `citizen.demo@dispatch.local` | Citizen | — |
 | `fire.station@dispatch.local` | Department | BFP Central Station (fire) |
 | `police.station@dispatch.local` | Department | PNP Central Precinct (police) |
 | `medical.response@dispatch.local` | Department | City Medical Rescue Unit (medical) |
@@ -129,6 +135,8 @@ py -3.12 supabase/seed/bootstrap_seed.py
 All accounts use the password from `SEED_DEFAULT_PASSWORD` (default: `Dispatch123!`).
 
 All department accounts are pre-verified (status: `approved`).
+
+The seeded citizen account can sign in immediately and use the normal report submission flow.
 
 ---
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import io
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-import io
 
 import pytest
 
@@ -567,7 +567,12 @@ def test_authenticated_user_can_create_feed_comment_and_public_can_read_it(setti
         user=FakeUser(id="citizen-1", email="citizen@example.com", role="citizen"),
         db_rows={
             "users": [
-                {"id": "citizen-1", "role": "citizen", "email": "citizen@example.com", "full_name": "Citizen One"}
+                {
+                    "id": "citizen-1",
+                    "role": "citizen",
+                    "email": "citizen@example.com",
+                    "full_name": "Citizen One",
+                }
             ],
             "departments": [
                 {

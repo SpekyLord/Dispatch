@@ -6,11 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 
-/**
- * Phase 1 — Municipality overview dashboard.
- * Aegis-styled bento cards: pending verification count, total departments,
- * and an analytics placeholder (Phase 3).
- */
+// Municipality overview dashboard — bento cards for key metrics and quick links.
 
 type Department = { id: string; name: string; type: string; verification_status: string };
 
@@ -68,33 +64,68 @@ export function MunicipalityHomePage() {
           </Link>
         </Card>
 
-        {/* Analytics placeholder — Phase 3 */}
-        <Card className="md:col-span-4 bg-surface-container">
+        {/* Analytics card — links to Phase 3 dashboard */}
+        <Card className="md:col-span-4">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+            <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-[#D97757]">
               <span className="material-symbols-outlined">analytics</span>
             </div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
               Analytics
             </p>
           </div>
-          <p className="text-sm text-on-surface-variant leading-relaxed italic mt-2">
-            Analytics dashboard with incident trends, department performance, and community resilience
-            metrics will be available in Phase 3.
+          <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">
+            Response metrics, category trends, and department performance.
           </p>
+          <Link to="/municipality/analytics">
+            <Button variant="outline" className="w-full">View Analytics</Button>
+          </Link>
+        </Card>
+
+        {/* Quick links row */}
+        <Card className="md:col-span-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+              <span className="material-symbols-outlined">summarize</span>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+              All Reports
+            </p>
+          </div>
+          <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">
+            System-wide incident reports with filters and search.
+          </p>
+          <Link to="/municipality/reports">
+            <Button variant="outline" className="w-full">Browse Reports</Button>
+          </Link>
+        </Card>
+
+        <Card className="md:col-span-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-tertiary-container flex items-center justify-center text-tertiary">
+              <span className="material-symbols-outlined">assessment</span>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+              Assessments
+            </p>
+          </div>
+          <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">
+            Damage assessments submitted by field departments.
+          </p>
+          <Link to="/municipality/assessments">
+            <Button variant="outline" className="w-full">View Assessments</Button>
+          </Link>
         </Card>
 
         <Card className="md:col-span-12 bg-[#fff5ef] border-[#f4c7b7]/40">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-widest text-[#B25A3B]">
-                Phase 2 Escalations
+                Escalations
               </p>
               <h2 className="mt-2 font-headline text-2xl text-on-surface">Unattended Incident Queue</h2>
               <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">
-                Review escalated incidents that still need attention. This stays intentionally narrow in
-                Phase 2 so municipality users can focus on unattended emergencies before the full reports
-                dashboard lands in Phase 3.
+                Review escalated incidents that still need attention from departments.
               </p>
             </div>
             <Link to="/municipality/reports/escalated">

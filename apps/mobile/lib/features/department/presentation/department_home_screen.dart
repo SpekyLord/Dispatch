@@ -4,6 +4,7 @@
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
+import 'package:dispatch_mobile/features/department/presentation/department_assessment_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
@@ -266,6 +267,18 @@ class _ApprovedView extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const DepartmentCreatePostScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.assessment),
+            title: const Text('Damage Assessment'),
+            subtitle: const Text('Submit field assessments'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DepartmentAssessmentScreen()),
             ),
           ),
         ),

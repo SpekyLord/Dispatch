@@ -29,7 +29,9 @@ def list_feed():
 @blueprint.get("/<post_id>")
 def get_feed_post(post_id: str):
     current_user = get_current_user()
-    post = _feed_service().get_post(post_id, viewer_user_id=current_user.id if current_user else None)
+    post = _feed_service().get_post(
+        post_id, viewer_user_id=current_user.id if current_user else None
+    )
     return jsonify({"post": post})
 
 

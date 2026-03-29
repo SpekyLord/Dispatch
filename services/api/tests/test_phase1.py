@@ -77,7 +77,23 @@ class FakeSupabaseClient:
         self, table, *, data, params, token=None, use_service_role=False, return_repr=True
     ):
         self._updates.append((table, data, params))
+        # Mutate stored rows so subsequent queries see the update
+        updated = []
+        for row in self._db.get(table, []):
+            match = True
+            for key, val in params.items():
+                if key in ("select", "order"):
+                    continue
+                expected = val.removeprefix("eq.") if isinstance(val, str) else val
+                if str(row.get(key, "")) != str(expected):
+                    match = False
+                    break
+            if match:
+                row.update(data)
+                updated.append({**row})
         if return_repr:
+            if updated:
+                return updated
             merged = {}
             rows = self._db.get(table, [])
             if rows:

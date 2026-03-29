@@ -295,4 +295,35 @@ class AuthService {
   Future<void> markAllNotificationsRead() async {
     await _dio.put('/api/notifications/read-all');
   }
+
+  // --- Damage assessments (Phase 3) ---
+
+  // Submit a new damage assessment for this department
+  Future<Map<String, dynamic>> createAssessment({
+    required String affectedArea,
+    required String damageLevel,
+    int estimatedCasualties = 0,
+    int displacedPersons = 0,
+    String? location,
+    String? description,
+    String? reportId,
+  }) async {
+    final body = <String, dynamic>{
+      'affected_area': affectedArea,
+      'damage_level': damageLevel,
+      'estimated_casualties': estimatedCasualties,
+      'displaced_persons': displacedPersons,
+    };
+    if (location != null) body['location'] = location;
+    if (description != null) body['description'] = description;
+    if (reportId != null) body['report_id'] = reportId;
+    final response = await _dio.post('/api/departments/assessments', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  // List this department's submitted assessments
+  Future<List<Map<String, dynamic>>> getDepartmentAssessments() async {
+    final response = await _dio.get('/api/departments/assessments');
+    return (response.data['assessments'] as List).cast<Map<String, dynamic>>();
+  }
 }

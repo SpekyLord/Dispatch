@@ -8,11 +8,7 @@ import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
 
-/**
- * Phase 1 — Citizen report detail page.
- * Aegis-styled bento layout: incident info card, images gallery,
- * status history timeline, and location map sidebar.
- */
+// Citizen report detail — bento layout with timeline, images, map sidebar.
 
 type StatusHistory = {
   id: string;
@@ -21,6 +17,25 @@ type StatusHistory = {
   note?: string;
   notes?: string;
   created_at: string;
+};
+// Phase 3 timeline entry combining status changes and department responses
+type TimelineEntry = {
+  type: "status_change" | "department_response";
+  timestamp: string;
+  new_status?: string;
+  old_status?: string;
+  notes?: string;
+  changed_by?: string;
+  action?: string;
+  department_name?: string;
+  decline_reason?: string;
+};
+type DeptResponse = {
+  department_name: string;
+  action: string;
+  notes?: string;
+  decline_reason?: string;
+  responded_at?: string;
 };
 type Report = {
   id: string; description: string; category: string; severity: string;
@@ -45,6 +60,8 @@ export function CitizenReportDetailPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
   const [report, setReport] = useState<Report | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+  const [deptResponses, setDeptResponses] = useState<DeptResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,10 +73,17 @@ export function CitizenReportDetailPage() {
       setLoading(true);
     }
 
-    return apiRequest<{ report: Report; status_history: StatusHistory[] }>(`/api/reports/${reportId}`)
+    return apiRequest<{
+      report: Report;
+      status_history: StatusHistory[];
+      timeline?: TimelineEntry[];
+      department_responses?: DeptResponse[];
+    }>(`/api/reports/${reportId}`)
       .then((res) => {
         setReport(res.report);
         setHistory(res.status_history);
+        setTimeline(res.timeline ?? []);
+        setDeptResponses(res.department_responses ?? []);
         setError(null);
       })
       .catch((err) => {
@@ -197,30 +221,60 @@ export function CitizenReportDetailPage() {
             </Card>
           )}
 
-          {/* Status history timeline */}
+          {/* Unified timeline — status changes + department responses */}
           <Card>
-            <h3 className="font-headline text-xl mb-6">Status History</h3>
-            {history.length === 0 ? (
-              <p className="text-sm text-on-surface-variant">No status updates yet.</p>
+            <h3 className="font-headline text-xl mb-6">Report Timeline</h3>
+            {timeline.length === 0 && history.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">No activity yet.</p>
             ) : (
               <div className="space-y-4">
-                {history.map((h) => {
-                  const historyStatus = h.new_status ?? h.status ?? "pending";
-                  const historyNote = h.notes ?? h.note;
-                  const hs = statusStyles[historyStatus] ?? {
-                    bg: "bg-surface-container-highest",
-                    text: "text-on-surface-variant",
-                  };
+                {(timeline.length > 0 ? timeline : history.map((h) => ({
+                  type: "status_change" as const,
+                  timestamp: h.created_at,
+                  new_status: h.new_status ?? h.status,
+                  notes: h.notes ?? h.note,
+                }))).map((entry, idx) => {
+                  // Status change entry
+                  if (entry.type === "status_change") {
+                    const historyStatus = entry.new_status ?? "pending";
+                    const hs = statusStyles[historyStatus] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
+                    return (
+                      <div key={`sc-${idx}`} className="flex gap-4 border-l-[3px] border-outline-variant/20 pl-5 relative">
+                        <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-surface-container-highest border-2 border-outline-variant" />
+                        <div>
+                          <span className={`inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${hs.bg} ${hs.text}`}>
+                            {historyStatus}
+                          </span>
+                          {entry.notes && <p className="mt-1 text-sm text-on-surface-variant">{entry.notes}</p>}
+                          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
+                            {new Date(entry.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Department response entry
+                  const actionColor = entry.action === "accepted"
+                    ? "bg-[#d4edda] text-[#155724]"
+                    : entry.action === "declined"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-surface-container-highest text-on-surface-variant";
                   return (
-                    <div key={h.id} className="flex gap-4 border-l-[3px] border-outline-variant/20 pl-5 relative">
-                      <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-surface-container-highest border-2 border-outline-variant" />
+                    <div key={`dr-${idx}`} className="flex gap-4 border-l-[3px] border-[#D97757]/30 pl-5 relative">
+                      <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-[#D97757]/20 border-2 border-[#D97757]" />
                       <div>
-                        <span className={`inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${hs.bg} ${hs.text}`}>
-                          {historyStatus}
-                        </span>
-                        {historyNote && <p className="mt-1 text-sm text-on-surface-variant">{historyNote}</p>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-on-surface">{entry.department_name}</span>
+                          <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${actionColor}`}>
+                            {entry.action}
+                          </span>
+                        </div>
+                        {entry.notes && <p className="mt-1 text-sm text-on-surface-variant">{entry.notes}</p>}
+                        {entry.decline_reason && (
+                          <p className="mt-1 text-sm text-red-700 italic">Reason: {entry.decline_reason}</p>
+                        )}
                         <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
-                          {new Date(h.created_at).toLocaleString()}
+                          {new Date(entry.timestamp).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -229,6 +283,25 @@ export function CitizenReportDetailPage() {
               </div>
             )}
           </Card>
+
+          {/* Department responses summary */}
+          {deptResponses.length > 0 && (
+            <Card>
+              <h3 className="font-headline text-xl mb-4">Department Responses</h3>
+              <div className="space-y-3">
+                {deptResponses.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-lg bg-surface-container p-3">
+                    <span className="text-sm font-medium text-on-surface">{r.department_name}</span>
+                    <span className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${
+                      r.action === "accepted" ? "bg-[#d4edda] text-[#155724]" : "bg-red-100 text-red-800"
+                    }`}>
+                      {r.action}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar — right 4 cols */}

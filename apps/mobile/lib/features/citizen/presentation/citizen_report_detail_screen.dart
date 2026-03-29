@@ -18,6 +18,7 @@ class CitizenReportDetailScreen extends ConsumerStatefulWidget {
 class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailScreen> {
   Map<String, dynamic>? _report;
   List<dynamic> _history = [];
+  List<dynamic> _departmentResponses = [];
   List<RealtimeSubscriptionHandle> _subscriptions = [];
   bool _loading = true;
 
@@ -74,6 +75,7 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
         setState(() {
           _report = data['report'] as Map<String, dynamic>?;
           _history = data['status_history'] as List<dynamic>? ?? [];
+          _departmentResponses = data['department_responses'] as List<dynamic>? ?? [];
           _loading = false;
         });
       }
@@ -264,6 +266,60 @@ class _CitizenReportDetailScreenState extends ConsumerState<CitizenReportDetailS
                               );
                             },
                           ),
+                      // Department responses section (Phase 3)
+                      if (_departmentResponses.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        Text('Department Responses', style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 8),
+                        for (final resp in _departmentResponses)
+                          Builder(
+                            builder: (ctx) {
+                              final r = resp as Map;
+                              final action = r['action'] as String? ?? 'pending';
+                              final deptName = r['department_name'] as String? ?? 'Unknown';
+                              final actionColor = action == 'accepted'
+                                  ? Colors.green
+                                  : action == 'declined'
+                                      ? Colors.red
+                                      : Colors.orange;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border(left: BorderSide(color: actionColor, width: 3)),
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(deptName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                        ),
+                                        Text(
+                                          action.toUpperCase(),
+                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: actionColor),
+                                        ),
+                                      ],
+                                    ),
+                                    if (r['notes'] != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(r['notes'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                      ),
+                                    if (r['responded_at'] != null)
+                                      Text(
+                                        r['responded_at'] as String,
+                                        style: const TextStyle(fontSize: 10, color: Colors.black38),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                      ],
                     ],
                   ),
                 ),

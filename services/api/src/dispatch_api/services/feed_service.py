@@ -55,7 +55,8 @@ class FeedService:
                 "content": content,
                 "category": category,
                 "location": location,
-                "profile_picture": department.get("profile_picture") or department.get("profile_photo"),
+                "profile_picture": department.get("profile_picture")
+                or department.get("profile_photo"),
             },
             use_service_role=True,
         )
@@ -75,8 +76,7 @@ class FeedService:
         attachment_urls: list[str],
     ) -> None:
         rows_to_insert = [
-            {"id": post_id, "photos": photo_url, "attachments": None}
-            for photo_url in photo_urls
+            {"id": post_id, "photos": photo_url, "attachments": None} for photo_url in photo_urls
         ] + [
             {"id": post_id, "photos": None, "attachments": attachment_url}
             for attachment_url in attachment_urls
@@ -202,8 +202,12 @@ class FeedService:
             user_ids=[row.get("uploader") for row in rows if row.get("uploader")]
         )
         assets_by_post_id = self._assets_by_post_id(post_ids=[row.get("id") for row in rows])
-        comment_counts_by_post_id = self._comment_counts_by_post_id(post_ids=[row.get("id") for row in rows])
-        liked_post_ids = self._liked_post_ids(post_ids=[row.get("id") for row in rows], user_id=viewer_user_id)
+        comment_counts_by_post_id = self._comment_counts_by_post_id(
+            post_ids=[row.get("id") for row in rows]
+        )
+        liked_post_ids = self._liked_post_ids(
+            post_ids=[row.get("id") for row in rows], user_id=viewer_user_id
+        )
         return [
             self._serialize_post(
                 post=row,

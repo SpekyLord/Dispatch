@@ -8,6 +8,8 @@ from flask import current_app, jsonify, request
 from dispatch_api.auth import get_current_user, require_auth, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.municipality import blueprint
+from dispatch_api.services.analytics_service import AnalyticsService
+from dispatch_api.services.assessment_service import AssessmentService
 from dispatch_api.services.notification_service import NotificationService
 from dispatch_api.services.report_service import ReportService
 
@@ -17,6 +19,14 @@ VALID_VERIFICATION_ACTIONS = {"approved", "rejected"}
 def _report_service() -> ReportService:
     client = current_app.extensions["supabase_client"]
     return ReportService(client, NotificationService(client))
+
+
+def _analytics_service() -> AnalyticsService:
+    return AnalyticsService(current_app.extensions["supabase_client"])
+
+
+def _assessment_service() -> AssessmentService:
+    return AssessmentService(current_app.extensions["supabase_client"])
 
 
 @blueprint.get("/departments")
@@ -118,3 +128,37 @@ def verify_department(dept_id: str):
         NotificationService(client).notify_verification_decision(department=department)
 
     return jsonify({"department": department})
+
+
+# -- Phase 3: municipality report overview with filters --
+@blueprint.get("/reports")
+@require_auth()
+@require_role("municipality")
+def list_municipality_reports():
+    filters = {
+        "status": request.args.get("status"),
+        "category": request.args.get("category"),
+        "is_escalated": request.args.get("is_escalated"),
+        "date_from": request.args.get("date_from"),
+        "date_to": request.args.get("date_to"),
+    }
+    reports = _analytics_service().get_municipality_reports(filters)
+    return jsonify({"reports": reports})
+
+
+# -- Phase 3: aggregate analytics for dashboard --
+@blueprint.get("/analytics")
+@require_auth()
+@require_role("municipality")
+def get_analytics():
+    data = _analytics_service().get_analytics()
+    return jsonify(data)
+
+
+# -- Phase 3: all damage assessments across departments --
+@blueprint.get("/assessments")
+@require_auth()
+@require_role("municipality")
+def list_assessments():
+    assessments = _assessment_service().list_all_assessments()
+    return jsonify({"assessments": assessments})

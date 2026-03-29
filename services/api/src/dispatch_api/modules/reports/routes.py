@@ -112,7 +112,59 @@ def get_report(report_id: str):
         use_service_role=True,
     )
 
-    return jsonify({"report": report, "status_history": history})
+    # Phase 3: include department responses and merged timeline
+    dept_responses = client.db_query(
+        "department_responses",
+        params={
+            "select": "*",
+            "report_id": f"eq.{report_id}",
+            "order": "responded_at.asc",
+        },
+        use_service_role=True,
+    )
+    # Enrich responses with department name
+    dept_ids = {r["department_id"] for r in dept_responses if r.get("department_id")}
+    dept_map: dict[str, str] = {}
+    if dept_ids:
+        depts = client.db_query("departments", params={"select": "id,name"}, use_service_role=True)
+        dept_map = {d["id"]: d.get("name", "Unknown") for d in depts if d.get("id") in dept_ids}
+    for r in dept_responses:
+        r["department_name"] = dept_map.get(r.get("department_id", ""), "Unknown")
+
+    # Build unified timeline sorted by timestamp
+    timeline: list[dict] = []
+    for h in history:
+        timeline.append(
+            {
+                "type": "status_change",
+                "timestamp": h.get("created_at"),
+                "new_status": h.get("new_status"),
+                "old_status": h.get("old_status"),
+                "notes": h.get("notes"),
+                "changed_by": h.get("changed_by"),
+            }
+        )
+    for r in dept_responses:
+        timeline.append(
+            {
+                "type": "department_response",
+                "timestamp": r.get("responded_at") or r.get("created_at"),
+                "action": r.get("action"),
+                "department_name": r.get("department_name"),
+                "notes": r.get("notes"),
+                "decline_reason": r.get("decline_reason"),
+            }
+        )
+    timeline.sort(key=lambda e: e.get("timestamp") or "")
+
+    return jsonify(
+        {
+            "report": report,
+            "status_history": history,
+            "department_responses": dept_responses,
+            "timeline": timeline,
+        }
+    )
 
 
 @blueprint.post("/<report_id>/upload")

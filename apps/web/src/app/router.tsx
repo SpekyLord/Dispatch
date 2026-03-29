@@ -1,4 +1,4 @@
-// App router — role-based route guards with Phase 2 department, feed, and notification routes.
+// App router — role-based route guards with Phase 2+3 department, feed, notification, analytics routes.
 
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -15,11 +15,15 @@ import { DepartmentProfilePage } from "@/pages/department/department-profile-pag
 import { DepartmentReportsPage } from "@/pages/department/department-reports-page";
 import { DepartmentReportDetailPage } from "@/pages/department/department-report-detail-page";
 import { DepartmentCreatePostPage } from "@/pages/department/department-create-post-page";
+import { DepartmentAssessmentPage } from "@/pages/department/department-assessment-page";
 import { MunicipalityHomePage } from "@/pages/municipality/municipality-home-page";
 import { MunicipalityNewsFeedPage } from "@/pages/municipality/municipality-news-feed-page";
 import { MunicipalityVerificationPage } from "@/pages/municipality/municipality-verification-page";
 import { MunicipalityDepartmentsPage } from "@/pages/municipality/municipality-departments-page";
 import { MunicipalityEscalatedReportsPage } from "@/pages/municipality/municipality-escalated-reports-page";
+import { MunicipalityReportsPage } from "@/pages/municipality/municipality-reports-page";
+import { MunicipalityAnalyticsPage } from "@/pages/municipality/municipality-analytics-page";
+import { MunicipalityAssessmentsPage } from "@/pages/municipality/municipality-assessments-page";
 import { DepartmentViewPage } from "@/pages/shared/department-view-page";
 import { FeedPage } from "@/pages/shared/feed-page";
 import { FeedDetailPage } from "@/pages/shared/feed-detail-page";
@@ -51,11 +55,15 @@ export function AppRouter() {
           <Route element={<DepartmentReportsPage />} path="/department/reports" />
           <Route element={<DepartmentReportDetailPage />} path="/department/reports/:reportId" />
           <Route element={<DepartmentCreatePostPage />} path="/department/posts/new" />
+          <Route element={<DepartmentAssessmentPage />} path="/department/assessments" />
           <Route element={<DepartmentProfilePage />} path="/department/profile" />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["municipality"]} />}>
           <Route element={<MunicipalityHomePage />} path="/municipality" />
+          <Route element={<MunicipalityReportsPage />} path="/municipality/reports" />
+          <Route element={<MunicipalityAnalyticsPage />} path="/municipality/analytics" />
+          <Route element={<MunicipalityAssessmentsPage />} path="/municipality/assessments" />
           <Route element={<MunicipalityEscalatedReportsPage />} path="/municipality/reports/escalated" />
           <Route element={<MunicipalityVerificationPage />} path="/municipality/verification" />
           <Route element={<MunicipalityDepartmentsPage />} path="/municipality/departments" />

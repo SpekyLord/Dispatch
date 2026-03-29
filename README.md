@@ -51,6 +51,7 @@ Required values:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `MOBILE_API_BASE_URL`
+- `MOBILE_WEB_API_BASE_URL`
 - `MOBILE_SUPABASE_URL`
 - `MOBILE_SUPABASE_ANON_KEY`
 - `SEED_DEFAULT_PASSWORD`
@@ -78,8 +79,10 @@ uv run dispatch-api
 ```powershell
 cd apps/mobile
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=.env
 ```
+
+Use `MOBILE_API_BASE_URL` for Android or emulator builds and `MOBILE_WEB_API_BASE_URL` for `flutter run -d chrome`. In development, the API now accepts localhost and `127.0.0.1` origins on any port so Flutter web can talk to the local backend.
 
 ## Quality Checks
 

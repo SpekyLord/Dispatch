@@ -47,6 +47,7 @@ cp apps/mobile/.env.example apps/mobile/.env
 | `MOBILE_SUPABASE_URL` | Same as `SUPABASE_URL` |
 | `MOBILE_SUPABASE_ANON_KEY` | Same as `SUPABASE_ANON_KEY` |
 | `MOBILE_API_BASE_URL` | `http://10.0.2.2:5000` (Android emulator) |
+| `MOBILE_WEB_API_BASE_URL` | `http://127.0.0.1:5000` (`flutter run -d chrome`) |
 | `SEED_DEFAULT_PASSWORD` | `Dispatch123!` |
 
 Each sub-app `.env` file mirrors the relevant subset — see the `.env.example` in each directory.
@@ -99,10 +100,12 @@ uv run pytest                 # Unit tests
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=.env
 ```
 
 > **Note:** Android SDK is only required for device/emulator builds. `flutter analyze` and `flutter test` work without it.
+>
+> **Chrome note:** `flutter run -d chrome` uses `MOBILE_WEB_API_BASE_URL` if provided. If you leave it blank, the app falls back to the current browser host on port `5000`. The API now allows localhost and `127.0.0.1` development origins on any port.
 
 ### Mobile Linting & Tests
 
@@ -163,4 +166,4 @@ Dispatch/
 | `uv` not found | `pip install uv` or install from [docs.astral.sh/uv](https://docs.astral.sh/uv/) |
 | Mobile build fails | Ensure Flutter SDK and Android SDK are installed; run `flutter doctor` |
 | API can't connect to Supabase | Check `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `services/api/.env` |
-| CORS errors on web | Verify `CORS_ORIGINS` in `services/api/.env` includes your dev URL |
+| CORS errors on Flutter web | Restart the API after pulling the latest changes so development localhost ports are allowed, then confirm the mobile app is using `MOBILE_WEB_API_BASE_URL` or the browser-host fallback |

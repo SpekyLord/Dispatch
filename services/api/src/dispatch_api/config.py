@@ -6,6 +6,11 @@ from typing import Literal
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+LOCAL_DEV_CORS_PATTERNS = (
+    r"^https?://localhost(:\d+)?$",
+    r"^https?://127\.0\.0\.1(:\d+)?$",
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -18,7 +23,7 @@ class Settings(BaseSettings):
     dispatch_env: Literal["development", "test", "production"] = "development"
     api_host: str = "127.0.0.1"
     api_port: int = 5000
-    cors_origins: str = Field(default="http://localhost:5173")
+    cors_origins: str | list[str] = Field(default="http://localhost:5173")
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
     supabase_service_role_key: str | None = None
@@ -26,9 +31,20 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[misc]
     @property
     def cors_origins_list(self) -> list[str]:
-        if not self.cors_origins:
-            return []
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        raw_origins = self.cors_origins
+        if not raw_origins:
+            origins: list[str] = []
+        elif isinstance(raw_origins, str):
+            origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+        else:
+            origins = [origin.strip() for origin in raw_origins if origin.strip()]
+
+        if self.dispatch_env == "development":
+            for pattern in LOCAL_DEV_CORS_PATTERNS:
+                if pattern not in origins:
+                    origins.append(pattern)
+
+        return origins
 
     @computed_field  # type: ignore[misc]
     @property

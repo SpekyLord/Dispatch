@@ -1,7 +1,5 @@
 // Report form — submit a new incident with photos, GPS, and map pin.
 
-import 'dart:io';
-
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
@@ -72,8 +70,7 @@ class _CitizenReportFormScreenState
   Future<void> _detectGps() async {
     setState(() => _gpsLoading = true);
     try {
-      final loc =
-          await ref.read(locationServiceProvider).getCurrentPosition();
+      final loc = await ref.read(locationServiceProvider).getCurrentPosition();
       if (loc != null && mounted) {
         setState(() {
           _latitude = loc.latitude;
@@ -81,8 +78,10 @@ class _CitizenReportFormScreenState
           _gpsStatus = 'GPS acquired';
         });
       } else if (mounted) {
-        setState(() =>
-            _gpsStatus = 'GPS unavailable. Pick location on map or enter address.');
+        setState(
+          () => _gpsStatus =
+              'GPS unavailable. Pick location on map or enter address.',
+        );
       }
     } catch (_) {
       if (mounted) {
@@ -178,8 +177,7 @@ class _CitizenReportFormScreenState
           (result['report'] as Map<String, dynamic>?)?['id'] as String?;
       if (reportId != null) {
         for (final img in _images) {
-          await authService.uploadReportImage(
-              reportId, img.path, 'image/jpeg');
+          await authService.uploadReportImage(reportId, img);
         }
       }
 
@@ -210,8 +208,10 @@ class _CitizenReportFormScreenState
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.shade200),
               ),
-              child: Text(_error!,
-                  style: TextStyle(color: Colors.red.shade700)),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
             ),
 
           // Description
@@ -234,8 +234,7 @@ class _CitizenReportFormScreenState
               border: OutlineInputBorder(),
             ),
             items: _categories
-                .map((c) =>
-                    DropdownMenuItem(value: c.$1, child: Text(c.$2)))
+                .map((c) => DropdownMenuItem(value: c.$1, child: Text(c.$2)))
                 .toList(),
             onChanged: (v) => setState(() => _category = v),
           ),
@@ -249,8 +248,7 @@ class _CitizenReportFormScreenState
               border: OutlineInputBorder(),
             ),
             items: _severities
-                .map((s) =>
-                    DropdownMenuItem(value: s.$1, child: Text(s.$2)))
+                .map((s) => DropdownMenuItem(value: s.$1, child: Text(s.$2)))
                 .toList(),
             onChanged: (v) => setState(() => _severity = v ?? 'medium'),
           ),
@@ -274,12 +272,15 @@ class _CitizenReportFormScreenState
               child: Row(
                 children: [
                   SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                   SizedBox(width: 8),
-                  Text('Detecting location...',
-                      style: TextStyle(fontSize: 13, color: Colors.black54)),
+                  Text(
+                    'Detecting location...',
+                    style: TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
                 ],
               ),
             )
@@ -298,8 +299,7 @@ class _CitizenReportFormScreenState
             ),
 
           // Location picker map
-          Text('Pin Location',
-              style: Theme.of(context).textTheme.titleSmall),
+          Text('Pin Location', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           LocationPicker(
             initialLatitude: _latitude ?? 14.5995,
@@ -312,8 +312,10 @@ class _CitizenReportFormScreenState
           // Image picker
           Row(
             children: [
-              Text('Photos (${_images.length}/$_maxImages)',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'Photos (${_images.length}/$_maxImages)',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const Spacer(),
               if (_images.length < _maxImages)
                 TextButton.icon(
@@ -335,8 +337,8 @@ class _CitizenReportFormScreenState
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(_images[i].path),
+                      child: Image.memory(
+                        _images[i].bytes,
                         width: 100,
                         height: 100,
                         fit: BoxFit.cover,
@@ -346,16 +348,18 @@ class _CitizenReportFormScreenState
                       top: 2,
                       right: 2,
                       child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _images.removeAt(i)),
+                        onTap: () => setState(() => _images.removeAt(i)),
                         child: Container(
                           padding: const EdgeInsets.all(2),
                           decoration: const BoxDecoration(
                             color: Colors.black54,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.close,
-                              size: 16, color: Colors.white),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -370,9 +374,9 @@ class _CitizenReportFormScreenState
           FilledButton(
             onPressed: _loading ? null : _submit,
             style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52)),
-            child:
-                Text(_loading ? 'Submitting...' : 'Submit Report'),
+              minimumSize: const Size.fromHeight(52),
+            ),
+            child: Text(_loading ? 'Submitting...' : 'Submit Report'),
           ),
         ],
       ),

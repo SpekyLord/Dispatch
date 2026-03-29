@@ -88,7 +88,7 @@ class SupabaseClient:
             },
         )
 
-        if response.status_code == 401:
+        if response.status_code in (401, 403):
             return None
 
         response.raise_for_status()
@@ -179,6 +179,28 @@ class SupabaseClient:
             params=params,
             headers=headers,
             json=data,
+        )
+        response.raise_for_status()
+        if return_repr:
+            return response.json()
+        return []
+
+    def db_delete(
+        self,
+        table: str,
+        *,
+        params: dict[str, str],
+        token: str | None = None,
+        use_service_role: bool = False,
+        return_repr: bool = True,
+    ) -> list[dict[str, Any]]:
+        headers = self._service_headers() if use_service_role else self._bearer_headers(token or "")
+        if return_repr:
+            headers["Prefer"] = "return=representation"
+        response = self._http_client.delete(
+            f"{self.settings.supabase_url}/rest/v1/{table}",
+            params=params,
+            headers=headers,
         )
         response.raise_for_status()
         if return_repr:

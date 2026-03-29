@@ -20,11 +20,17 @@ export type DepartmentInfo = {
   user_id: string;
   name: string;
   type: string;
+  description?: string | null;
   verification_status: "pending" | "approved" | "rejected";
   rejection_reason?: string | null;
   contact_number?: string | null;
   address?: string | null;
   area_of_responsibility?: string | null;
+  profile_picture?: string | null;
+  profile_photo?: string | null;
+  header_photo?: string | null;
+  post_count?: number | null;
+  updated_at?: string | null;
 };
 
 type SessionState = {

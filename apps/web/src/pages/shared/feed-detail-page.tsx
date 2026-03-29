@@ -3,21 +3,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 
+import type { FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { AttachmentList } from "@/components/feed/attachment-list";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Post = {
-  id: string;
+  id: string | number;
+  uploader: string;
   title: string;
   content: string;
   category: string;
+  location?: string | null;
   is_pinned: boolean;
   created_at: string;
+  photos?: string[];
+  attachments?: string[];
   image_urls?: string[];
-  department?: { id: string; name: string; type: string } | null;
+  department?: FeedDepartmentPreview | null;
 };
 
 const categoryStyles: Record<string, { bg: string; text: string }> = {
@@ -65,7 +71,7 @@ export function FeedDetailPage() {
     }
 
     const subscription = subscribeToTable(
-      "posts",
+      "department_feed_posts",
       () => {
         void fetchPost(false);
       },
@@ -118,18 +124,49 @@ export function FeedDetailPage() {
         <h2 className="font-headline text-2xl text-on-surface mb-2">{post.title}</h2>
 
         {post.department && (
-          <p className="text-xs text-on-surface-variant mb-6">
-            Published by <span className="font-semibold capitalize">{post.department.name}</span> ({post.department.type})
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest text-on-surface-variant">
+              <Link className="flex h-full w-full items-center justify-center" to={`/departments/${post.uploader}`}>
+                {post.department.profile_picture ? (
+                  <img
+                    src={post.department.profile_picture}
+                    alt={`${post.department.name} profile`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined">campaign</span>
+                )}
+              </Link>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              Published by{" "}
+              <Link className="font-semibold capitalize text-on-surface hover:text-[#a14b2f]" to={`/departments/${post.uploader}`}>
+                {post.department.name}
+              </Link>{" "}
+              ({post.department.type})
+            </p>
+          </div>
+        )}
+
+        {post.location && (
+          <p className="mb-6 text-sm text-on-surface-variant">
+            <span className="font-semibold text-on-surface">Location:</span> {post.location}
           </p>
         )}
 
         <div className="prose prose-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">{post.content}</div>
 
-        {post.image_urls && post.image_urls.length > 0 && (
+        {post.photos && post.photos.length > 0 && (
           <div className="mt-6 flex gap-3 overflow-x-auto">
-            {post.image_urls.map((url, i) => (
+            {post.photos.map((url, i) => (
               <img key={i} src={url} alt={`Attachment ${i + 1}`} className="h-48 rounded-lg object-cover border border-outline-variant/10" />
             ))}
+          </div>
+        )}
+
+        {post.attachments && post.attachments.length > 0 && (
+          <div className="mt-6">
+            <AttachmentList attachments={post.attachments} />
           </div>
         )}
       </Card>

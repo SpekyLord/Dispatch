@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from typing import Any
 
 from dispatch_api.errors import ApiError
@@ -10,14 +11,29 @@ class DepartmentService:
         self.client = client
 
     def get_department_for_user(self, user_id: str) -> dict[str, Any]:
-        rows = self.client.db_query(
+        rows: list[dict[str, Any]] = []
+        base_rows = self.client.db_query(
             "departments",
             params={"select": "*", "user_id": f"eq.{user_id}"},
             use_service_role=True,
         )
+        try:
+            rows = self.client.db_query(
+                "department_profile_summary",
+                params={"select": "*", "user_id": f"eq.{user_id}"},
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError:
+            rows = []
+
+        if not rows:
+            rows = base_rows
         if not rows:
             raise ApiError("Department profile not found.", code="not_found", status_code=404)
-        return rows[0]
+
+        department = {**(base_rows[0] if base_rows else {}), **rows[0]}
+        department.setdefault("post_count", self._post_count_for_user(user_id))
+        return department
 
     def require_verified_department(self, department: dict[str, Any]) -> None:
         if department.get("verification_status") != "approved":
@@ -34,3 +50,11 @@ class DepartmentService:
             use_service_role=True,
         )
         return [row for row in rows if row.get("verification_status") == "approved"]
+
+    def _post_count_for_user(self, user_id: str) -> int:
+        rows = self.client.db_query(
+            "department_feed_posts",
+            params={"select": "id", "uploader": f"eq.{user_id}"},
+            use_service_role=True,
+        )
+        return len(rows)

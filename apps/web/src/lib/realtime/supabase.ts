@@ -7,7 +7,8 @@ export type RealtimeTable =
   | "department_responses"
   | "report_status_history"
   | "notifications"
-  | "posts";
+  | "department_feed_posts"
+  | "department_feed_comment";
 
 export function getRealtimeClient() {
   const url = import.meta.env.VITE_SUPABASE_URL;

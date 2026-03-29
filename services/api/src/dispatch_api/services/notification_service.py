@@ -172,8 +172,8 @@ class NotificationService:
                 "type": "announcement",
                 "title": post["title"],
                 "message": "A verified department published a new announcement.",
-                "reference_id": post["id"],
-                "reference_type": "post",
+                "reference_id": None,
+                "reference_type": "department_feed_post",
             }
             for user in citizen_users
         ]

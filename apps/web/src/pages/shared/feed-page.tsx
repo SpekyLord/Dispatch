@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import type { FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
@@ -10,14 +11,18 @@ import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Post = {
-  id: string;
+  id: string | number;
+  uploader: string;
   title: string;
   content: string;
   category: string;
+  location?: string | null;
   is_pinned: boolean;
   created_at: string;
+  photos?: string[];
+  attachments?: string[];
   image_urls?: string[];
-  department?: { id: string; name: string; type: string } | null;
+  department?: FeedDepartmentPreview | null;
 };
 
 // Category badge styles
@@ -58,7 +63,7 @@ export function FeedPage() {
 
   useEffect(() => {
     const subscription = subscribeToTable(
-      "posts",
+      "department_feed_posts",
       () => {
         void fetchPosts(false);
       },
@@ -104,8 +109,16 @@ export function FeedPage() {
               <Link key={post.id} to={`/feed/${post.id}`}>
                 <Card className="hover:shadow-glass transition-all hover:-translate-y-0.5 cursor-pointer">
                   <div className="flex items-start gap-4">
-                    <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${catStyle.bg} ${catStyle.text}`}>
-                      <span className="material-symbols-outlined">{catStyle.icon}</span>
+                    <div className={`flex-shrink-0 w-10 h-10 overflow-hidden rounded-lg flex items-center justify-center ${catStyle.bg} ${catStyle.text}`}>
+                      {post.department?.profile_picture ? (
+                        <img
+                          src={post.department.profile_picture}
+                          alt={`${post.department.name} profile`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="material-symbols-outlined">{catStyle.icon}</span>
+                      )}
                     </div>
                     <div className="flex-grow min-w-0">
                       <div className="flex items-start justify-between gap-3">
@@ -118,9 +131,22 @@ export function FeedPage() {
                         </span>
                       </div>
                       <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{post.content}</p>
+                      {post.photos && post.photos.length > 0 && (
+                        <div className="mt-3 overflow-hidden rounded-lg border border-outline-variant/10">
+                          <img
+                            src={post.photos[0]}
+                            alt={post.title}
+                            className="h-40 w-full object-cover"
+                          />
+                        </div>
+                      )}
                       <div className="mt-2 flex items-center gap-2 text-[10px] text-outline">
                         {post.department && (
                           <span className="font-medium capitalize">{post.department.name}</span>
+                        )}
+                        {post.location && <span>{post.location}</span>}
+                        {post.attachments && post.attachments.length > 0 && (
+                          <span>{post.attachments.length} attachment{post.attachments.length !== 1 ? "s" : ""}</span>
                         )}
                         <span>{new Date(post.created_at).toLocaleString()}</span>
                       </div>

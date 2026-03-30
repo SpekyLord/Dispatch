@@ -16,6 +16,7 @@ type Report = {
   severity: string;
   status: string;
   is_escalated: boolean;
+  is_mesh_origin?: boolean;
   created_at: string;
 };
 
@@ -137,6 +138,11 @@ export function MunicipalityReportsPage() {
                           {r.title || r.description}
                         </h3>
                         <div className="flex items-center gap-2 shrink-0">
+                          {r.is_mesh_origin && (
+                            <span className="rounded-md bg-cyan-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-cyan-800">
+                              Mesh
+                            </span>
+                          )}
                           {r.is_escalated && (
                             <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-red-800">
                               Escalated

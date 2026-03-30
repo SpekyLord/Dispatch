@@ -1,4 +1,4 @@
-// App router — role-based route guards with Phase 2+3 department, feed, notification, analytics routes.
+// App router — role-based route guards with Phase 2-4 department, feed, notification, analytics, mesh routes.
 
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -24,6 +24,7 @@ import { MunicipalityEscalatedReportsPage } from "@/pages/municipality/municipal
 import { MunicipalityReportsPage } from "@/pages/municipality/municipality-reports-page";
 import { MunicipalityAnalyticsPage } from "@/pages/municipality/municipality-analytics-page";
 import { MunicipalityAssessmentsPage } from "@/pages/municipality/municipality-assessments-page";
+import { MunicipalityMeshPage } from "@/pages/municipality/municipality-mesh-page";
 import { DepartmentViewPage } from "@/pages/shared/department-view-page";
 import { FeedPage } from "@/pages/shared/feed-page";
 import { FeedDetailPage } from "@/pages/shared/feed-detail-page";
@@ -67,6 +68,7 @@ export function AppRouter() {
           <Route element={<MunicipalityEscalatedReportsPage />} path="/municipality/reports/escalated" />
           <Route element={<MunicipalityVerificationPage />} path="/municipality/verification" />
           <Route element={<MunicipalityDepartmentsPage />} path="/municipality/departments" />
+          <Route element={<MunicipalityMeshPage />} path="/municipality/mesh" />
           <Route element={<MunicipalityNewsFeedPage />} path="/municipality/news-feed" />
         </Route>
 

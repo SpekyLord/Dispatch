@@ -1,2 +1,342 @@
+"""Mesh gateway service — idempotent ingest, dedup, and sync."""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+from dispatch_api.errors import ApiError
+
+log = logging.getLogger(__name__)
+
+VALID_PAYLOAD_TYPES = {
+    "INCIDENT_REPORT",
+    "ANNOUNCEMENT",
+    "DISTRESS",
+    "STATUS_UPDATE",
+    "SYNC_ACK",
+}
+
+MAX_HOPS_DEFAULT = 7
+MAX_HOPS_DISTRESS = 15
+
+
 class MeshService:
-    """Phase 0 placeholder for mesh-domain orchestration."""
+    def __init__(self, client) -> None:
+        self.client = client
+
+    # -- batch ingest from a gateway device --
+    def ingest_packets(self, packets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [self._process_single(pkt) for pkt in packets]
+
+    # -- pull server-side updates for gateway rebroadcast --
+    def get_sync_updates(self, *, since: str | None = None) -> dict[str, Any]:
+        base_params: dict[str, str] = {"order": "updated_at.desc", "limit": "100"}
+        if since:
+            base_params["updated_at"] = f"gte.{since}"
+
+        reports = self.client.db_query(
+            "incident_reports",
+            params={"select": "id,status,updated_at", **base_params},
+            use_service_role=True,
+        )
+
+        distress_params: dict[str, str] = {
+            "select": "*",
+            "order": "created_at.desc",
+            "limit": "50",
+        }
+        if since:
+            distress_params["created_at"] = f"gte.{since}"
+        distress = self.client.db_query(
+            "distress_signals", params=distress_params, use_service_role=True
+        )
+
+        history_params: dict[str, str] = {
+            "select": "*",
+            "order": "created_at.desc",
+            "limit": "100",
+        }
+        if since:
+            history_params["created_at"] = f"gte.{since}"
+        history = self.client.db_query(
+            "report_status_history", params=history_params, use_service_role=True
+        )
+
+        return {
+            "report_updates": reports,
+            "distress_signals": distress,
+            "status_history": history,
+            "synced_at": datetime.now(tz=UTC).isoformat(),
+        }
+
+    # -- process one mesh packet --
+    def _process_single(self, pkt: dict[str, Any]) -> dict[str, Any]:
+        message_id = pkt.get("messageId", "")
+        payload_type = pkt.get("payloadType", "")
+        origin_device = pkt.get("originDeviceId", "")
+        hop_count = pkt.get("hopCount", 0)
+        max_hops = pkt.get("maxHops", MAX_HOPS_DEFAULT)
+        payload = pkt.get("payload", {})
+        signature = pkt.get("signature", "")
+
+        if not message_id:
+            return _error_result(message_id, "missing messageId")
+        if payload_type not in VALID_PAYLOAD_TYPES:
+            return _error_result(message_id, f"invalid payloadType: {payload_type}")
+        if hop_count > max_hops:
+            return _error_result(message_id, "hop limit exceeded")
+
+        # dedup check
+        existing = self.client.db_query(
+            "mesh_messages",
+            params={"select": "id,processing_state", "message_id": f"eq.{message_id}"},
+            use_service_role=True,
+        )
+        if existing:
+            return {
+                "messageId": message_id,
+                "status": "duplicate",
+                "linkedRecordId": existing[0].get("linked_record_id"),
+            }
+
+        # record dedup entry
+        self.client.db_insert(
+            "mesh_messages",
+            data={
+                "message_id": message_id,
+                "payload_type": payload_type,
+                "origin_device_id": origin_device,
+                "hop_count": hop_count,
+                "processing_state": "pending",
+                "raw_payload": payload,
+                "signature": signature,
+                "created_at": datetime.now(tz=UTC).isoformat(),
+            },
+            use_service_role=True,
+        )
+
+        try:
+            linked_id = None
+            if payload_type == "INCIDENT_REPORT":
+                linked_id = self._process_incident(message_id, payload)
+            elif payload_type == "ANNOUNCEMENT":
+                linked_id = self._process_announcement(message_id, payload)
+            elif payload_type == "DISTRESS":
+                linked_id = self._process_distress(message_id, origin_device, hop_count, payload)
+            elif payload_type == "STATUS_UPDATE":
+                linked_id = self._process_status_update(payload)
+
+            # mark processed
+            self.client.db_update(
+                "mesh_messages",
+                data={
+                    "processing_state": "processed",
+                    "linked_record_id": linked_id,
+                    "linked_record_type": _record_type_for(payload_type),
+                    "processed_at": datetime.now(tz=UTC).isoformat(),
+                },
+                params={"message_id": f"eq.{message_id}"},
+                use_service_role=True,
+            )
+            return {
+                "messageId": message_id,
+                "status": "processed",
+                "linkedRecordId": linked_id,
+            }
+
+        except Exception as exc:
+            log.exception("Mesh processing failed: %s", message_id)
+            self.client.db_update(
+                "mesh_messages",
+                data={
+                    "processing_state": "failed",
+                    "error_message": str(exc)[:500],
+                    "processed_at": datetime.now(tz=UTC).isoformat(),
+                },
+                params={"message_id": f"eq.{message_id}"},
+                use_service_role=True,
+            )
+            return _error_result(message_id, str(exc))
+
+    # -- incident report: append-only --
+    def _process_incident(self, message_id: str, payload: dict[str, Any]) -> str | None:
+        description = payload.get("description", "")
+        if not description:
+            raise ApiError("Incident payload missing description.", code="validation_error")
+
+        row = {
+            "description": description,
+            "category": payload.get("category", "other"),
+            "severity": payload.get("severity", "medium"),
+            "status": "pending",
+            "is_escalated": False,
+            "is_mesh_origin": True,
+            "mesh_message_id": message_id,
+            "reporter_id": payload.get("reporter_id", "00000000-0000-0000-0000-000000000000"),
+            "address": payload.get("address", ""),
+            "latitude": payload.get("latitude"),
+            "longitude": payload.get("longitude"),
+            "image_urls": payload.get("image_urls", []),
+            "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
+        }
+        rows = self.client.db_insert("incident_reports", data=row, use_service_role=True)
+        if rows:
+            self.client.db_insert(
+                "report_status_history",
+                data={
+                    "report_id": rows[0]["id"],
+                    "new_status": "pending",
+                    "notes": "Created via mesh relay",
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                },
+                use_service_role=True,
+            )
+            return rows[0]["id"]
+        return None
+
+    # -- announcement: append-only, requires valid dept token --
+    def _process_announcement(self, message_id: str, payload: dict[str, Any]) -> str | None:
+        dept_id = payload.get("department_id")
+        offline_token = payload.get("offline_verification_token")
+
+        if not dept_id:
+            raise ApiError("Announcement missing department_id.", code="validation_error")
+        if not offline_token:
+            raise ApiError(
+                "Announcement missing offline verification token.",
+                code="token_missing",
+            )
+
+        # verify department is approved
+        depts = self.client.db_query(
+            "departments",
+            params={"select": "id,verification_status,user_id", "id": f"eq.{dept_id}"},
+            use_service_role=True,
+        )
+        if not depts or depts[0].get("verification_status") != "approved":
+            raise ApiError(
+                "Department not verified — announcement rejected.",
+                code="token_invalid",
+            )
+
+        row = {
+            "department_id": dept_id,
+            "author_id": payload.get("author_id", depts[0].get("user_id", "")),
+            "title": payload.get("title", "Offline Announcement"),
+            "content": payload.get("content", ""),
+            "category": payload.get("category", "update"),
+            "image_urls": payload.get("image_urls", []),
+            "is_mesh_origin": True,
+            "mesh_message_id": message_id,
+            "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
+        }
+        rows = self.client.db_insert("posts", data=row, use_service_role=True)
+        return rows[0]["id"] if rows else None
+
+    # -- distress: immutable, fast-path --
+    def _process_distress(
+        self,
+        message_id: str,
+        origin_device: str,
+        hop_count: int,
+        payload: dict[str, Any],
+    ) -> str | None:
+        row = {
+            "message_id": message_id,
+            "origin_device_id": origin_device,
+            "latitude": payload.get("latitude"),
+            "longitude": payload.get("longitude"),
+            "description": payload.get("description", ""),
+            "reporter_name": payload.get("reporter_name", ""),
+            "contact_info": payload.get("contact_info", ""),
+            "hop_count": hop_count,
+            "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
+        }
+        rows = self.client.db_insert("distress_signals", data=row, use_service_role=True)
+        if rows:
+            # notify municipality users
+            self.client.db_insert(
+                "notifications",
+                data={
+                    "user_id": "00000000-0000-0000-0000-000000000000",
+                    "type": "new_report",
+                    "title": "SOS Distress Signal",
+                    "message": (f"Distress signal via mesh from device {origin_device[:8]}..."),
+                    "reference_id": rows[0]["id"],
+                    "reference_type": "distress_signal",
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                },
+                use_service_role=True,
+                return_repr=False,
+            )
+            return rows[0]["id"]
+        return None
+
+    # -- status update: last-write-wins by timestamp --
+    def _process_status_update(self, payload: dict[str, Any]) -> str | None:
+        report_id = payload.get("report_id")
+        new_status = payload.get("new_status")
+        if not report_id or not new_status:
+            raise ApiError(
+                "Status update requires report_id and new_status.",
+                code="validation_error",
+            )
+
+        timestamp = payload.get("timestamp", datetime.now(tz=UTC).isoformat())
+
+        existing = self.client.db_query(
+            "incident_reports",
+            params={"select": "id,status,updated_at", "id": f"eq.{report_id}"},
+            use_service_role=True,
+        )
+        if not existing:
+            raise ApiError("Report not found.", code="not_found")
+
+        # last-write-wins: skip if our timestamp is older
+        current_updated = existing[0].get("updated_at", "")
+        if timestamp < current_updated:
+            return report_id
+
+        self.client.db_update(
+            "incident_reports",
+            data={"status": new_status, "updated_at": timestamp},
+            params={"id": f"eq.{report_id}"},
+            use_service_role=True,
+        )
+        self.client.db_insert(
+            "report_status_history",
+            data={
+                "report_id": report_id,
+                "new_status": new_status,
+                "notes": "Updated via mesh sync",
+                "created_at": timestamp,
+            },
+            use_service_role=True,
+        )
+        return report_id
+
+    @staticmethod
+    def verify_signature(payload: dict, signature: str, device_key: str) -> bool:
+        """Verify HMAC-SHA256 signature of a mesh packet payload."""
+        payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        expected = hmac.new(device_key.encode(), payload_bytes, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
+
+
+def _record_type_for(payload_type: str) -> str | None:
+    return {
+        "INCIDENT_REPORT": "incident_report",
+        "ANNOUNCEMENT": "post",
+        "DISTRESS": "distress_signal",
+        "STATUS_UPDATE": "incident_report",
+        "SYNC_ACK": None,
+    }.get(payload_type)
+
+
+def _error_result(message_id: str, error: str) -> dict[str, Any]:
+    return {"messageId": message_id, "status": "error", "error": error}

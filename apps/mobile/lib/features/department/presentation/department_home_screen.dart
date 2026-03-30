@@ -8,6 +8,8 @@ import 'package:dispatch_mobile/features/department/presentation/department_asse
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -303,6 +305,30 @@ class _ApprovedView extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.cell_tower, color: Colors.cyan.shade700),
+            title: const Text('Mesh Network'),
+            subtitle: const Text('Offline relay and sync status'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.sos, color: Colors.red.shade700),
+            title: const Text('Emergency SOS'),
+            subtitle: const Text('Send distress signal (no login)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SosScreen()),
             ),
           ),
         ),

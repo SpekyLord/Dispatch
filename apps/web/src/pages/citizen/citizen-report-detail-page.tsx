@@ -40,7 +40,8 @@ type DeptResponse = {
 type Report = {
   id: string; description: string; category: string; severity: string;
   status: string; address?: string; latitude?: number; longitude?: number;
-  is_escalated: boolean; image_urls?: string[]; created_at: string; updated_at: string;
+  is_escalated: boolean; is_mesh_origin?: boolean; image_urls?: string[];
+  created_at: string; updated_at: string;
 };
 
 const statusStyles: Record<string, { bg: string; text: string }> = {
@@ -192,6 +193,12 @@ export function CitizenReportDetailPage() {
               <span className="rounded bg-surface-container-highest px-3 py-1 text-xs capitalize text-on-surface-variant">
                 {report.severity}
               </span>
+              {report.is_mesh_origin && (
+                <span className="rounded bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-800">
+                  <span className="material-symbols-outlined text-[12px] align-middle mr-1">cell_tower</span>
+                  Mesh Origin
+                </span>
+              )}
               {report.is_escalated && (
                 <span className="rounded bg-error-container/30 px-3 py-1 text-xs font-semibold text-error">
                   <span className="material-symbols-outlined text-[12px] align-middle mr-1">warning</span>

@@ -6,6 +6,8 @@ import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_det
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,6 +50,22 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       appBar: AppBar(
         title: const Text('My Reports'),
         actions: [
+          // SOS shortcut
+          IconButton(
+            icon: Icon(Icons.sos, color: Colors.red.shade600),
+            tooltip: 'Emergency SOS',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SosScreen()),
+            ),
+          ),
+          // Mesh status
+          IconButton(
+            icon: const Icon(Icons.cell_tower),
+            tooltip: 'Mesh Network',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
+            ),
+          ),
           // Feed shortcut
           IconButton(
             icon: const Icon(Icons.newspaper),

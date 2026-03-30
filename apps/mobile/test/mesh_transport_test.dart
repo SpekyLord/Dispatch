@@ -1,4 +1,4 @@
-// Phase 4 mobile tests — offline queue, dedup, hop limit, token rejection.
+// Phase 4 mobile tests - offline queue, dedup, hop limit, token rejection.
 
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,10 +40,7 @@ void main() {
     });
 
     test('requiresWifiDirect true for large payloads', () {
-      // create payload > 10KB
-      final bigPayload = <String, dynamic>{
-        'description': 'x' * 15000,
-      };
+      final bigPayload = <String, dynamic>{'description': 'x' * 15000};
       final pkt = MeshPacket(
         messageId: 'big',
         originDeviceId: 'dev',
@@ -60,6 +57,10 @@ void main() {
 
     setUp(() {
       svc = MeshTransportService();
+    });
+
+    tearDown(() {
+      svc.dispose();
     });
 
     test('initializes with origin role', () async {
@@ -103,13 +104,11 @@ void main() {
         payload: {'description': 'Test'},
       );
 
-      // first receive succeeds
       final accepted = svc.receivePacket(pkt);
       expect(accepted, true);
 
-      // duplicate is rejected
       final pkt2 = MeshPacket.fromJson(pkt.toJson());
-      pkt2.hopCount = 0; // reset for test
+      pkt2.hopCount = 0;
       final rejected = svc.receivePacket(pkt2);
       expect(rejected, false);
     });
@@ -168,10 +167,46 @@ void main() {
     test('onPeerDiscovered adds and updates peers', () {
       svc.onPeerDiscovered('ep-1', 'Phone A');
       expect(svc.peerCount, 1);
-      svc.onPeerDiscovered('ep-1', 'Phone A'); // update
+      svc.onPeerDiscovered('ep-1', 'Phone A');
       expect(svc.peerCount, 1);
       svc.onPeerDiscovered('ep-2', 'Phone B');
       expect(svc.peerCount, 2);
+    });
+
+    test(
+      'drainQueue prioritizes survivor signals ahead of incident reports',
+      () {
+        svc.enqueuePacket(
+          MeshPacket(
+            messageId: 'incident-first',
+            originDeviceId: 'dev',
+            timestamp: '2026-03-31T00:00:00Z',
+            payloadType: MeshPayloadType.incidentReport,
+            payload: {'description': 'Test'},
+          ),
+        );
+        svc.enqueuePacket(
+          MeshPacket(
+            messageId: 'survivor-priority',
+            originDeviceId: 'dev',
+            timestamp: '2026-03-31T00:00:00Z',
+            maxHops: 15,
+            payloadType: MeshPayloadType.survivorSignal,
+            payload: {'detectionMethod': 'BLE_PASSIVE'},
+          ),
+        );
+
+        final drained = svc.drainQueue();
+        expect(drained.first.messageId, 'survivor-priority');
+      },
+    );
+
+    test('SOS beacon broadcast state can be toggled for SAR detection', () {
+      svc.startSosBeaconBroadcast(deviceId: 'sos-dev');
+      expect(svc.isSosBeaconBroadcasting, true);
+      expect(svc.sosBeaconDeviceId, 'sos-dev');
+      svc.stopSosBeaconBroadcast();
+      expect(svc.isSosBeaconBroadcasting, false);
     });
   });
 

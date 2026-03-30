@@ -1,17 +1,19 @@
-// SOS distress screen — one-tap emergency signal, no login required.
+// SOS distress screen - one-tap emergency signal, no login required.
 // Broadcasts DISTRESS packets with maxHops=15 via mesh relay.
 
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SosScreen extends StatefulWidget {
+class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
 
   @override
-  State<SosScreen> createState() => _SosScreenState();
+  ConsumerState<SosScreen> createState() => _SosScreenState();
 }
 
-class _SosScreenState extends State<SosScreen> {
+class _SosScreenState extends ConsumerState<SosScreen> {
   final _nameCtrl = TextEditingController();
   final _contactCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -28,18 +30,18 @@ class _SosScreenState extends State<SosScreen> {
 
   void _sendDistress() {
     setState(() => _sending = true);
+    final transport = ref.read(meshTransportProvider);
 
-    // create distress packet via mesh transport
     final packet = MeshTransportService.createDistressPacket(
-      deviceId: 'local-device', // would use real device ID
+      deviceId: 'local-device',
       description: _descCtrl.text.trim(),
       reporterName: _nameCtrl.text.trim(),
       contactInfo: _contactCtrl.text.trim(),
     );
 
-    // enqueue for mesh broadcast
-    final transport = MeshTransportService();
     transport.enqueuePacket(packet);
+    transport.startSosBeaconBroadcast(deviceId: 'local-device');
+    ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
 
     setState(() {
       _sent = true;
@@ -99,7 +101,7 @@ class _SosScreenState extends State<SosScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                'Max relay: 15 hops',
+                'Max relay: 15 hops • SOS beacon active',
                 style: TextStyle(
                   color: Colors.cyan.shade800,
                   fontSize: 12,
@@ -122,7 +124,6 @@ class _SosScreenState extends State<SosScreen> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        // emergency header
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -152,8 +153,6 @@ class _SosScreenState extends State<SosScreen> {
           ),
         ),
         const SizedBox(height: 24),
-
-        // optional info fields
         TextField(
           controller: _nameCtrl,
           decoration: const InputDecoration(
@@ -184,8 +183,6 @@ class _SosScreenState extends State<SosScreen> {
           maxLines: 3,
         ),
         const SizedBox(height: 32),
-
-        // big SOS button
         SizedBox(
           height: 56,
           child: FilledButton(

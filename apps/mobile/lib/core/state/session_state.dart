@@ -36,15 +36,15 @@ class DepartmentInfo {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type,
-        'verification_status': verificationStatus,
-        'rejection_reason': rejectionReason,
-        'contact_number': contactNumber,
-        'address': address,
-        'area_of_responsibility': areaOfResponsibility,
-      };
+    'id': id,
+    'name': name,
+    'type': type,
+    'verification_status': verificationStatus,
+    'rejection_reason': rejectionReason,
+    'contact_number': contactNumber,
+    'address': address,
+    'area_of_responsibility': areaOfResponsibility,
+  };
 }
 
 /// Auth session state — serializable to JSON for file-based persistence.

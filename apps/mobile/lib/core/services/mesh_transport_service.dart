@@ -1,7 +1,8 @@
-// Mesh transport — BLE discovery, WiFi Direct handoff, packet relay, and gateway sync.
+// Mesh transport - BLE discovery, WiFi Direct handoff, packet relay, and gateway sync.
 // Uses nearby_connections API abstraction; actual plugin integration requires
 // Android/iOS permissions and is tested via manual device-to-device field tests.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -11,6 +12,7 @@ enum MeshPayloadType {
   incidentReport,
   announcement,
   distress,
+  survivorSignal,
   statusUpdate,
   syncAck,
 }
@@ -43,6 +45,7 @@ class MeshPacket {
       MeshPayloadType.incidentReport => 'INCIDENT_REPORT',
       MeshPayloadType.announcement => 'ANNOUNCEMENT',
       MeshPayloadType.distress => 'DISTRESS',
+      MeshPayloadType.survivorSignal => 'SURVIVOR_SIGNAL',
       MeshPayloadType.statusUpdate => 'STATUS_UPDATE',
       MeshPayloadType.syncAck => 'SYNC_ACK',
     };
@@ -69,6 +72,7 @@ class MeshPacket {
       'INCIDENT_REPORT' => MeshPayloadType.incidentReport,
       'ANNOUNCEMENT' => MeshPayloadType.announcement,
       'DISTRESS' => MeshPayloadType.distress,
+      'SURVIVOR_SIGNAL' => MeshPayloadType.survivorSignal,
       'STATUS_UPDATE' => MeshPayloadType.statusUpdate,
       'SYNC_ACK' => MeshPayloadType.syncAck,
       _ => MeshPayloadType.statusUpdate,
@@ -112,9 +116,13 @@ class MeshTransportService {
   final List<MeshPeer> _peers = [];
   final Set<String> _seenMessageIds = {};
   final List<MeshPacket> _outboundQueue = [];
+  final StreamController<MeshPacket> _packetController =
+      StreamController<MeshPacket>.broadcast();
   DateTime? _lastSyncTime;
   bool _isDiscovering = false;
   bool _hasInternet = false;
+  bool _isSosBeaconBroadcasting = false;
+  String? _sosBeaconDeviceId;
 
   // read-only accessors
   MeshNodeRole get role => _role;
@@ -124,6 +132,9 @@ class MeshTransportService {
   DateTime? get lastSyncTime => _lastSyncTime;
   bool get isDiscovering => _isDiscovering;
   int get estimatedReach => _estimateReach();
+  bool get isSosBeaconBroadcasting => _isSosBeaconBroadcasting;
+  String? get sosBeaconDeviceId => _sosBeaconDeviceId;
+  Stream<MeshPacket> get packetStream => _packetController.stream;
 
   Future<void> initialize() async {
     // detect connectivity and set initial role
@@ -179,13 +190,19 @@ class MeshTransportService {
       _outboundQueue.add(packet);
     }
 
+    _packetController.add(packet);
+
     // relay to other peers (would call nearby_connections.sendPayload)
     return true;
   }
 
   // get all queued packets for gateway upload
   List<MeshPacket> drainQueue() {
-    final packets = List<MeshPacket>.from(_outboundQueue);
+    final packets = List<MeshPacket>.from(_outboundQueue)
+      ..sort(
+        (a, b) =>
+            _priorityFor(a.payloadType).compareTo(_priorityFor(b.payloadType)),
+      );
     _outboundQueue.clear();
     _lastSyncTime = DateTime.now();
     return packets;
@@ -212,14 +229,26 @@ class MeshTransportService {
   }
 
   // remove stale peers (not seen in last 5 minutes)
-  void pruneStaleePeers() {
+  void pruneStalePeers() {
     final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
     _peers.removeWhere((p) => p.lastSeen.isBefore(cutoff));
   }
 
+  void pruneStaleePeers() => pruneStalePeers();
+
   // decide transport: BLE for small, WiFi Direct for >10KB
   String transportForPacket(MeshPacket packet) {
     return packet.requiresWifiDirect ? 'wifi_direct' : 'ble';
+  }
+
+  void startSosBeaconBroadcast({required String deviceId}) {
+    _isSosBeaconBroadcasting = true;
+    _sosBeaconDeviceId = deviceId;
+  }
+
+  void stopSosBeaconBroadcast() {
+    _isSosBeaconBroadcasting = false;
+    _sosBeaconDeviceId = null;
   }
 
   // estimate mesh reach based on peer count and avg hops
@@ -271,7 +300,13 @@ class MeshTransportService {
       timestamp: DateTime.now().toUtc().toIso8601String(),
       payloadType: MeshPayloadType.incidentReport,
       payload: _buildIncidentPayload(
-        description, category, severity, address, latitude, longitude, reporterId,
+        description,
+        category,
+        severity,
+        address,
+        latitude,
+        longitude,
+        reporterId,
       ),
     );
   }
@@ -292,15 +327,25 @@ class MeshTransportService {
       timestamp: DateTime.now().toUtc().toIso8601String(),
       payloadType: MeshPayloadType.announcement,
       payload: _buildAnnouncementPayload(
-        departmentId, offlineToken, title, content, category, authorId,
+        departmentId,
+        offlineToken,
+        title,
+        content,
+        category,
+        authorId,
       ),
     );
   }
 
   // imperative map builders to avoid use_null_aware_elements lint
   static Map<String, dynamic> _buildIncidentPayload(
-    String description, String category, String severity,
-    String? address, double? latitude, double? longitude, String? reporterId,
+    String description,
+    String category,
+    String severity,
+    String? address,
+    double? latitude,
+    double? longitude,
+    String? reporterId,
   ) {
     final m = <String, dynamic>{
       'description': description,
@@ -315,8 +360,12 @@ class MeshTransportService {
   }
 
   static Map<String, dynamic> _buildAnnouncementPayload(
-    String departmentId, String offlineToken, String title,
-    String content, String category, String? authorId,
+    String departmentId,
+    String offlineToken,
+    String title,
+    String content,
+    String category,
+    String? authorId,
   ) {
     final m = <String, dynamic>{
       'department_id': departmentId,
@@ -327,6 +376,22 @@ class MeshTransportService {
     };
     if (authorId != null) m['author_id'] = authorId;
     return m;
+  }
+
+  // Distress and survivor detection packets drain first so gateway uploads keep
+  // life-safety traffic ahead of routine reports and acknowledgements.
+  static int _priorityFor(MeshPayloadType payloadType) {
+    return switch (payloadType) {
+      MeshPayloadType.distress || MeshPayloadType.survivorSignal => 0,
+      MeshPayloadType.statusUpdate => 1,
+      MeshPayloadType.announcement => 2,
+      MeshPayloadType.incidentReport => 3,
+      MeshPayloadType.syncAck => 4,
+    };
+  }
+
+  void dispose() {
+    _packetController.close();
   }
 
   // simple uuid v4 generator

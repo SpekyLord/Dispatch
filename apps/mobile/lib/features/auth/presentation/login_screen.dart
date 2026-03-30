@@ -57,22 +57,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Text(
               'DISPATCH',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFFE05A2B),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                  ),
+                color: const Color(0xFFE05A2B),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2.0,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               'Sign in',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
               'Enter your credentials to access the platform.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
             ),
             const SizedBox(height: 32),
             if (_error != null)
@@ -84,7 +86,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.red.shade200),
                 ),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 14)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 14),
+                ),
               ),
             TextField(
               controller: _emailController,
@@ -106,7 +111,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _loading ? null : _handleLogin,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
               child: Text(_loading ? 'Signing in...' : 'Sign in'),
             ),
             const SizedBox(height: 16),

@@ -52,11 +52,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       password: _passwordController.text,
       role: _role,
       fullName: _fullNameController.text.trim(),
-      organizationName: _role == 'department' ? _orgNameController.text.trim() : null,
+      organizationName: _role == 'department'
+          ? _orgNameController.text.trim()
+          : null,
       departmentType: _role == 'department' ? _deptType : null,
-      contactNumber: _role == 'department' ? _contactController.text.trim() : null,
+      contactNumber: _role == 'department'
+          ? _contactController.text.trim()
+          : null,
       address: _role == 'department' ? _addressController.text.trim() : null,
-      areaOfResponsibility: _role == 'department' ? _areaController.text.trim() : null,
+      areaOfResponsibility: _role == 'department'
+          ? _areaController.text.trim()
+          : null,
     );
 
     if (mounted) {
@@ -78,17 +84,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             Text(
               'DISPATCH',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFFE05A2B),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                  ),
+                color: const Color(0xFFE05A2B),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2.0,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               'Create an account',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 24),
             if (_error != null)
@@ -100,7 +106,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.red.shade200),
                 ),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 14)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 14),
+                ),
               ),
             // Role selector
             Row(
@@ -162,10 +171,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     Text(
                       'DEPARTMENT DETAILS',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            letterSpacing: 1.2,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black54,
-                          ),
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -183,11 +192,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'fire', child: Text('Fire (BFP)')),
-                        DropdownMenuItem(value: 'police', child: Text('Police (PNP)')),
-                        DropdownMenuItem(value: 'medical', child: Text('Medical')),
-                        DropdownMenuItem(value: 'disaster', child: Text('MDRRMO')),
-                        DropdownMenuItem(value: 'rescue', child: Text('Rescue')),
+                        DropdownMenuItem(
+                          value: 'fire',
+                          child: Text('Fire (BFP)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'police',
+                          child: Text('Police (PNP)'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'medical',
+                          child: Text('Medical'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'disaster',
+                          child: Text('MDRRMO'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'rescue',
+                          child: Text('Rescue'),
+                        ),
                         DropdownMenuItem(value: 'other', child: Text('Other')),
                       ],
                       onChanged: (v) => setState(() => _deptType = v ?? 'fire'),
@@ -224,7 +248,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _loading ? null : _handleRegister,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
               child: Text(_loading ? 'Creating account...' : 'Create account'),
             ),
             const SizedBox(height: 16),

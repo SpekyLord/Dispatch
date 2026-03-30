@@ -15,12 +15,21 @@ class AppConfig {
   final String supabaseUrl;
 
   // Both URL and key needed for realtime features
-  bool get hasRealtimeConfig => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+  bool get hasRealtimeConfig =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
-  static const _configuredApiBaseUrl = String.fromEnvironment('MOBILE_API_BASE_URL');
-  static const _configuredWebApiBaseUrl = String.fromEnvironment('MOBILE_WEB_API_BASE_URL');
-  static const _configuredSupabaseAnonKey = String.fromEnvironment('MOBILE_SUPABASE_ANON_KEY');
-  static const _configuredSupabaseUrl = String.fromEnvironment('MOBILE_SUPABASE_URL');
+  static const _configuredApiBaseUrl = String.fromEnvironment(
+    'MOBILE_API_BASE_URL',
+  );
+  static const _configuredWebApiBaseUrl = String.fromEnvironment(
+    'MOBILE_WEB_API_BASE_URL',
+  );
+  static const _configuredSupabaseAnonKey = String.fromEnvironment(
+    'MOBILE_SUPABASE_ANON_KEY',
+  );
+  static const _configuredSupabaseUrl = String.fromEnvironment(
+    'MOBILE_SUPABASE_URL',
+  );
 
   static final current = AppConfig(
     apiBaseUrl: resolveApiBaseUrl(

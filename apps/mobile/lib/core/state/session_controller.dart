@@ -7,18 +7,21 @@ import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
-final sessionStorageProvider = Provider<SessionStorage>((ref) => SessionStorage());
+final sessionStorageProvider = Provider<SessionStorage>(
+  (ref) => SessionStorage(),
+);
 
 final sessionControllerProvider =
     StateNotifierProvider<SessionController, SessionState>((ref) {
-  return SessionController(
-    ref.read(sessionStorageProvider),
-    ref.read(authServiceProvider),
-  );
-});
+      return SessionController(
+        ref.read(sessionStorageProvider),
+        ref.read(authServiceProvider),
+      );
+    });
 
 class SessionController extends StateNotifier<SessionState> {
-  SessionController(this._storage, this._authService) : super(const SessionState()) {
+  SessionController(this._storage, this._authService)
+    : super(const SessionState()) {
     _restore();
   }
 
@@ -35,7 +38,10 @@ class SessionController extends StateNotifier<SessionState> {
   }
 
   // Returns null on success, error string on failure
-  Future<String?> login({required String email, required String password}) async {
+  Future<String?> login({
+    required String email,
+    required String password,
+  }) async {
     try {
       final result = await _authService.login(email: email, password: password);
       final token = result['access_token'] as String?;

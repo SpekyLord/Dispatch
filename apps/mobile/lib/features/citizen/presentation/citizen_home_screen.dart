@@ -54,17 +54,17 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           IconButton(
             icon: Icon(Icons.sos, color: Colors.red.shade600),
             tooltip: 'Emergency SOS',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SosScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SosScreen())),
           ),
           // Mesh status
           IconButton(
             icon: const Icon(Icons.cell_tower),
             tooltip: 'Mesh Network',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const MeshStatusScreen())),
           ),
           // Feed shortcut
           IconButton(
@@ -90,7 +90,8 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
             ),
           ),
           TextButton(
-            onPressed: () => ref.read(sessionControllerProvider.notifier).signOut(),
+            onPressed: () =>
+                ref.read(sessionControllerProvider.notifier).signOut(),
             child: const Text('Sign out'),
           ),
         ],
@@ -108,29 +109,30 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _reports.isEmpty
-              ? const Center(child: Text('No reports yet. Tap + to submit one.'))
-              : RefreshIndicator(
-                  onRefresh: _fetchReports,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _reports.length,
-                    itemBuilder: (context, index) {
-                      final report = _reports[index];
-                      return _ReportCard(
-                        report: report,
-                        onTap: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CitizenReportDetailScreen(reportId: report['id'] as String),
-                            ),
-                          );
-                          _fetchReports();
-                        },
+          ? const Center(child: Text('No reports yet. Tap + to submit one.'))
+          : RefreshIndicator(
+              onRefresh: _fetchReports,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _reports.length,
+                itemBuilder: (context, index) {
+                  final report = _reports[index];
+                  return _ReportCard(
+                    report: report,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CitizenReportDetailScreen(
+                            reportId: report['id'] as String,
+                          ),
+                        ),
                       );
+                      _fetchReports();
                     },
-                  ),
-                ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }
@@ -181,7 +183,11 @@ class _ReportCard extends StatelessWidget {
               ),
               child: Text(
                 status,
-                style: TextStyle(fontSize: 11, color: _statusColor(status), fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _statusColor(status),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

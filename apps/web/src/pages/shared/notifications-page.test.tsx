@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,7 +29,12 @@ describe("NotificationsPage", () => {
     localStorage.clear();
     realtimeMock.subscriptions.length = 0;
     useSessionStore.setState({
-      user: { id: "citizen-1", email: "citizen@test.com", role: "citizen", full_name: "Citizen" },
+      user: {
+        id: "citizen-1",
+        email: "citizen@test.com",
+        role: "citizen",
+        full_name: "Citizen",
+      },
       accessToken: "citizen-token",
       refreshToken: null,
       department: null,
@@ -58,14 +62,19 @@ describe("NotificationsPage", () => {
         return new Response(
           JSON.stringify({
             notifications,
-            unread_count: notifications.filter((notification) => !notification.is_read).length,
+            unread_count: notifications.filter(
+              (notification) => !notification.is_read,
+            ).length,
           }),
           { status: 200 },
         );
       }
 
       if (url.endsWith("/api/notifications/read-all") && method === "PUT") {
-        notifications = notifications.map((notification) => ({ ...notification, is_read: true }));
+        notifications = notifications.map((notification) => ({
+          ...notification,
+          is_read: true,
+        }));
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
 
@@ -83,7 +92,7 @@ describe("NotificationsPage", () => {
     });
     expect(screen.getByText("1 unread notification")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /mark all read/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark all read/i }));
 
     await waitFor(() => {
       expect(screen.getByText("All caught up")).toBeInTheDocument();

@@ -33,8 +33,8 @@ class RealtimeSubscriptionHandle {
 
 class RealtimeService {
   RealtimeService({AppConfig? config, SupabaseClient? client})
-      : _config = config ?? AppConfig.current,
-        _client = client;
+    : _config = config ?? AppConfig.current,
+      _client = client;
 
   final AppConfig _config;
   SupabaseClient? _client;

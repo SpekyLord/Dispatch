@@ -1,4 +1,4 @@
-// Damage assessment screen — form to submit + list of past assessments.
+// Damage assessment screen Ã¢â‚¬â€ form to submit + list of past assessments.
 
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:flutter/material.dart';
@@ -8,10 +8,12 @@ class DepartmentAssessmentScreen extends ConsumerStatefulWidget {
   const DepartmentAssessmentScreen({super.key});
 
   @override
-  ConsumerState<DepartmentAssessmentScreen> createState() => _DepartmentAssessmentScreenState();
+  ConsumerState<DepartmentAssessmentScreen> createState() =>
+      _DepartmentAssessmentScreenState();
 }
 
-class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmentScreen> {
+class _DepartmentAssessmentScreenState
+    extends ConsumerState<DepartmentAssessmentScreen> {
   final _formKey = GlobalKey<FormState>();
   final _areaCtrl = TextEditingController();
   final _casualtiesCtrl = TextEditingController(text: '0');
@@ -46,18 +48,28 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
     try {
       final authService = ref.read(authServiceProvider);
       final list = await authService.getDepartmentAssessments();
-      if (mounted) setState(() { _assessments = list; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _assessments = list;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _submitting = true; _error = null; });
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       final authService = ref.read(authServiceProvider);
-      // Build body imperatively — no conditional map entries
+      // Build body imperatively Ã¢â‚¬â€ no conditional map entries
       final area = _areaCtrl.text.trim();
       final casualties = int.tryParse(_casualtiesCtrl.text.trim()) ?? 0;
       final displaced = int.tryParse(_displacedCtrl.text.trim()) ?? 0;
@@ -82,9 +94,9 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
       setState(() => _damageLevel = 'minor');
       await _fetchAssessments();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Assessment submitted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Assessment submitted')));
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -114,14 +126,25 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
           padding: const EdgeInsets.all(16),
           children: [
             // --- Submit form ---
-            Text('New Assessment', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'New Assessment',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
             if (_error != null)
               Container(
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                ),
               ),
             Form(
               key: _formKey,
@@ -129,44 +152,69 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
                 children: [
                   TextFormField(
                     controller: _areaCtrl,
-                    decoration: const InputDecoration(labelText: 'Affected Area *', border: OutlineInputBorder()),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Affected Area *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Damage Level', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Damage Level',
+                      border: OutlineInputBorder(),
+                    ),
                     initialValue: _damageLevel,
                     onChanged: (v) {
                       if (v != null) setState(() => _damageLevel = v);
                     },
                     items: const [
                       DropdownMenuItem(value: 'minor', child: Text('Minor')),
-                      DropdownMenuItem(value: 'moderate', child: Text('Moderate')),
+                      DropdownMenuItem(
+                        value: 'moderate',
+                        child: Text('Moderate'),
+                      ),
                       DropdownMenuItem(value: 'severe', child: Text('Severe')),
-                      DropdownMenuItem(value: 'critical', child: Text('Critical')),
+                      DropdownMenuItem(
+                        value: 'critical',
+                        child: Text('Critical'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _casualtiesCtrl,
-                    decoration: const InputDecoration(labelText: 'Estimated Casualties', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Estimated Casualties',
+                      border: OutlineInputBorder(),
+                    ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _displacedCtrl,
-                    decoration: const InputDecoration(labelText: 'Displaced Persons', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Displaced Persons',
+                      border: OutlineInputBorder(),
+                    ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _locationCtrl,
-                    decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Location',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _descriptionCtrl,
-                    decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                    ),
                     maxLines: 3,
                   ),
                   const SizedBox(height: 16),
@@ -174,7 +222,9 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _submitting ? null : _submit,
-                      child: Text(_submitting ? 'Submitting...' : 'Submit Assessment'),
+                      child: Text(
+                        _submitting ? 'Submitting...' : 'Submit Assessment',
+                      ),
                     ),
                   ),
                 ],
@@ -183,12 +233,20 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
 
             // --- Past assessments ---
             const SizedBox(height: 32),
-            Text('Previous Assessments', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Previous Assessments',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
             if (_loading)
               const Center(child: CircularProgressIndicator())
             else if (_assessments.isEmpty)
-              const Text('No assessments submitted yet.', style: TextStyle(color: Colors.black45))
+              const Text(
+                'No assessments submitted yet.',
+                style: TextStyle(color: Colors.black45),
+              )
             else
               for (int i = 0; i < _assessments.length; i++)
                 _buildAssessmentCard(_assessments[i]),
@@ -215,39 +273,73 @@ class _DepartmentAssessmentScreenState extends ConsumerState<DepartmentAssessmen
             Row(
               children: [
                 Expanded(
-                  child: Text(area, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  child: Text(
+                    area,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: _damageLevelColor(level).withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     level.toUpperCase(),
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _damageLevelColor(level)),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: _damageLevelColor(level),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text('Casualties: $casualties  |  Displaced: $displaced', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            Text(
+              'Casualties: $casualties  |  Displaced: $displaced',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
             if (a['location'] != null) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(Icons.location_on, size: 13, color: Colors.black45),
+                  const Icon(
+                    Icons.location_on,
+                    size: 13,
+                    color: Colors.black45,
+                  ),
                   const SizedBox(width: 4),
-                  Expanded(child: Text(a['location'] as String, style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                  Expanded(
+                    child: Text(
+                      a['location'] as String,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
             if (a['description'] != null) ...[
               const SizedBox(height: 4),
-              Text(a['description'] as String, style: const TextStyle(fontSize: 12)),
+              Text(
+                a['description'] as String,
+                style: const TextStyle(fontSize: 12),
+              ),
             ],
             const SizedBox(height: 4),
-            Text(createdAt, style: const TextStyle(fontSize: 10, color: Colors.black38)),
+            Text(
+              createdAt,
+              style: const TextStyle(fontSize: 10, color: Colors.black38),
+            ),
           ],
         ),
       ),

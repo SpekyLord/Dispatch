@@ -1,4 +1,4 @@
-"""Mesh gateway API — batch ingest and sync-updates endpoints."""
+"""Mesh gateway API - batch ingest, sync-updates, and survivor-signal endpoints."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from http import HTTPStatus
 
 from flask import current_app, jsonify, request
 
+from dispatch_api.auth import get_current_user, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.mesh import blueprint
 from dispatch_api.services.mesh_service import MeshService
@@ -15,7 +16,32 @@ def _mesh_service() -> MeshService:
     return MeshService(current_app.extensions["supabase_client"])
 
 
-# gateway upload endpoint for batch mesh packet ingestion
+def _priority_for(packet: dict) -> int:
+    payload_type = packet.get("payloadType")
+    return {
+        "DISTRESS": 0,
+        "SURVIVOR_SIGNAL": 0,
+        "STATUS_UPDATE": 1,
+        "ANNOUNCEMENT": 2,
+        "INCIDENT_REPORT": 3,
+        "SYNC_ACK": 4,
+    }.get(payload_type, 5)
+
+
+def _float_arg(name: str) -> float | None:
+    raw_value = request.args.get(name)
+    if raw_value in (None, ""):
+        return None
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ApiError(
+            f"{name} must be a number.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        ) from exc
+
+
 @blueprint.post("/ingest")
 def ingest_packets():
     body = request.get_json(silent=True)
@@ -35,23 +61,17 @@ def ingest_packets():
         )
 
     svc = _mesh_service()
-
-    # prioritize DISTRESS packets first
-    distress = [p for p in packets if p.get("payloadType") == "DISTRESS"]
-    others = [p for p in packets if p.get("payloadType") != "DISTRESS"]
-    ordered = distress + others
-
+    ordered = sorted(packets, key=_priority_for)
     results = svc.ingest_packets(ordered)
 
-    # build SYNC_ACK responses for processed packets
     acks = []
-    for r in results:
-        if r.get("status") == "processed":
+    for result in results:
+        if result.get("status") == "processed":
             acks.append(
                 {
-                    "messageId": r["messageId"],
+                    "messageId": result["messageId"],
                     "payloadType": "SYNC_ACK",
-                    "linkedRecordId": r.get("linkedRecordId"),
+                    "linkedRecordId": result.get("linkedRecordId"),
                     "synced": True,
                 }
             )
@@ -60,17 +80,54 @@ def ingest_packets():
         {
             "results": results,
             "acks": acks,
-            "processed_count": sum(1 for r in results if r["status"] == "processed"),
-            "duplicate_count": sum(1 for r in results if r["status"] == "duplicate"),
-            "error_count": sum(1 for r in results if r["status"] == "error"),
+            "processed_count": sum(1 for result in results if result["status"] == "processed"),
+            "duplicate_count": sum(1 for result in results if result["status"] == "duplicate"),
+            "error_count": sum(1 for result in results if result["status"] == "error"),
         }
     )
 
 
-# pull server-side changes for gateway rebroadcast into mesh
 @blueprint.get("/sync-updates")
 def get_sync_updates():
     since = request.args.get("since")
     svc = _mesh_service()
     updates = svc.get_sync_updates(since=since)
     return jsonify(updates)
+
+
+@blueprint.get("/survivor-signals")
+@require_role("department", "municipality")
+def get_survivor_signals():
+    svc = _mesh_service()
+    survivor_signals = svc.list_survivor_signals(
+        status=request.args.get("status"),
+        detection_method=request.args.get("detection_method"),
+        time_start=request.args.get("time_start"),
+        time_end=request.args.get("time_end"),
+        min_lat=_float_arg("min_lat"),
+        max_lat=_float_arg("max_lat"),
+        min_lng=_float_arg("min_lng"),
+        max_lng=_float_arg("max_lng"),
+    )
+    return jsonify({"survivor_signals": survivor_signals, "count": len(survivor_signals)})
+
+
+@blueprint.put("/survivor-signals/<signal_id>/resolve")
+@require_role("department", "municipality")
+def resolve_survivor_signal(signal_id: str):
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    signal = svc.resolve_survivor_signal(
+        signal_id,
+        resolved_by=current_user.id,
+        note=body.get("note", ""),
+    )
+    return jsonify({"survivor_signal": signal})

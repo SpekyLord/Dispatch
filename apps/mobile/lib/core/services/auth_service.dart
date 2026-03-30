@@ -317,7 +317,10 @@ class AuthService {
     if (location != null) body['location'] = location;
     if (description != null) body['description'] = description;
     if (reportId != null) body['report_id'] = reportId;
-    final response = await _dio.post('/api/departments/assessments', data: body);
+    final response = await _dio.post(
+      '/api/departments/assessments',
+      data: body,
+    );
     return response.data as Map<String, dynamic>;
   }
 

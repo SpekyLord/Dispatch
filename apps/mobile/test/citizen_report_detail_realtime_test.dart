@@ -9,13 +9,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 class FakeRealtimeService extends RealtimeService {
   FakeRealtimeService()
-      : super(
-          config: const AppConfig(
-            apiBaseUrl: '',
-            supabaseAnonKey: '',
-            supabaseUrl: '',
-          ),
-        );
+    : super(
+        config: const AppConfig(
+          apiBaseUrl: '',
+          supabaseAnonKey: '',
+          supabaseUrl: '',
+        ),
+      );
 
   final Map<String, List<VoidCallback>> _listeners = {};
 
@@ -71,10 +71,7 @@ class FakeCitizenDetailAuthService extends AuthService {
 
   @override
   Future<Map<String, dynamic>> getReport(String reportId) async {
-    return {
-      'report': _report,
-      'status_history': _history,
-    };
+    return {'report': _report, 'status_history': _history};
   }
 
   void moveToResponding() {
@@ -91,38 +88,41 @@ class FakeCitizenDetailAuthService extends AuthService {
 }
 
 void main() {
-  testWidgets('citizen detail screen refreshes when realtime status changes arrive', (tester) async {
-    final auth = FakeCitizenDetailAuthService();
-    final realtime = FakeRealtimeService();
+  testWidgets(
+    'citizen detail screen refreshes when realtime status changes arrive',
+    (tester) async {
+      final auth = FakeCitizenDetailAuthService();
+      final realtime = FakeRealtimeService();
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authServiceProvider.overrideWithValue(auth),
-          realtimeServiceProvider.overrideWithValue(realtime),
-        ],
-        child: const MaterialApp(
-          home: CitizenReportDetailScreen(reportId: 'report-12345'),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authServiceProvider.overrideWithValue(auth),
+            realtimeServiceProvider.overrideWithValue(realtime),
+          ],
+          child: const MaterialApp(
+            home: CitizenReportDetailScreen(reportId: 'report-12345'),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Report received.'), findsOneWidget);
+      expect(find.text('Report received.'), findsOneWidget);
 
-    auth.moveToResponding();
-    realtime.emit(
-      'report_status_history',
-      eqColumn: 'report_id',
-      eqValue: 'report-12345',
-    );
+      auth.moveToResponding();
+      realtime.emit(
+        'report_status_history',
+        eqColumn: 'report_id',
+        eqValue: 'report-12345',
+      );
 
-    await tester.pump();
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Responders are now en route.'), findsOneWidget);
-    expect(find.text('RESPONDING'), findsWidgets);
-  });
+      expect(find.text('Responders are now en route.'), findsOneWidget);
+      expect(find.text('RESPONDING'), findsWidgets);
+    },
+  );
 }

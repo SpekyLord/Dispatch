@@ -487,3 +487,123 @@ class TestSyncAcks:
             assert len(data["acks"]) == 1
             assert data["acks"][0]["messageId"] == "ack-test"
             assert data["acks"][0]["synced"] is True
+
+
+class TestMeshSurvivorSignal:
+    def test_survivor_signal_ingested(self, settings):
+        fake = FakeSupabaseClient()
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="sar-1",
+            ptype="SURVIVOR_SIGNAL",
+            max_hops=15,
+            payload={
+                "detectionMethod": "BLE_PASSIVE",
+                "signalStrengthDbm": -68,
+                "estimatedDistanceMeters": 4.2,
+                "detectedDeviceIdentifier": "AA:BB:CC:DD:00:00",
+                "lastSeenTimestamp": "2026-03-31T00:00:00Z",
+                "nodeLocation": {"lat": 14.5, "lng": 121.0, "accuracyMeters": 8},
+                "confidence": 0.88,
+                "acousticPatternMatched": "none",
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            data = resp.get_json()
+            assert data["processed_count"] == 1
+            assert data["results"][0]["status"] == "processed"
+
+        survivor_inserts = [(t, d) for t, d in fake._inserts if t == "survivor_signals"]
+        assert len(survivor_inserts) == 1
+        assert survivor_inserts[0][1]["detection_method"] == "BLE_PASSIVE"
+
+    def test_survivor_signal_prioritized_over_reports(self, settings):
+        fake = FakeSupabaseClient()
+        app = make_app(settings, fake)
+        packets = [
+            _packet(msg_id="normal-incident", ptype="INCIDENT_REPORT"),
+            _packet(
+                msg_id="priority-sar",
+                ptype="SURVIVOR_SIGNAL",
+                max_hops=15,
+                payload={
+                    "detectionMethod": "SOS_BEACON",
+                    "signalStrengthDbm": -52,
+                    "estimatedDistanceMeters": 2.1,
+                    "detectedDeviceIdentifier": "AA:BB:CC:DD:00:00",
+                    "lastSeenTimestamp": "2026-03-31T00:00:00Z",
+                    "nodeLocation": {"lat": 14.5, "lng": 121.0, "accuracyMeters": 5},
+                    "confidence": 1.0,
+                    "acousticPatternMatched": "none",
+                },
+            ),
+        ]
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": packets})
+            data = resp.get_json()
+            assert data["results"][0]["messageId"] == "priority-sar"
+
+
+class TestSurvivorSignalRoutes:
+    def test_list_survivor_signals_filters_active_and_bbox(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="dept-1", email="dept@test.com", role="department"),
+            db_rows={
+                "survivor_signals": [
+                    {
+                        "id": "sig-1",
+                        "detection_method": "BLE_PASSIVE",
+                        "resolved": False,
+                        "node_location": {"lat": 14.5, "lng": 121.0},
+                        "last_seen_timestamp": "2026-03-31T00:10:00Z",
+                    },
+                    {
+                        "id": "sig-2",
+                        "detection_method": "WIFI_PROBE",
+                        "resolved": True,
+                        "node_location": {"lat": 9.0, "lng": 122.0},
+                        "last_seen_timestamp": "2026-03-31T00:10:00Z",
+                    },
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/survivor-signals?status=active&detection_method=BLE_PASSIVE&min_lat=14&max_lat=15&min_lng=120&max_lng=122",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["survivor_signals"][0]["id"] == "sig-1"
+
+    def test_resolve_survivor_signal(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="muni-1", email="admin@test.com", role="municipality"),
+            db_rows={
+                "survivor_signals": [
+                    {
+                        "id": "sig-3",
+                        "resolved": False,
+                        "resolution_note": "",
+                    }
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.put(
+                "/api/mesh/survivor-signals/sig-3/resolve",
+                headers={"Authorization": "Bearer valid-token"},
+                json={"note": "Located and handed off to responders."},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["survivor_signal"]["resolved"] is True
+
+        survivor_updates = [update for update in fake._updates if update[0] == "survivor_signals"]
+        assert len(survivor_updates) == 1
+        assert survivor_updates[0][1]["resolved"] is True
+        assert survivor_updates[0][1]["resolution_note"] == "Located and handed off to responders."

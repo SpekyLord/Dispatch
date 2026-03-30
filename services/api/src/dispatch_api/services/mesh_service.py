@@ -1,4 +1,4 @@
-"""Mesh gateway service — idempotent ingest, dedup, and sync."""
+"""Mesh gateway service - idempotent ingest, dedup, sync, and survivor signal workflows."""
 
 from __future__ import annotations
 
@@ -17,12 +17,14 @@ VALID_PAYLOAD_TYPES = {
     "INCIDENT_REPORT",
     "ANNOUNCEMENT",
     "DISTRESS",
+    "SURVIVOR_SIGNAL",
     "STATUS_UPDATE",
     "SYNC_ACK",
 }
 
 MAX_HOPS_DEFAULT = 7
 MAX_HOPS_DISTRESS = 15
+MAX_HOPS_SURVIVOR_SIGNAL = 15
 
 
 class MeshService:
@@ -56,6 +58,17 @@ class MeshService:
             "distress_signals", params=distress_params, use_service_role=True
         )
 
+        survivor_params: dict[str, str] = {
+            "select": "*",
+            "order": "created_at.desc",
+            "limit": "100",
+        }
+        if since:
+            survivor_params["created_at"] = f"gte.{since}"
+        survivor_signals = self.client.db_query(
+            "survivor_signals", params=survivor_params, use_service_role=True
+        )
+
         history_params: dict[str, str] = {
             "select": "*",
             "order": "created_at.desc",
@@ -70,9 +83,92 @@ class MeshService:
         return {
             "report_updates": reports,
             "distress_signals": distress,
+            "survivor_signals": survivor_signals,
             "status_history": history,
             "synced_at": datetime.now(tz=UTC).isoformat(),
         }
+
+    def list_survivor_signals(
+        self,
+        *,
+        status: str | None = None,
+        detection_method: str | None = None,
+        time_start: str | None = None,
+        time_end: str | None = None,
+        min_lat: float | None = None,
+        max_lat: float | None = None,
+        min_lng: float | None = None,
+        max_lng: float | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = self.client.db_query(
+            "survivor_signals",
+            params={"select": "*", "order": "created_at.desc", "limit": "200"},
+            use_service_role=True,
+        )
+
+        if status == "active":
+            rows = [row for row in rows if not row.get("resolved", False)]
+        elif status == "resolved":
+            rows = [row for row in rows if row.get("resolved", False)]
+
+        if detection_method:
+            rows = [
+                row
+                for row in rows
+                if (row.get("detection_method") or "").upper() == detection_method.upper()
+            ]
+
+        if time_start:
+            rows = [
+                row
+                for row in rows
+                if (row.get("last_seen_timestamp") or row.get("created_at") or "") >= time_start
+            ]
+        if time_end:
+            rows = [
+                row
+                for row in rows
+                if (row.get("last_seen_timestamp") or row.get("created_at") or "") <= time_end
+            ]
+
+        if None not in (min_lat, max_lat, min_lng, max_lng):
+            rows = [
+                row
+                for row in rows
+                if _location_in_bbox(
+                    row.get("node_location") or {}, min_lat, max_lat, min_lng, max_lng
+                )
+            ]
+
+        return rows
+
+    def resolve_survivor_signal(
+        self,
+        signal_id: str,
+        *,
+        resolved_by: str,
+        note: str,
+    ) -> dict[str, Any]:
+        existing = self.client.db_query(
+            "survivor_signals",
+            params={"select": "*", "id": f"eq.{signal_id}"},
+            use_service_role=True,
+        )
+        if not existing:
+            raise ApiError("Survivor signal not found.", code="not_found")
+
+        rows = self.client.db_update(
+            "survivor_signals",
+            data={
+                "resolved": True,
+                "resolved_by": resolved_by,
+                "resolved_at": datetime.now(tz=UTC).isoformat(),
+                "resolution_note": note.strip(),
+            },
+            params={"id": f"eq.{signal_id}"},
+            use_service_role=True,
+        )
+        return rows[0] if rows else existing[0]
 
     # -- process one mesh packet --
     def _process_single(self, pkt: dict[str, Any]) -> dict[str, Any]:
@@ -91,10 +187,12 @@ class MeshService:
         if hop_count > max_hops:
             return _error_result(message_id, "hop limit exceeded")
 
-        # dedup check
         existing = self.client.db_query(
             "mesh_messages",
-            params={"select": "id,processing_state", "message_id": f"eq.{message_id}"},
+            params={
+                "select": "id,processing_state,linked_record_id",
+                "message_id": f"eq.{message_id}",
+            },
             use_service_role=True,
         )
         if existing:
@@ -104,7 +202,6 @@ class MeshService:
                 "linkedRecordId": existing[0].get("linked_record_id"),
             }
 
-        # record dedup entry
         self.client.db_insert(
             "mesh_messages",
             data={
@@ -128,10 +225,16 @@ class MeshService:
                 linked_id = self._process_announcement(message_id, payload)
             elif payload_type == "DISTRESS":
                 linked_id = self._process_distress(message_id, origin_device, hop_count, payload)
+            elif payload_type == "SURVIVOR_SIGNAL":
+                linked_id = self._process_survivor_signal(
+                    message_id,
+                    origin_device,
+                    hop_count,
+                    payload,
+                )
             elif payload_type == "STATUS_UPDATE":
                 linked_id = self._process_status_update(payload)
 
-            # mark processed
             self.client.db_update(
                 "mesh_messages",
                 data={
@@ -212,7 +315,6 @@ class MeshService:
                 code="token_missing",
             )
 
-        # verify department is approved
         depts = self.client.db_query(
             "departments",
             params={"select": "id,verification_status,user_id", "id": f"eq.{dept_id}"},
@@ -220,7 +322,7 @@ class MeshService:
         )
         if not depts or depts[0].get("verification_status") != "approved":
             raise ApiError(
-                "Department not verified — announcement rejected.",
+                "Department not verified - announcement rejected.",
                 code="token_invalid",
             )
 
@@ -259,14 +361,13 @@ class MeshService:
         }
         rows = self.client.db_insert("distress_signals", data=row, use_service_role=True)
         if rows:
-            # notify municipality users
             self.client.db_insert(
                 "notifications",
                 data={
                     "user_id": "00000000-0000-0000-0000-000000000000",
                     "type": "new_report",
                     "title": "SOS Distress Signal",
-                    "message": (f"Distress signal via mesh from device {origin_device[:8]}..."),
+                    "message": f"Distress signal via mesh from device {origin_device[:8]}...",
                     "reference_id": rows[0]["id"],
                     "reference_type": "distress_signal",
                     "created_at": datetime.now(tz=UTC).isoformat(),
@@ -276,6 +377,40 @@ class MeshService:
             )
             return rows[0]["id"]
         return None
+
+    def _process_survivor_signal(
+        self,
+        message_id: str,
+        origin_device: str,
+        hop_count: int,
+        payload: dict[str, Any],
+    ) -> str | None:
+        detection_method = payload.get("detectionMethod")
+        if not detection_method:
+            raise ApiError(
+                "Survivor signal missing detectionMethod.",
+                code="validation_error",
+            )
+
+        row = {
+            "message_id": message_id,
+            "origin_device_id": origin_device,
+            "detection_method": detection_method,
+            "signal_strength_dbm": payload.get("signalStrengthDbm", -90),
+            "estimated_distance_meters": payload.get("estimatedDistanceMeters", 0),
+            "detected_device_identifier": payload.get("detectedDeviceIdentifier", "unknown"),
+            "last_seen_timestamp": payload.get(
+                "lastSeenTimestamp",
+                datetime.now(tz=UTC).isoformat(),
+            ),
+            "node_location": payload.get("nodeLocation", {}),
+            "confidence": payload.get("confidence", 0),
+            "acoustic_pattern_matched": payload.get("acousticPatternMatched", "none"),
+            "hop_count": hop_count,
+            "created_at": datetime.now(tz=UTC).isoformat(),
+        }
+        rows = self.client.db_insert("survivor_signals", data=row, use_service_role=True)
+        return rows[0]["id"] if rows else None
 
     # -- status update: last-write-wins by timestamp --
     def _process_status_update(self, payload: dict[str, Any]) -> str | None:
@@ -297,7 +432,6 @@ class MeshService:
         if not existing:
             raise ApiError("Report not found.", code="not_found")
 
-        # last-write-wins: skip if our timestamp is older
         current_updated = existing[0].get("updated_at", "")
         if timestamp < current_updated:
             return report_id
@@ -333,9 +467,24 @@ def _record_type_for(payload_type: str) -> str | None:
         "INCIDENT_REPORT": "incident_report",
         "ANNOUNCEMENT": "post",
         "DISTRESS": "distress_signal",
+        "SURVIVOR_SIGNAL": "survivor_signal",
         "STATUS_UPDATE": "incident_report",
         "SYNC_ACK": None,
     }.get(payload_type)
+
+
+def _location_in_bbox(
+    node_location: dict[str, Any],
+    min_lat: float,
+    max_lat: float,
+    min_lng: float,
+    max_lng: float,
+) -> bool:
+    lat = node_location.get("lat")
+    lng = node_location.get("lng")
+    if lat is None or lng is None:
+        return False
+    return min_lat <= float(lat) <= max_lat and min_lng <= float(lng) <= max_lng
 
 
 def _error_result(message_id: str, error: str) -> dict[str, Any]:

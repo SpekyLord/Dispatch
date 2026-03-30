@@ -9,13 +9,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 class FakeRealtimeService extends RealtimeService {
   FakeRealtimeService()
-      : super(
-          config: const AppConfig(
-            apiBaseUrl: '',
-            supabaseAnonKey: '',
-            supabaseUrl: '',
-          ),
-        );
+    : super(
+        config: const AppConfig(
+          apiBaseUrl: '',
+          supabaseAnonKey: '',
+          supabaseUrl: '',
+        ),
+      );
 
   final Map<String, List<VoidCallback>> _listeners = {};
 
@@ -67,7 +67,9 @@ class FakeNotificationsAuthService extends AuthService {
   Future<Map<String, dynamic>> getNotifications() async {
     return {
       'notifications': notifications,
-      'unread_count': notifications.where((notification) => notification['is_read'] != true).length,
+      'unread_count': notifications
+          .where((notification) => notification['is_read'] != true)
+          .length,
     };
   }
 
@@ -81,51 +83,54 @@ class FakeNotificationsAuthService extends AuthService {
 }
 
 void main() {
-  testWidgets('notifications can be marked read and refreshed by realtime events', (tester) async {
-    final auth = FakeNotificationsAuthService();
-    final realtime = FakeRealtimeService();
+  testWidgets(
+    'notifications can be marked read and refreshed by realtime events',
+    (tester) async {
+      final auth = FakeNotificationsAuthService();
+      final realtime = FakeRealtimeService();
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authServiceProvider.overrideWithValue(auth),
-          realtimeServiceProvider.overrideWithValue(realtime),
-        ],
-        child: const MaterialApp(home: NotificationsScreen()),
-      ),
-    );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authServiceProvider.overrideWithValue(auth),
+            realtimeServiceProvider.overrideWithValue(realtime),
+          ],
+          child: const MaterialApp(home: NotificationsScreen()),
+        ),
+      );
 
-    await tester.pump();
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Responder assigned'), findsOneWidget);
-    expect(find.text('Mark all read'), findsOneWidget);
+      expect(find.text('Responder assigned'), findsOneWidget);
+      expect(find.text('Mark all read'), findsOneWidget);
 
-    await tester.tap(find.text('Mark all read'));
-    await tester.pump();
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Mark all read'));
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(auth.markAllCalls, 1);
-    expect(find.text('Mark all read'), findsNothing);
+      expect(auth.markAllCalls, 1);
+      expect(find.text('Mark all read'), findsNothing);
 
-    auth.notifications = [
-      ...auth.notifications,
-      {
-        'id': 'notif-2',
-        'type': 'announcement',
-        'title': 'Flood advisory',
-        'message': 'Water levels are rising near the river.',
-        'is_read': false,
-        'created_at': '2026-03-29T05:20:00Z',
-      },
-    ];
+      auth.notifications = [
+        ...auth.notifications,
+        {
+          'id': 'notif-2',
+          'type': 'announcement',
+          'title': 'Flood advisory',
+          'message': 'Water levels are rising near the river.',
+          'is_read': false,
+          'created_at': '2026-03-29T05:20:00Z',
+        },
+      ];
 
-    realtime.emit('notifications');
+      realtime.emit('notifications');
 
-    await tester.pump();
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Flood advisory'), findsOneWidget);
-    expect(find.text('Mark all read'), findsOneWidget);
-  });
+      expect(find.text('Flood advisory'), findsOneWidget);
+      expect(find.text('Mark all read'), findsOneWidget);
+    },
+  );
 }

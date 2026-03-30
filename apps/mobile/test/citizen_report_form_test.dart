@@ -77,7 +77,9 @@ void main() {
     expect(find.text('Please select a category.'), findsOneWidget);
   });
 
-  testWidgets('shows error when submitting without description', (tester) async {
+  testWidgets('shows error when submitting without description', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(400, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());

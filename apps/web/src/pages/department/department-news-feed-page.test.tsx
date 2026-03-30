@@ -9,7 +9,12 @@ describe("DepartmentNewsFeedPage", () => {
   beforeEach(() => {
     localStorage.clear();
     useSessionStore.setState({
-      user: { id: "dept-1", email: "department@test.com", role: "department", full_name: "Department User" },
+      user: {
+        id: "dept-1",
+        email: "department@test.com",
+        role: "department",
+        full_name: "Department User",
+      },
       accessToken: "department-token",
       refreshToken: null,
       department: null,
@@ -23,9 +28,11 @@ describe("DepartmentNewsFeedPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Department publishing")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create Post" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Department posting prompt")).toBeInTheDocument();
+    expect(screen.getByText("Department composer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Post" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /anything urgent to share/i }),
+    ).toBeInTheDocument();
   });
 
   it("opens the create post modal from the feed", () => {
@@ -35,9 +42,13 @@ describe("DepartmentNewsFeedPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Create Post" }));
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
 
     expect(screen.getByText("Department Command Desk")).toBeInTheDocument();
-    expect(screen.getByText(/create a public announcement without leaving the feed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /create a public announcement without leaving the feed/i,
+      ),
+    ).toBeInTheDocument();
   });
 });

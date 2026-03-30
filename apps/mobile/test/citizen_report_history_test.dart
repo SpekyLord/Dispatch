@@ -16,12 +16,8 @@ class FakeAuthService extends AuthService {
 void main() {
   Widget buildTestWidget() {
     return ProviderScope(
-      overrides: [
-        authServiceProvider.overrideWithValue(FakeAuthService()),
-      ],
-      child: const MaterialApp(
-        home: CitizenHomeScreen(),
-      ),
+      overrides: [authServiceProvider.overrideWithValue(FakeAuthService())],
+      child: const MaterialApp(home: CitizenHomeScreen()),
     );
   }
 

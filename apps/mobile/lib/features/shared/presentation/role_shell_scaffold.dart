@@ -22,10 +22,7 @@ class RoleShellScaffold extends StatelessWidget {
       appBar: AppBar(
         title: Text(title),
         actions: [
-          TextButton(
-            onPressed: onSignOut,
-            child: const Text('Sign out'),
-          ),
+          TextButton(onPressed: onSignOut, child: const Text('Sign out')),
         ],
       ),
       body: SafeArea(
@@ -35,10 +32,10 @@ class RoleShellScaffold extends StatelessWidget {
             Text(
               kicker,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFFE05A2B),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
+                color: const Color(0xFFE05A2B),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
             ),
             const SizedBox(height: 12),
             body,

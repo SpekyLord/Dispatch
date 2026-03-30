@@ -1,18 +1,22 @@
-// Mesh status panel — shows current role, peer count, estimated reach,
-// queue size, and last sync time.
+// Mesh status panel - shows current role, peer count, estimated reach,
+// queue size, last sync time, and SAR mode controls for responders.
 
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
+import 'package:dispatch_mobile/core/state/mesh_providers.dart';
+import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MeshStatusScreen extends StatefulWidget {
+class MeshStatusScreen extends ConsumerStatefulWidget {
   const MeshStatusScreen({super.key});
 
   @override
-  State<MeshStatusScreen> createState() => _MeshStatusScreenState();
+  ConsumerState<MeshStatusScreen> createState() => _MeshStatusScreenState();
 }
 
-class _MeshStatusScreenState extends State<MeshStatusScreen> {
-  final _transport = MeshTransportService();
+class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
   bool _initialized = false;
 
   @override
@@ -22,13 +26,23 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
   }
 
   Future<void> _init() async {
-    await _transport.initialize();
-    if (mounted) setState(() => _initialized = true);
+    final transport = ref.read(meshTransportProvider);
+    await transport.initialize();
+    ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+    if (mounted) {
+      setState(() => _initialized = true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final transport = ref.read(meshTransportProvider);
+    final sarState = ref.watch(sarModeControllerProvider);
+    final session = ref.watch(sessionControllerProvider);
+    final canEnableSarMode =
+        session.role == AppRole.department &&
+        session.department?.verificationStatus == 'approved';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mesh Network')),
@@ -36,23 +50,23 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () async {
-                _transport.pruneStaleePeers();
+                transport.pruneStalePeers();
+                ref
+                    .read(sarModeControllerProvider.notifier)
+                    .refreshSubsystemStatus();
                 setState(() {});
               },
               child: ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
-                  // role indicator
-                  _buildRoleCard(theme),
+                  _buildRoleCard(theme, transport),
                   const SizedBox(height: 16),
-
-                  // stats grid
                   Row(
                     children: [
                       Expanded(
                         child: _StatCard(
                           icon: Icons.people_outline,
-                          value: '${_transport.peerCount}',
+                          value: '${transport.peerCount}',
                           label: 'Peers',
                           color: Colors.blue,
                         ),
@@ -61,7 +75,7 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                       Expanded(
                         child: _StatCard(
                           icon: Icons.outbox,
-                          value: '${_transport.queueSize}',
+                          value: '${transport.queueSize}',
                           label: 'Queue',
                           color: Colors.orange,
                         ),
@@ -70,7 +84,7 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                       Expanded(
                         child: _StatCard(
                           icon: Icons.cell_tower,
-                          value: '~${_transport.estimatedReach}',
+                          value: '~${transport.estimatedReach}',
                           label: 'Reach',
                           color: Colors.green,
                         ),
@@ -78,8 +92,6 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // last sync
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -102,8 +114,8 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                               ),
                             ),
                             Text(
-                              _transport.lastSyncTime != null
-                                  ? _formatTime(_transport.lastSyncTime!)
+                              transport.lastSyncTime != null
+                                  ? _formatTime(transport.lastSyncTime!)
                                   : 'Never',
                               style: const TextStyle(fontSize: 14),
                             ),
@@ -113,35 +125,44 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // discovery toggle
+                  _SarModeCard(
+                    canEnableSarMode: canEnableSarMode,
+                    sarState: sarState,
+                    isSosBeaconBroadcasting: transport.isSosBeaconBroadcasting,
+                    onToggle: (value) {
+                      ref
+                          .read(sarModeControllerProvider.notifier)
+                          .setSarModeEnabled(value);
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   Card(
                     child: ListTile(
                       leading: Icon(
-                        _transport.isDiscovering
+                        transport.isDiscovering
                             ? Icons.bluetooth_searching
                             : Icons.bluetooth,
-                        color: _transport.isDiscovering
+                        color: transport.isDiscovering
                             ? Colors.blue
                             : Colors.grey,
                       ),
                       title: Text(
-                        _transport.isDiscovering
+                        transport.isDiscovering
                             ? 'Discovering...'
                             : 'Start Discovery',
                       ),
                       subtitle: Text(
-                        _transport.isDiscovering
+                        transport.isDiscovering
                             ? 'Scanning for nearby mesh devices'
                             : 'Tap to find nearby devices',
                       ),
                       trailing: Switch(
-                        value: _transport.isDiscovering,
-                        onChanged: (v) async {
-                          if (v) {
-                            await _transport.startDiscovery();
+                        value: transport.isDiscovering,
+                        onChanged: (value) async {
+                          if (value) {
+                            await transport.startDiscovery();
                           } else {
-                            await _transport.stopDiscovery();
+                            await transport.stopDiscovery();
                           }
                           setState(() {});
                         },
@@ -149,9 +170,7 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // peer list
-                  if (_transport.peers.isNotEmpty) ...[
+                  if (transport.peers.isNotEmpty) ...[
                     Text(
                       'Nearby Peers',
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -159,7 +178,7 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ..._transport.peers.map(
+                    ...transport.peers.map(
                       (peer) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -207,18 +226,18 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
     );
   }
 
-  Widget _buildRoleCard(ThemeData theme) {
-    final roleLabel = switch (_transport.role) {
+  Widget _buildRoleCard(ThemeData theme, MeshTransportService transport) {
+    final roleLabel = switch (transport.role) {
       MeshNodeRole.origin => 'Origin',
       MeshNodeRole.relay => 'Relay',
       MeshNodeRole.gateway => 'Gateway',
     };
-    final roleIcon = switch (_transport.role) {
+    final roleIcon = switch (transport.role) {
       MeshNodeRole.origin => Icons.phone_android,
       MeshNodeRole.relay => Icons.swap_horiz,
       MeshNodeRole.gateway => Icons.cloud_upload,
     };
-    final roleColor = switch (_transport.role) {
+    final roleColor = switch (transport.role) {
       MeshNodeRole.origin => Colors.blue,
       MeshNodeRole.relay => Colors.orange,
       MeshNodeRole.gateway => Colors.green,
@@ -268,11 +287,164 @@ class _MeshStatusScreenState extends State<MeshStatusScreen> {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
+  String _formatTime(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
     if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     return '${diff.inHours}h ago';
+  }
+}
+
+class _SarModeCard extends StatelessWidget {
+  const _SarModeCard({
+    required this.canEnableSarMode,
+    required this.sarState,
+    required this.isSosBeaconBroadcasting,
+    required this.onToggle,
+  });
+
+  final bool canEnableSarMode;
+  final SarModeState sarState;
+  final bool isSosBeaconBroadcasting;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeSignals = sarState.activeSignals;
+    final subsystemActive = {
+      ...sarState.subsystemActive,
+      SarDetectionMethod.sosBeacon: isSosBeaconBroadcasting,
+    };
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: sarState.isEnabled,
+              onChanged: canEnableSarMode ? onToggle : null,
+              title: const Text('SAR Mode'),
+              subtitle: Text(
+                canEnableSarMode
+                    ? 'Enable passive survivor detection and the local SAR feed.'
+                    : 'Only verified department responders can enable SAR Mode.',
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: subsystemActive.entries.map((entry) {
+                final label = switch (entry.key) {
+                  SarDetectionMethod.wifiProbe => 'Wi-Fi Probe',
+                  SarDetectionMethod.blePassive => 'BLE Passive',
+                  SarDetectionMethod.acoustic => 'Acoustic',
+                  SarDetectionMethod.sosBeacon => 'SOS Beacon',
+                };
+                return Chip(
+                  avatar: Icon(
+                    entry.value
+                        ? Icons.check_circle
+                        : Icons.pause_circle_outline,
+                    size: 16,
+                    color: entry.value
+                        ? Colors.green.shade700
+                        : Colors.grey.shade600,
+                  ),
+                  label: Text(label),
+                );
+              }).toList(),
+            ),
+            if (sarState.isEnabled) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Text(
+                  'Passive sensing is active. Device identifiers are anonymized before storage, raw audio never leaves the device, and continuous scanning will increase battery use.',
+                  style: TextStyle(color: Colors.amber.shade900, fontSize: 12),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Text(
+              'SAR Detection Feed',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            if (activeSignals.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'No survivor signals yet. Nearby BLE, Wi-Fi probe, acoustic, and SOS beacon detections will appear here once received.',
+                ),
+              )
+            else
+              ...activeSignals.map(
+                (signal) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  color: signal.detectionMethod == SarDetectionMethod.sosBeacon
+                      ? Colors.red.shade50
+                      : null,
+                  child: ListTile(
+                    leading: Icon(
+                      switch (signal.detectionMethod) {
+                        SarDetectionMethod.wifiProbe => Icons.wifi_tethering,
+                        SarDetectionMethod.blePassive =>
+                          Icons.bluetooth_searching,
+                        SarDetectionMethod.acoustic => Icons.graphic_eq,
+                        SarDetectionMethod.sosBeacon => Icons.sos,
+                      },
+                      color:
+                          signal.detectionMethod == SarDetectionMethod.sosBeacon
+                          ? Colors.red.shade700
+                          : Colors.blueGrey.shade700,
+                    ),
+                    title: Text(
+                      '${signal.detectionMethod.wireValue.replaceAll('_', ' ')} • ${signal.estimatedDistanceMeters.toStringAsFixed(1)} m',
+                    ),
+                    subtitle: Text(
+                      'Confidence ${(signal.confidence * 100).round()}% • ${signal.detectedDeviceIdentifier} • ${signal.isRelayed ? 'relayed ${signal.hopCount}/${signal.maxHops}' : 'local'}',
+                    ),
+                    trailing: Text(
+                      _formatLastSeen(signal.lastSeenTimestamp),
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatLastSeen(DateTime dateTime) {
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inSeconds < 60) {
+      return '${diff.inSeconds}s';
+    }
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m';
+    }
+    return '${diff.inHours}h';
   }
 }
 

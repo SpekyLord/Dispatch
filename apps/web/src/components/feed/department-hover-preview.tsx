@@ -67,6 +67,14 @@ export function DepartmentHoverPreview({
   const [isVisible, setIsVisible] = useState(false);
   const hoverTimeoutRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        window.clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (!department) {
     return <div className={className}>{children}</div>;
   }
@@ -99,14 +107,6 @@ export function DepartmentHoverPreview({
     }
     setIsVisible(false);
   }
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        window.clearTimeout(hoverTimeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div

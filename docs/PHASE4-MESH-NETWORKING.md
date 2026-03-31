@@ -1,4 +1,4 @@
-# Phase 4 — Mobile Mesh Networking & Offline-First Sync
+# Phase 4 - Mobile Mesh Networking & Offline-First Sync
 
 ## Overview
 
@@ -114,7 +114,7 @@ Mesh networking requires:
 - Token is refreshed on every successful online session
 - If expired or missing, the device cannot originate `ANNOUNCEMENT` packets
 - The server validates by checking the department's `verification_status` is `approved`
-- Expired token → announcement creation blocked on device; if somehow relayed, server rejects it
+- Expired token -> announcement creation blocked on device; if somehow relayed, server rejects it
 
 ## SOS Distress Signal
 
@@ -166,3 +166,13 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 3. The packet is enqueued at the same priority as `DISTRESS` and relayed through the existing mesh pipeline.
 4. A gateway uploads the packet through `POST /api/mesh/ingest`, which records the dedup trace in `mesh_messages` and persists the detection in `survivor_signals`.
 5. Municipality and department responders can review active detections through `GET /api/mesh/survivor-signals` and mark them resolved through `PUT /api/mesh/survivor-signals/:id/resolve` without deleting the audit record.
+
+## Compass Navigation Extension (4-EXT.2)
+
+- Survivor Compass is launched from the mobile SAR feed after a responder pins a target signal.
+- Distance and bearing are computed from the rescuer's current GPS fix to the signal's `nodeLocation`.
+- Android heading uses accelerometer + magnetometer fusion over the `dispatch_mobile/compass_heading` event channel; iOS uses the platform heading API over the same channel.
+- Direct detections are treated as the tightest lock. Multi-hop relay signals surface hop count and a wider confidence band so responders treat them as search corridors rather than precise points.
+- The minimap shows the rescuer position, estimated target point, and nearby mesh peers. Peer dots are rendered as a relative proximity ring until peer GPS coordinates are included in mesh sync uploads.
+- When the rescuer closes to roughly 3 meters, the UI switches to a pulse animation and haptic cue to support a short-range sweep.
+- Resolve actions call the existing survivor-signal resolve API when the device is online. If the request fails, the current mobile implementation keeps a local retry queue; it does not yet emit a dedicated mesh-relayed resolve packet.

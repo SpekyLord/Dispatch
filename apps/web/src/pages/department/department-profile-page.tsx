@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -101,16 +101,19 @@ export function DepartmentProfilePage() {
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const headerPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
-  async function loadDepartmentProfile(currentUserId: string) {
-    const [departmentResponse, postsResponse] = await Promise.all([
-      apiRequest<{ department: DepartmentInfo }>("/api/departments/profile"),
-      apiRequest<{ posts: DepartmentProfilePost[] }>(`/api/feed?uploader=${currentUserId}`),
-    ]);
-    setDepartmentState(departmentResponse.department);
-    setDepartment(departmentResponse.department);
-    setPosts(postsResponse.posts);
-    return departmentResponse.department;
-  }
+  const loadDepartmentProfile = useCallback(
+    async (currentUserId: string) => {
+      const [departmentResponse, postsResponse] = await Promise.all([
+        apiRequest<{ department: DepartmentInfo }>("/api/departments/profile"),
+        apiRequest<{ posts: DepartmentProfilePost[] }>(`/api/feed?uploader=${currentUserId}`),
+      ]);
+      setDepartmentState(departmentResponse.department);
+      setDepartment(departmentResponse.department);
+      setPosts(postsResponse.posts);
+      return departmentResponse.department;
+    },
+    [setDepartment],
+  );
 
   useEffect(() => {
     if (!user) {
@@ -124,7 +127,7 @@ export function DepartmentProfilePage() {
         setPosts([]);
       })
       .finally(() => setLoading(false));
-  }, [setDepartment, user]);
+  }, [loadDepartmentProfile, user]);
 
   const displayName = department?.name || user?.full_name || "Department Profile";
   const handle = user?.email?.split("@")[0] ?? "dept_command";
@@ -163,6 +166,10 @@ export function DepartmentProfilePage() {
   }, [headerPhotoFile]);
 
   function openEditProfile() {
+    if (!department) {
+      setProfileError("Department profile is still loading.");
+      return;
+    }
     setProfileDraft(createProfileDraft(department));
     setProfilePhotoFile(null);
     setHeaderPhotoFile(null);
@@ -361,7 +368,7 @@ export function DepartmentProfilePage() {
 
                 <p className="mt-5 text-lg text-on-surface-variant">
                   <span className="font-semibold text-on-surface">{postCount}</span> published post{postCount === 1 ? "" : "s"}
-                  <span className="mx-2 text-outline">•</span>
+                  <span className="mx-2 text-outline">â€¢</span>
                   <span className="font-semibold capitalize text-on-surface">{department.verification_status}</span> status
                 </p>
 

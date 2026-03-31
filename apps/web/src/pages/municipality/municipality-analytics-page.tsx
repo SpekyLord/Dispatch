@@ -36,8 +36,11 @@ export function MunicipalityAnalyticsPage() {
       .finally(() => setLoading(false));
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAnalytics(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => {
+      fetchAnalytics();
+    });
+  }, []);
 
   if (loading) {
     return (

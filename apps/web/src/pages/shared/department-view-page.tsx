@@ -61,24 +61,57 @@ export function DepartmentViewPage() {
 
   useEffect(() => {
     if (!uploaderId) {
-      setLoading(false);
       return;
     }
+
+    let isActive = true;
+    Promise.resolve().then(() => {
+      if (!isActive) {
+        return;
+      }
+      setLoading(true);
+      setDepartment(null);
+      setPosts([]);
+    });
 
     Promise.all([
       apiRequest<{ department: DepartmentInfo }>(`/api/departments/view/${uploaderId}`),
       apiRequest<{ posts: DepartmentProfilePost[] }>(`/api/feed?uploader=${uploaderId}`),
     ])
       .then(([departmentResponse, postsResponse]) => {
+        if (!isActive) {
+          return;
+        }
         setDepartment(departmentResponse.department);
         setPosts(postsResponse.posts);
       })
       .catch(() => {
+        if (!isActive) {
+          return;
+        }
         setDepartment(null);
         setPosts([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isActive) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, [uploaderId]);
+
+  if (!uploaderId) {
+    return (
+      <AppShell subtitle="Publisher profile" title="Department">
+        <Card className="py-16 text-center text-on-surface-variant">
+          This department profile is not available right now.
+        </Card>
+      </AppShell>
+    );
+  }
 
   if (loading) {
     return (

@@ -86,6 +86,9 @@ class SurvivorSignalEvent {
     this.hopCount = 0,
     this.maxHops = 15,
     this.isResolved = false,
+    this.serverSignalId,
+    this.isResolutionQueued = false,
+    this.resolutionNote,
   });
 
   final String messageId;
@@ -100,6 +103,9 @@ class SurvivorSignalEvent {
   final int hopCount;
   final int maxHops;
   final bool isResolved;
+  final String? serverSignalId;
+  final bool isResolutionQueued;
+  final String? resolutionNote;
 
   bool get isRelayed => hopCount > 0;
 
@@ -114,6 +120,44 @@ class SurvivorSignalEvent {
       'confidence': confidence,
       'acousticPatternMatched': acousticPatternMatched.wireValue,
     };
+  }
+
+  SurvivorSignalEvent copyWith({
+    SarDetectionMethod? detectionMethod,
+    int? signalStrengthDbm,
+    double? estimatedDistanceMeters,
+    String? detectedDeviceIdentifier,
+    DateTime? lastSeenTimestamp,
+    SarNodeLocation? nodeLocation,
+    double? confidence,
+    AcousticPatternMatched? acousticPatternMatched,
+    int? hopCount,
+    int? maxHops,
+    bool? isResolved,
+    String? serverSignalId,
+    bool? isResolutionQueued,
+    String? resolutionNote,
+  }) {
+    return SurvivorSignalEvent(
+      messageId: messageId,
+      detectionMethod: detectionMethod ?? this.detectionMethod,
+      signalStrengthDbm: signalStrengthDbm ?? this.signalStrengthDbm,
+      estimatedDistanceMeters:
+          estimatedDistanceMeters ?? this.estimatedDistanceMeters,
+      detectedDeviceIdentifier:
+          detectedDeviceIdentifier ?? this.detectedDeviceIdentifier,
+      lastSeenTimestamp: lastSeenTimestamp ?? this.lastSeenTimestamp,
+      nodeLocation: nodeLocation ?? this.nodeLocation,
+      confidence: confidence ?? this.confidence,
+      acousticPatternMatched:
+          acousticPatternMatched ?? this.acousticPatternMatched,
+      hopCount: hopCount ?? this.hopCount,
+      maxHops: maxHops ?? this.maxHops,
+      isResolved: isResolved ?? this.isResolved,
+      serverSignalId: serverSignalId ?? this.serverSignalId,
+      isResolutionQueued: isResolutionQueued ?? this.isResolutionQueued,
+      resolutionNote: resolutionNote ?? this.resolutionNote,
+    );
   }
 
   factory SurvivorSignalEvent.fromPacket(MeshPacket packet) {
@@ -142,6 +186,66 @@ class SurvivorSignalEvent {
       ),
       hopCount: packet.hopCount,
       maxHops: packet.maxHops,
+    );
+  }
+
+  factory SurvivorSignalEvent.fromServerJson(Map<String, dynamic> json) {
+    final messageId =
+        json['message_id'] as String? ?? json['messageId'] as String? ?? '';
+    return SurvivorSignalEvent(
+      messageId: messageId,
+      detectionMethod: _detectionMethodFromWire(
+        (json['detection_method'] as String?) ??
+            (json['detectionMethod'] as String?) ??
+            'BLE_PASSIVE',
+      ),
+      signalStrengthDbm:
+          (json['signal_strength_dbm'] as num?)?.toInt() ??
+          (json['signalStrengthDbm'] as num?)?.toInt() ??
+          -90,
+      estimatedDistanceMeters:
+          (json['estimated_distance_meters'] as num?)?.toDouble() ??
+          (json['estimatedDistanceMeters'] as num?)?.toDouble() ??
+          0,
+      detectedDeviceIdentifier:
+          json['detected_device_identifier'] as String? ??
+          json['detectedDeviceIdentifier'] as String? ??
+          'unknown',
+      lastSeenTimestamp:
+          DateTime.tryParse(
+            json['last_seen_timestamp'] as String? ??
+                json['lastSeenTimestamp'] as String? ??
+                json['created_at'] as String? ??
+                DateTime.now().toUtc().toIso8601String(),
+          ) ??
+          DateTime.now().toUtc(),
+      nodeLocation: SarNodeLocation.fromJson(
+        json['node_location'] as Map<String, dynamic>? ??
+            json['nodeLocation'] as Map<String, dynamic>? ??
+            {},
+      ),
+      confidence:
+          (json['confidence'] as num?)?.toDouble() ??
+          (json['confidence_score'] as num?)?.toDouble() ??
+          0,
+      acousticPatternMatched: _acousticPatternFromWire(
+        json['acoustic_pattern_matched'] as String? ??
+            json['acousticPatternMatched'] as String? ??
+            'none',
+      ),
+      hopCount:
+          (json['hop_count'] as num?)?.toInt() ??
+          (json['hopCount'] as num?)?.toInt() ??
+          0,
+      maxHops:
+          (json['max_hops'] as num?)?.toInt() ??
+          (json['maxHops'] as num?)?.toInt() ??
+          15,
+      isResolved: json['resolved'] == true || json['is_resolved'] == true,
+      serverSignalId: json['id'] as String?,
+      resolutionNote:
+          json['resolution_note'] as String? ??
+          json['resolutionNote'] as String?,
     );
   }
 }
@@ -187,21 +291,45 @@ class SarModeState {
       SarDetectionMethod.acoustic: false,
       SarDetectionMethod.sosBeacon: false,
     },
+    this.activeTargetMessageId,
   });
 
   final bool isEnabled;
   final List<SurvivorSignalEvent> activeSignals;
   final Map<SarDetectionMethod, bool> subsystemActive;
+  final String? activeTargetMessageId;
+
+  SurvivorSignalEvent? get activeTarget {
+    final targetId = activeTargetMessageId;
+    if (targetId != null) {
+      for (final signal in activeSignals) {
+        if (signal.messageId == targetId) {
+          return signal;
+        }
+      }
+    }
+    for (final signal in activeSignals) {
+      if (!signal.isResolved) {
+        return signal;
+      }
+    }
+    return activeSignals.isEmpty ? null : activeSignals.first;
+  }
 
   SarModeState copyWith({
     bool? isEnabled,
     List<SurvivorSignalEvent>? activeSignals,
     Map<SarDetectionMethod, bool>? subsystemActive,
+    String? activeTargetMessageId,
+    bool clearActiveTarget = false,
   }) {
     return SarModeState(
       isEnabled: isEnabled ?? this.isEnabled,
       activeSignals: activeSignals ?? this.activeSignals,
       subsystemActive: subsystemActive ?? this.subsystemActive,
+      activeTargetMessageId: clearActiveTarget
+          ? null
+          : activeTargetMessageId ?? this.activeTargetMessageId,
     );
   }
 }
@@ -231,6 +359,78 @@ class SarModeController extends StateNotifier<SarModeState> {
         SarDetectionMethod.acoustic: enabled,
         SarDetectionMethod.sosBeacon: _transport.isSosBeaconBroadcasting,
       },
+      activeTargetMessageId: enabled ? state.activeTargetMessageId : null,
+      clearActiveTarget: !enabled,
+    );
+  }
+
+  void pinTarget(String messageId) {
+    for (final signal in state.activeSignals) {
+      if (signal.messageId == messageId) {
+        state = state.copyWith(activeTargetMessageId: messageId);
+        return;
+      }
+    }
+  }
+
+  void ingestServerSignals(Iterable<Map<String, dynamic>> rows) {
+    final mergedById = <String, SurvivorSignalEvent>{
+      for (final signal in state.activeSignals) signal.messageId: signal,
+    };
+
+    for (final row in rows) {
+      final event = SurvivorSignalEvent.fromServerJson(row);
+      if (event.messageId.isEmpty) {
+        continue;
+      }
+      final existing = mergedById[event.messageId];
+      mergedById[event.messageId] = existing == null
+          ? event
+          : _mergeSignal(existing, event);
+    }
+
+    final nextSignals = _sortSignals(
+      mergedById.values.toList(),
+    ).take(25).toList();
+    state = state.copyWith(
+      activeSignals: nextSignals,
+      activeTargetMessageId: _nextTargetId(
+        nextSignals,
+        state.activeTargetMessageId,
+      ),
+    );
+  }
+
+  void markSignalResolved(
+    String messageId, {
+    String? serverSignalId,
+    String? note,
+    bool queued = false,
+  }) {
+    final nextSignals = _sortSignals(
+      state.activeSignals
+          .map(
+            (signal) => signal.messageId == messageId
+                ? signal.copyWith(
+                    isResolved: true,
+                    serverSignalId: serverSignalId,
+                    isResolutionQueued: queued,
+                    resolutionNote: note,
+                  )
+                : signal,
+          )
+          .toList(),
+    );
+
+    state = state.copyWith(
+      activeSignals: nextSignals,
+      activeTargetMessageId: _nextTargetId(
+        nextSignals,
+        state.activeTargetMessageId == messageId
+            ? null
+            : state.activeTargetMessageId,
+      ),
+      clearActiveTarget: state.activeTargetMessageId == messageId,
     );
   }
 
@@ -388,26 +588,80 @@ class SarModeController extends StateNotifier<SarModeState> {
   }
 
   void _upsertSignal(SurvivorSignalEvent event) {
-    final nextSignals =
-        [
-          for (final existing in state.activeSignals)
-            if (existing.messageId != event.messageId) existing,
-          event,
-        ]..sort((a, b) {
-          final distanceCompare = a.estimatedDistanceMeters.compareTo(
-            b.estimatedDistanceMeters,
-          );
-          if (distanceCompare != 0) {
-            return distanceCompare;
-          }
-          final confidenceCompare = b.confidence.compareTo(a.confidence);
-          if (confidenceCompare != 0) {
-            return confidenceCompare;
-          }
-          return b.lastSeenTimestamp.compareTo(a.lastSeenTimestamp);
-        });
+    final byId = <String, SurvivorSignalEvent>{
+      for (final existing in state.activeSignals) existing.messageId: existing,
+    };
+    final existing = byId[event.messageId];
+    byId[event.messageId] = existing == null
+        ? event
+        : _mergeSignal(existing, event);
 
-    state = state.copyWith(activeSignals: nextSignals.take(25).toList());
+    final nextSignals = _sortSignals(byId.values.toList()).take(25).toList();
+    state = state.copyWith(
+      activeSignals: nextSignals,
+      activeTargetMessageId: _nextTargetId(
+        nextSignals,
+        state.activeTargetMessageId,
+      ),
+    );
+  }
+
+  SurvivorSignalEvent _mergeSignal(
+    SurvivorSignalEvent current,
+    SurvivorSignalEvent incoming,
+  ) {
+    final freshest =
+        incoming.lastSeenTimestamp.isAfter(current.lastSeenTimestamp)
+        ? incoming
+        : current;
+    final fallback = identical(freshest, incoming) ? current : incoming;
+
+    return freshest.copyWith(
+      isResolved: freshest.isResolved || fallback.isResolved,
+      serverSignalId: freshest.serverSignalId ?? fallback.serverSignalId,
+      isResolutionQueued:
+          freshest.isResolutionQueued || fallback.isResolutionQueued,
+      resolutionNote: freshest.resolutionNote ?? fallback.resolutionNote,
+    );
+  }
+
+  List<SurvivorSignalEvent> _sortSignals(List<SurvivorSignalEvent> signals) {
+    signals.sort((a, b) {
+      if (a.isResolved != b.isResolved) {
+        return a.isResolved ? 1 : -1;
+      }
+      final distanceCompare = a.estimatedDistanceMeters.compareTo(
+        b.estimatedDistanceMeters,
+      );
+      if (distanceCompare != 0) {
+        return distanceCompare;
+      }
+      final confidenceCompare = b.confidence.compareTo(a.confidence);
+      if (confidenceCompare != 0) {
+        return confidenceCompare;
+      }
+      return b.lastSeenTimestamp.compareTo(a.lastSeenTimestamp);
+    });
+    return signals;
+  }
+
+  String? _nextTargetId(
+    List<SurvivorSignalEvent> signals,
+    String? preferredId,
+  ) {
+    if (preferredId != null) {
+      for (final signal in signals) {
+        if (signal.messageId == preferredId && !signal.isResolved) {
+          return preferredId;
+        }
+      }
+    }
+    for (final signal in signals) {
+      if (!signal.isResolved) {
+        return signal.messageId;
+      }
+    }
+    return signals.isEmpty ? null : signals.first.messageId;
   }
 
   void _handlePacket(MeshPacket packet) {

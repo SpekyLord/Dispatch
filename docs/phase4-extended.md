@@ -1,4 +1,4 @@
-# Phase 4 Extended — Survivor Detection, SAR Navigation, and Mesh-Integrated Communications
+# Phase 4 Extended - Survivor Detection, SAR Navigation, and Mesh-Integrated Communications
 
 > **Scope note:** This document is a supplemental phase task for Phase 4 only.
 > It does not replace `docs/phasetask.md`. It extends Phase 4 with additional
@@ -13,7 +13,7 @@
 
 ---
 
-## 4-EXT.1 — Passive Survivor Detection (SAR Mode)
+## 4-EXT.1 - Passive Survivor Detection (SAR Mode)
 
 **Objective**
 
@@ -46,36 +46,36 @@ packet is treated as equal-priority to `DISTRESS`. It uses `maxHops = 15`.
 }
 ```
 
-### Build Checklist — 4-EXT.1
+### Build Checklist - 4-EXT.1
 
 #### Database / Supabase
 
-- [ ] Add a `survivor_signals` table with columns: `id`, `message_id` (FK to
+- [x] Add a `survivor_signals` table with columns: `id`, `message_id` (FK to
   `mesh_messages`), `detection_method`, `signal_strength_dbm`,
   `estimated_distance_meters`, `detected_device_identifier`,
   `last_seen_timestamp`, `node_location` (PostGIS point or JSON lat/lng),
   `confidence`, `acoustic_pattern_matched`, `created_at`, `resolved_at`,
   `resolved_by`.
-- [ ] Add a `resolved` boolean and `resolved_by` FK so rescue teams can mark a
+- [x] Add a `resolved` boolean and `resolved_by` FK so rescue teams can mark a
   signal as located or false-positive without deleting the audit record.
-- [ ] Ensure delayed upload path (offline → gateway → server) is supported for
+- [x] Ensure delayed upload path (offline -> gateway -> server) is supported for
   `SURVIVOR_SIGNAL` packets via the existing mesh ingest flow.
 
 #### Flask API
 
-- [ ] Extend `POST /api/mesh/ingest` to handle `SURVIVOR_SIGNAL` payloadType
+- [x] Extend `POST /api/mesh/ingest` to handle `SURVIVOR_SIGNAL` payloadType
   with the same idempotency contract already defined for `DISTRESS`.
-- [ ] Add `GET /api/mesh/survivor-signals` (municipality and department roles
+- [x] Add `GET /api/mesh/survivor-signals` (municipality and department roles
   only) with filters: `status` (`active`, `resolved`), `detection_method`,
   bounding box, time range.
-- [ ] Add `PUT /api/mesh/survivor-signals/:id/resolve` so verified responders
+- [x] Add `PUT /api/mesh/survivor-signals/:id/resolve` so verified responders
   can mark a signal resolved with a free-text note.
-- [ ] Fast-path ingest for `SURVIVOR_SIGNAL` matching the existing `DISTRESS`
+- [x] Fast-path ingest for `SURVIVOR_SIGNAL` matching the existing `DISTRESS`
   fast-path so gateway delay is minimal.
 
 #### Mobile App
 
-- [ ] Add a SAR Mode toggle in the mesh status panel. SAR Mode enables the
+- [x] Add a SAR Mode toggle in the mesh status panel. SAR Mode enables the
   passive sensing subsystems below. Default: off. Requires department or
   designated rescuer role to enable.
 - [ ] **Wi-Fi probe sniffing:** Use platform Wi-Fi scan APIs to passively
@@ -94,76 +94,83 @@ packet is treated as equal-priority to `DISTRESS`. It uses `maxHops = 15`.
   windows to run a lightweight on-device classifier. Classify samples as
   `tapping`, `voice`, `anomalous_sound`, or `none`. Trigger a
   `SURVIVOR_SIGNAL` packet only on positive classification. Classification must
-  run entirely on-device — do not send raw audio over the mesh or to the
+  run entirely on-device - do not send raw audio over the mesh or to the
   backend.
 - [ ] **SOS beacon broadcast:** Any logged-in or anonymous user who triggers
   the no-login SOS action (already in core Phase 4) also begins broadcasting a
   detectable BLE advertisement with a standardized service UUID so nearby SAR
   nodes can pick it up passively.
-- [ ] Deduplicate survivor signals from the same estimated source within a
+- [x] Deduplicate survivor signals from the same estimated source within a
   60-second window per sensing method before generating a new packet.
-- [ ] Show a SAR detection feed in the department mobile view listing active
+- [x] Show a SAR detection feed in the department mobile view listing active
   `SURVIVOR_SIGNAL` events received locally, sorted by estimated proximity and
   confidence.
 
 #### Realtime / Offline Transport
 
-- [ ] Give `SURVIVOR_SIGNAL` the same relay priority as `DISTRESS` in the mesh
+- [x] Give `SURVIVOR_SIGNAL` the same relay priority as `DISTRESS` in the mesh
   queue.
-- [ ] Apply the existing seen-message deduplication log to `SURVIVOR_SIGNAL`
+- [x] Apply the existing seen-message deduplication log to `SURVIVOR_SIGNAL`
   packets to prevent re-relay storms.
 
 #### Tests
 
 - [ ] Unit tests for Wi-Fi probe parser, BLE scan RSSI extractor, and acoustic
   sample classifier mock.
-- [ ] Unit tests for `SURVIVOR_SIGNAL` serialization, deduplication window, and
+- [x] Unit tests for `SURVIVOR_SIGNAL` serialization, deduplication window, and
   packet priority ordering.
-- [ ] API tests for `SURVIVOR_SIGNAL` ingest idempotency and resolve endpoint.
+- [x] API tests for `SURVIVOR_SIGNAL` ingest idempotency and resolve endpoint.
 - [ ] Manual SAR field-test step: enable SAR Mode on two devices, place one in
   airplane mode with BLE on, confirm the SAR device appears in the detection
   feed on the other.
 
 #### Docs
 
-- [ ] Document SAR Mode permissions, battery impact, privacy implications of
+- [x] Document SAR Mode permissions, battery impact, privacy implications of
   passive scanning, and how anonymized device identifiers are generated and
   stored.
-- [ ] Document on-device acoustic model constraints (size limit, update path).
-- [ ] Document `SURVIVOR_SIGNAL` packet lifecycle from detection to server
+- [x] Document on-device acoustic model constraints (size limit, update path).
+- [x] Document `SURVIVOR_SIGNAL` packet lifecycle from detection to server
   persistence to manual resolve.
+
+### Status Note - 4-EXT.1
+
+- Date: `2026-03-31`
+- Completed: server persistence for `SURVIVOR_SIGNAL`, responder review/resolve API routes, mesh-priority relay + dedup, SAR Mode toggle, and the department-side mobile SAR feed are implemented and covered by API/mobile tests.
+- Remaining: live Wi-Fi probe sniffing, live BLE passive scan intake, microphone-backed acoustic sampling, and actual BLE SOS beacon broadcast/reception are still helper- or stub-level hooks rather than platform-integrated passive sensing subsystems.
+
 
 ---
 
-## 4-EXT.2 — Compass Navigation for Survivor Locating (Mobile)
+## 4-EXT.2 - Compass Navigation for Survivor Locating (Mobile)
 
 **Objective**
 
 Give rescue personnel an AirTag-style compass view on mobile that points toward
 the nearest high-confidence survivor signal using the device's location and
-bearing sensors. No new backend API is required for core compass function — the
+bearing sensors. No new backend API is required for core compass function - the
 signal data flows from the existing mesh and survivor-signal feed.
 
-### Build Checklist — 4-EXT.2
+### Build Checklist - 4-EXT.2
 
 #### Mobile App
 
-- [ ] Add a **Survivor Compass** screen accessible from the SAR detection feed
+- [x] Add a **Survivor Compass** screen accessible from the SAR detection feed
   (department role, SAR Mode enabled).
-- [ ] Fuse device GPS coordinates with the `nodeLocation` field of the nearest
+- [x] Fuse device GPS coordinates with the `nodeLocation` field of the nearest
   active `SURVIVOR_SIGNAL` to compute bearing and approximate distance.
-- [ ] Use the device magnetometer and accelerometer to render a real-time
+- [x] Use the device magnetometer and accelerometer to render a real-time
   directional arrow that rotates as the rescuer turns, pointing toward the
   target signal. The arrow should show the cardinal direction label and distance
   estimate.
-- [ ] If the target signal comes from a mesh relay rather than a direct
+- [x] If the target signal comes from a mesh relay rather than a direct
   detection, display a confidence band and the number of hops the signal
   traveled.
-- [ ] Allow the rescuer to pin a target signal (from the feed list) as the
+- [x] Allow the rescuer to pin a target signal (from the feed list) as the
   active compass target. Only one target may be active at a time.
-- [ ] Show a minimap inset that displays the rescuer's current position, the
+- [x] Show a minimap inset that displays the rescuer's current position, the
   estimated target position, and any nearby mesh peer nodes.
-- [ ] When the estimated distance to target drops below 3 meters, switch the
+- [x] When the estimated distance to target drops below 3 meters, switch the
   compass view to a proximity pulse animation and play a haptic pattern.
 - [ ] Mark a survivor signal as located directly from the compass screen,
   triggering `PUT /api/mesh/survivor-signals/:id/resolve` when connectivity is
@@ -171,19 +178,26 @@ signal data flows from the existing mesh and survivor-signal feed.
 
 #### Tests
 
-- [ ] Widget test for bearing calculation given mock GPS + target coordinates.
-- [ ] Widget test for compass rotation using a mock magnetometer stream.
-- [ ] Widget test for proximity pulse threshold trigger at < 3 m.
+- [x] Widget test for bearing calculation given mock GPS + target coordinates.
+- [x] Widget test for compass rotation using a mock magnetometer stream.
+- [x] Widget test for proximity pulse threshold trigger at < 3 m.
 
 #### Docs
 
-- [ ] Document compass accuracy limitations, sensor fusion approach, and the
+- [x] Document compass accuracy limitations, sensor fusion approach, and the
   expected error envelope when signal originates from a multi-hop relay vs.
   direct detection.
 
+### Status Note - 4-EXT.2
+
+- Date: `2026-03-31`
+- Completed: the mobile SAR feed now opens a Survivor Compass screen with live heading input, GPS-to-signal bearing math, hop/confidence guidance, target pinning, a minimap inset, and a proximity pulse/haptic state under 3 meters.
+- Remaining: offline resolve actions currently queue a local retry for the HTTP resolve call. They are not yet serialized into a dedicated mesh-relayed resolve packet, so the final checklist item for offline mesh resolve remains open.
+- Constraint: nearby mesh peer markers on the minimap are rendered as a relative proximity ring until peer GPS coordinates are added to mesh sync payloads.
+
 ---
 
-## 4-EXT.3 — Interactive Mesh Map (Web Dashboard)
+## 4-EXT.3 - Interactive Mesh Map (Web Dashboard)
 
 **Objective**
 
@@ -191,7 +205,7 @@ Expose mesh topology and survivor signal activity on the web dashboard's
 interactive Leaflet map so municipality operators and incident commanders can
 see the disaster zone in real time.
 
-### Build Checklist — 4-EXT.3
+### Build Checklist - 4-EXT.3
 
 #### Flask API
 
@@ -239,7 +253,7 @@ see the disaster zone in real time.
 
 ---
 
-## 4-EXT.4 — Mesh-Routed Communications
+## 4-EXT.4 - Mesh-Routed Communications
 
 **Objective**
 
@@ -250,9 +264,9 @@ citizens and responders in a full connectivity blackout.
 
 **New canonical `payloadType` values**
 
-- `MESH_MESSAGE` — a direct or group text message between app users, relayed
+- `MESH_MESSAGE` - a direct or group text message between app users, relayed
   over mesh.
-- `MESH_POST` — a department-authored announcement post that propagates over
+- `MESH_POST` - a department-authored announcement post that propagates over
   mesh rather than waiting for online sync (treated as `ANNOUNCEMENT` type at
   the gateway but carries richer threading metadata offline).
 
@@ -284,7 +298,7 @@ citizens and responders in a full connectivity blackout.
 }
 ```
 
-### Build Checklist — 4-EXT.4
+### Build Checklist - 4-EXT.4
 
 #### Database / Supabase
 
@@ -292,7 +306,7 @@ citizens and responders in a full connectivity blackout.
   packets: `id`, `thread_id`, `message_id` (FK mesh dedup), `recipient_scope`,
   `recipient_identifier`, `body`, `author_display_name`, `author_role`,
   `created_at`.
-- [ ] Reuse the existing `posts` table for server-side `MESH_POST` ingestion —
+- [ ] Reuse the existing `posts` table for server-side `MESH_POST` ingestion -
   the gateway ingest should create a normal `post` record with a
   `mesh_originated = true` flag.
 - [ ] Add a `mesh_originated` boolean column to the `posts` table defaulting to
@@ -363,7 +377,7 @@ citizens and responders in a full connectivity blackout.
 
 ---
 
-## 4-EXT.5 — Survivor Trail (Last-Known-Location History)
+## 4-EXT.5 - Survivor Trail (Last-Known-Location History)
 
 **Objective**
 
@@ -386,7 +400,7 @@ range.
 }
 ```
 
-### Build Checklist — 4-EXT.5
+### Build Checklist - 4-EXT.5
 
 #### Database / Supabase
 
@@ -477,7 +491,7 @@ range.
   at both origination (mobile) and gateway ingest (API).
 - [ ] A `LOCATION_BEACON` trail persists on the web map for a device that has
   gone offline, showing last-seen timestamp and location.
-- [ ] All new ingest paths are idempotent — re-uploading the same `messageId`
+- [ ] All new ingest paths are idempotent - re-uploading the same `messageId`
   does not create duplicate server records.
 - [ ] Existing Phase 4 core verification checklist items (from
   `docs/phasetask.md`) still pass after extension work is merged.

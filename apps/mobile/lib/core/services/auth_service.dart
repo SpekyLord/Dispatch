@@ -296,6 +296,35 @@ class AuthService {
     await _dio.put('/api/notifications/read-all');
   }
 
+  // --- Mesh survivor signals (Phase 4 extension) ---
+
+  Future<List<Map<String, dynamic>>> getSurvivorSignals({
+    String? status,
+    String? detectionMethod,
+  }) async {
+    final params = <String, dynamic>{};
+    if (status != null) params['status'] = status;
+    if (detectionMethod != null) params['detection_method'] = detectionMethod;
+    final response = await _dio.get(
+      '/api/mesh/survivor-signals',
+      queryParameters: params,
+    );
+    return (response.data['survivor_signals'] as List)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> resolveSurvivorSignal(
+    String signalId, {
+    String note = '',
+  }) async {
+    final response = await _dio.put(
+      '/api/mesh/survivor-signals/$signalId/resolve',
+      data: {'note': note},
+    );
+    return (response.data as Map<String, dynamic>)['survivor_signal']
+        as Map<String, dynamic>;
+  }
+
   // --- Damage assessments (Phase 3) ---
 
   // Submit a new damage assessment for this department

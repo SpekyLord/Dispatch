@@ -1,4 +1,4 @@
-// Municipality mesh overview — distress signals, mesh sync status, recent mesh-origin packets.
+// Municipality mesh overview â€” distress signals, mesh sync status, recent mesh-origin packets.
 
 import { useEffect, useState } from "react";
 
@@ -49,13 +49,16 @@ export function MunicipalityMeshPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => {
+      fetchData();
+    });
+  }, []);
 
   // live updates on distress signals
   useEffect(() => {
     const sub = subscribeToTable("distress_signals", () => fetchData(), { accessToken });
     return () => sub.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   const unresolvedCount = distress.filter((d) => !d.is_resolved).length;
@@ -77,7 +80,7 @@ export function MunicipalityMeshPage() {
         <Card className="text-center">
           <span className="material-symbols-outlined text-3xl text-green-600 mb-2 block">sync</span>
           <p className="text-sm font-medium text-on-surface mt-2">
-            {lastSync ? new Date(lastSync).toLocaleString() : "—"}
+            {lastSync ? new Date(lastSync).toLocaleString() : "-"}
           </p>
           <p className="text-xs text-on-surface-variant uppercase tracking-widest mt-1">Last Sync</p>
         </Card>

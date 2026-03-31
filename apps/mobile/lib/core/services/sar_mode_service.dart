@@ -50,6 +50,34 @@ AcousticPatternMatched _acousticPatternFromWire(String value) {
   };
 }
 
+bool _isSurvivorResolutionPayload(Map<String, dynamic> payload) {
+  final targetType =
+      (payload['targetType'] as String?) ?? (payload['target_type'] as String?);
+  return (targetType ?? '').toUpperCase() == 'SURVIVOR_SIGNAL';
+}
+
+String? _survivorMessageIdFromStatusUpdate(Map<String, dynamic> payload) {
+  final value =
+      (payload['survivorMessageId'] as String?) ??
+      (payload['survivor_message_id'] as String?) ??
+      (payload['message_id'] as String?);
+  return (value == null || value.isEmpty) ? null : value;
+}
+
+String? _survivorSignalIdFromStatusUpdate(Map<String, dynamic> payload) {
+  final value =
+      (payload['signalId'] as String?) ?? (payload['signal_id'] as String?);
+  return (value == null || value.isEmpty) ? null : value;
+}
+
+String? _resolutionNoteFromStatusUpdate(Map<String, dynamic> payload) {
+  final value =
+      (payload['resolutionNote'] as String?) ??
+      (payload['resolution_note'] as String?) ??
+      (payload['note'] as String?);
+  return (value == null || value.isEmpty) ? null : value;
+}
+
 const Map<SarDetectionMethod, bool> _defaultSubsystemActive = {
   SarDetectionMethod.wifiProbe: false,
   SarDetectionMethod.blePassive: false,
@@ -475,6 +503,28 @@ class SarModeController extends StateNotifier<SarModeState> {
     );
   }
 
+  void queueSurvivorResolution({
+    required SurvivorSignalEvent signal,
+    String note = '',
+    String? resolvedByUserId,
+  }) {
+    _transport.enqueuePacket(
+      MeshTransportService.createSurvivorResolvePacket(
+        deviceId: _transport.sosBeaconDeviceId ?? 'local-device',
+        survivorMessageId: signal.messageId,
+        signalId: signal.serverSignalId,
+        note: note,
+        resolvedByUserId: resolvedByUserId,
+      ),
+    );
+    markSignalResolved(
+      signal.messageId,
+      serverSignalId: signal.serverSignalId,
+      note: note,
+      queued: true,
+    );
+  }
+
   SurvivorSignalEvent? registerWifiProbe({
     required String rawDeviceIdentifier,
     required int signalStrengthDbm,
@@ -679,12 +729,20 @@ class SarModeController extends StateNotifier<SarModeState> {
         ? incoming
         : current;
     final fallback = identical(freshest, incoming) ? current : incoming;
+    final hasServerResolvedCopy =
+        ((current.isResolved &&
+            current.serverSignalId != null &&
+            !current.isResolutionQueued) ||
+        (incoming.isResolved &&
+            incoming.serverSignalId != null &&
+            !incoming.isResolutionQueued));
 
     return freshest.copyWith(
       isResolved: freshest.isResolved || fallback.isResolved,
       serverSignalId: freshest.serverSignalId ?? fallback.serverSignalId,
-      isResolutionQueued:
-          freshest.isResolutionQueued || fallback.isResolutionQueued,
+      isResolutionQueued: hasServerResolvedCopy
+          ? false
+          : freshest.isResolutionQueued || fallback.isResolutionQueued,
       resolutionNote: freshest.resolutionNote ?? fallback.resolutionNote,
     );
   }
@@ -729,12 +787,32 @@ class SarModeController extends StateNotifier<SarModeState> {
   }
 
   void _handlePacket(MeshPacket packet) {
-    if (packet.payloadType != MeshPayloadType.survivorSignal) {
+    if (packet.payloadType == MeshPayloadType.survivorSignal) {
+      final event = SurvivorSignalEvent.fromPacket(packet);
+      _remember(event);
+      _upsertSignal(event);
       return;
     }
-    final event = SurvivorSignalEvent.fromPacket(packet);
-    _remember(event);
-    _upsertSignal(event);
+    if (packet.payloadType != MeshPayloadType.statusUpdate) {
+      return;
+    }
+
+    final payload = packet.payload;
+    if (!_isSurvivorResolutionPayload(payload)) {
+      return;
+    }
+
+    final survivorMessageId = _survivorMessageIdFromStatusUpdate(payload);
+    if (survivorMessageId == null) {
+      return;
+    }
+
+    markSignalResolved(
+      survivorMessageId,
+      serverSignalId: _survivorSignalIdFromStatusUpdate(payload),
+      note: _resolutionNoteFromStatusUpdate(payload),
+      queued: false,
+    );
   }
 
   Future<void> _handlePlatformEvent(SarPlatformEvent event) async {

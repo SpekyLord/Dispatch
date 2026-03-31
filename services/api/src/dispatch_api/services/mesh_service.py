@@ -315,7 +315,7 @@ class MeshService:
                 data={
                     "processing_state": "processed",
                     "linked_record_id": linked_id,
-                    "linked_record_type": _record_type_for(payload_type),
+                    "linked_record_type": _record_type_for(payload_type, payload),
                     "processed_at": datetime.now(tz=UTC).isoformat(),
                 },
                 params={"message_id": f"eq.{message_id}"},
@@ -489,6 +489,14 @@ class MeshService:
 
     # -- status update: last-write-wins by timestamp --
     def _process_status_update(self, payload: dict[str, Any]) -> str | None:
+        target_type = str(
+            payload.get("targetType")
+            or payload.get("target_type")
+            or "INCIDENT_REPORT"
+        ).upper()
+        if target_type == "SURVIVOR_SIGNAL":
+            return self._process_survivor_signal_status_update(payload)
+
         report_id = payload.get("report_id")
         new_status = payload.get("new_status")
         if not report_id or not new_status:
@@ -529,6 +537,68 @@ class MeshService:
         )
         return report_id
 
+    def _process_survivor_signal_status_update(
+        self,
+        payload: dict[str, Any],
+    ) -> str | None:
+        signal_id = payload.get("signalId") or payload.get("signal_id")
+        survivor_message_id = (
+            payload.get("survivorMessageId")
+            or payload.get("survivor_message_id")
+            or payload.get("message_id")
+        )
+        if not signal_id and not survivor_message_id:
+            raise ApiError(
+                "Survivor resolve update requires signal_id or survivor_message_id.",
+                code="validation_error",
+            )
+
+        timestamp = payload.get("timestamp", datetime.now(tz=UTC).isoformat())
+        note = str(
+            payload.get("resolutionNote")
+            or payload.get("resolution_note")
+            or payload.get("note")
+            or ""
+        ).strip()
+        resolved_by = payload.get("resolvedByUserId") or payload.get(
+            "resolved_by_user_id"
+        )
+
+        query_params = {"select": "*"}
+        if signal_id:
+            query_params["id"] = f"eq.{signal_id}"
+        else:
+            query_params["message_id"] = f"eq.{survivor_message_id}"
+
+        existing = self.client.db_query(
+            "survivor_signals",
+            params=query_params,
+            use_service_role=True,
+        )
+        if not existing:
+            raise ApiError("Survivor signal not found.", code="not_found")
+
+        current = existing[0]
+        current_resolved_at = current.get("resolved_at") or ""
+        if current_resolved_at and timestamp < current_resolved_at:
+            return current.get("id")
+
+        update_data: dict[str, Any] = {
+            "resolved": True,
+            "resolved_at": timestamp,
+            "resolution_note": note,
+        }
+        if resolved_by:
+            update_data["resolved_by"] = resolved_by
+
+        self.client.db_update(
+            "survivor_signals",
+            data=update_data,
+            params={"id": f"eq.{current['id']}"},
+            use_service_role=True,
+        )
+        return current.get("id")
+
     @staticmethod
     def verify_signature(payload: dict, signature: str, device_key: str) -> bool:
         """Verify HMAC-SHA256 signature of a mesh packet payload."""
@@ -537,13 +607,23 @@ class MeshService:
         return hmac.compare_digest(expected, signature)
 
 
-def _record_type_for(payload_type: str) -> str | None:
+def _record_type_for(
+    payload_type: str,
+    payload: dict[str, Any] | None = None,
+) -> str | None:
+    if payload_type == "STATUS_UPDATE":
+        target_type = str(
+            (payload or {}).get("targetType")
+            or (payload or {}).get("target_type")
+            or "INCIDENT_REPORT"
+        ).upper()
+        return "survivor_signal" if target_type == "SURVIVOR_SIGNAL" else "incident_report"
+
     return {
         "INCIDENT_REPORT": "incident_report",
         "ANNOUNCEMENT": "post",
         "DISTRESS": "distress_signal",
         "SURVIVOR_SIGNAL": "survivor_signal",
-        "STATUS_UPDATE": "incident_report",
         "SYNC_ACK": None,
     }.get(payload_type)
 

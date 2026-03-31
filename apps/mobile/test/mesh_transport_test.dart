@@ -242,4 +242,23 @@ void main() {
       expect(pkt.payload['department_id'], 'dept-1');
     });
   });
+
+  group('Survivor resolve packet factory', () {
+    test('builds a status update packet for survivor resolve relay', () {
+      final pkt = MeshTransportService.createSurvivorResolvePacket(
+        deviceId: 'dept-device',
+        survivorMessageId: 'sar-msg-1',
+        signalId: 'sig-1',
+        note: 'Located near the riverbank.',
+        resolvedByUserId: 'dept-user-1',
+      );
+
+      expect(pkt.payloadType, MeshPayloadType.statusUpdate);
+      expect(pkt.maxHops, 15);
+      expect(pkt.payload['targetType'], 'SURVIVOR_SIGNAL');
+      expect(pkt.payload['survivorMessageId'], 'sar-msg-1');
+      expect(pkt.payload['signalId'], 'sig-1');
+      expect(pkt.payload['resolvedByUserId'], 'dept-user-1');
+    });
+  });
 }

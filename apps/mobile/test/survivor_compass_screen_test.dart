@@ -6,20 +6,27 @@ import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
+import 'package:dispatch_mobile/core/services/session_storage.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class FakeCompassAuthService extends AuthService {
-  FakeCompassAuthService() : super();
+  FakeCompassAuthService({this.throwOnFetch = false}) : super();
+
+  final bool throwOnFetch;
 
   @override
   Future<List<Map<String, dynamic>>> getSurvivorSignals({
     String? status,
     String? detectionMethod,
   }) async {
+    if (throwOnFetch) {
+      throw Exception('offline');
+    }
     return const [];
   }
 
@@ -58,16 +65,24 @@ class FakeLocationService extends LocationService {
   }
 }
 
+class CompassHarness {
+  CompassHarness({required this.transport, required this.controller});
+
+  final MeshTransportService transport;
+  final SarModeController controller;
+}
+
 void main() {
-  Future<void> pumpCompass(
+  Future<CompassHarness> pumpCompass(
     WidgetTester tester, {
     required LocationData rescuerLocation,
     required double headingDegrees,
     required SarNodeLocation targetLocation,
+    AuthService? authService,
   }) async {
     final transport = MeshTransportService();
     final controller = SarModeController(transport: transport);
-    controller.setSarModeEnabled(true);
+    await controller.setSarModeEnabled(true);
     final signal = controller.registerSosBeacon(
       beaconIdentifier: 'AA:BB:CC:DD:EE:FF',
       signalStrengthDbm: -52,
@@ -83,7 +98,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authServiceProvider.overrideWithValue(FakeCompassAuthService()),
+          authServiceProvider.overrideWithValue(
+            authService ?? FakeCompassAuthService(),
+          ),
           meshTransportProvider.overrideWithValue(transport),
           sarModeControllerProvider.overrideWith((ref) => controller),
           locationServiceProvider.overrideWithValue(
@@ -100,6 +117,9 @@ void main() {
               ),
             ),
           ),
+          sessionControllerProvider.overrideWith(
+            (ref) => _FakeSessionController(),
+          ),
         ],
         child: const MaterialApp(
           home: SurvivorCompassScreen(showMiniMap: false),
@@ -110,6 +130,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
     await tester.pump(const Duration(milliseconds: 150));
+    return CompassHarness(transport: transport, controller: controller);
   }
 
   testWidgets('shows the target bearing for mock GPS coordinates', (
@@ -160,4 +181,74 @@ void main() {
 
     expect(find.text('Proximity pulse active'), findsOneWidget);
   });
+
+  testWidgets('queues a survivor resolve packet for mesh relay when offline', (
+    tester,
+  ) async {
+    final harness = await pumpCompass(
+      tester,
+      rescuerLocation: const LocationData(latitude: 14.5, longitude: 121.0),
+      headingDegrees: 0,
+      targetLocation: const SarNodeLocation(
+        lat: 14.5004,
+        lng: 121.0,
+        accuracyMeters: 5,
+      ),
+      authService: FakeCompassAuthService(throwOnFetch: true),
+    );
+
+    await tester.scrollUntilVisible(find.text('Mark located'), 160);
+    final noteField = find.byType(TextField);
+    expect(noteField, findsOneWidget);
+    await tester.enterText(noteField, 'Located near the collapsed stairwell.');
+    await tester.tap(find.text('Mark located'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Resolve queued for mesh'), findsWidgets);
+
+    final queuedPackets = harness.transport.drainQueue();
+    final resolvePacket = queuedPackets.firstWhere(
+      (packet) => packet.payloadType == MeshPayloadType.statusUpdate,
+    );
+    expect(resolvePacket.payload['targetType'], 'SURVIVOR_SIGNAL');
+    expect(
+      resolvePacket.payload['survivorMessageId'],
+      harness.controller.state.activeSignals.first.messageId,
+    );
+    expect(
+      resolvePacket.payload['resolutionNote'],
+      'Located near the collapsed stairwell.',
+    );
+  });
+}
+
+class _FakeSessionController extends SessionController {
+  _FakeSessionController()
+    : super(
+        _NoopSessionStorage(
+          const SessionState(
+            accessToken: 'token',
+            userId: 'dept-user-1',
+            role: AppRole.department,
+            fullName: 'Responder One',
+          ),
+        ),
+        AuthService(),
+      );
+}
+
+class _NoopSessionStorage extends SessionStorage {
+  _NoopSessionStorage(this._state);
+
+  final SessionState _state;
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<SessionState> load() async => _state;
+
+  @override
+  Future<void> save(SessionState state) async {}
 }

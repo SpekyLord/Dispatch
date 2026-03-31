@@ -7,10 +7,10 @@ void main() {
     late MeshTransportService transport;
     late SarModeController controller;
 
-    setUp(() {
+    setUp(() async {
       transport = MeshTransportService();
       controller = SarModeController(transport: transport);
-      controller.setSarModeEnabled(true);
+      await controller.setSarModeEnabled(true);
     });
 
     tearDown(() {
@@ -112,5 +112,65 @@ void main() {
         SarDetectionMethod.sosBeacon,
       );
     });
+
+    test(
+      'queues survivor resolve packets and applies relayed resolve updates',
+      () async {
+        final location = const SarNodeLocation(
+          lat: 14.5,
+          lng: 121.0,
+          accuracyMeters: 5,
+        );
+        final signal = controller.registerSosBeacon(
+          beaconIdentifier: 'AA:BB:CC:DD:EE:FF',
+          signalStrengthDbm: -54,
+          nodeLocation: location,
+          observedAt: DateTime.parse('2026-03-31T00:00:00Z'),
+        );
+
+        expect(signal, isNotNull);
+        controller.queueSurvivorResolution(
+          signal: signal!,
+          note: 'Located near the collapsed stairwell.',
+          resolvedByUserId: 'dept-user-1',
+        );
+
+        final queuedSignal = controller.state.activeSignals.single;
+        expect(queuedSignal.isResolved, isTrue);
+        expect(queuedSignal.isResolutionQueued, isTrue);
+
+        final drained = transport.drainQueue();
+        final survivorPacket = drained.firstWhere(
+          (packet) => packet.payloadType == MeshPayloadType.survivorSignal,
+        );
+        final resolvePacket = drained.firstWhere(
+          (packet) => packet.payloadType == MeshPayloadType.statusUpdate,
+        );
+        expect(resolvePacket.maxHops, 15);
+        expect(resolvePacket.payload['targetType'], 'SURVIVOR_SIGNAL');
+        expect(resolvePacket.payload['survivorMessageId'], signal.messageId);
+
+        final peerTransport = MeshTransportService();
+        final peerController = SarModeController(transport: peerTransport);
+        await peerController.setSarModeEnabled(true);
+        addTearDown(() {
+          peerController.dispose();
+          peerTransport.dispose();
+        });
+
+        peerTransport.receivePacket(survivorPacket);
+        await Future<void>.delayed(Duration.zero);
+        peerTransport.receivePacket(resolvePacket);
+        await Future<void>.delayed(Duration.zero);
+
+        final relayedSignal = peerController.state.activeSignals.single;
+        expect(relayedSignal.isResolved, isTrue);
+        expect(relayedSignal.isResolutionQueued, isFalse);
+        expect(
+          relayedSignal.resolutionNote,
+          'Located near the collapsed stairwell.',
+        );
+      },
+    );
   });
 }

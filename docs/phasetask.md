@@ -793,9 +793,9 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Blockers: manual field-test verification requires physical Android/iOS devices with BLE and cannot be automated in CI.
 - Carryover: manual device-to-device field-test steps for no-internet report relay, announcement relay, and distress propagation.
 - Date: `2026-03-31`
-- Completed: verified and documented the Phase 4 extension baseline already present for survivor signals (`SURVIVOR_SIGNAL` schema/API/mobile feed/priority/dedup); fixed the web package so lint and production build pass again; added the mobile Survivor Compass flow with live heading input, GPS bearing/distance guidance, target pinning, hop/confidence messaging, minimap inset, proximity pulse+haptics, and widget coverage for bearing/turn/pulse states; implemented the municipality Mesh & SAR dashboard with gateway-topology snapshot persistence, `GET /api/mesh/topology`, GeoJSON-ready survivor signal coordinates, report/node/responder overlays, resolved-signal fade rules, 30-second topology polling, and web/API test coverage.
-- Deviations: Android passive BLE/acoustic/SOS-beacon capture is now platform-integrated, but passive Wi-Fi probe sniffing remains blocked by standard mobile app sandboxes, and offline survivor resolve still queues a local retry instead of emitting a dedicated mesh-relayed resolve packet.
-- Carryover: Wi-Fi probe capture, manual dual-device SAR field testing, mesh-relayed survivor resolve packets, and the remaining 4-EXT.4/4-EXT.5 work stay open in `docs/phase4-extended.md`.
+- Completed: verified and documented the Phase 4 extension baseline already present for survivor signals (`SURVIVOR_SIGNAL` schema/API/mobile feed/priority/dedup); fixed the web package so lint and production build pass again; added the mobile Survivor Compass flow with live heading input, GPS bearing/distance guidance, target pinning, hop/confidence messaging, minimap inset, proximity pulse+haptics, direct resolve actions with online HTTP sync plus offline mesh-relay fallback, and widget coverage for bearing/turn/pulse/resolve states; implemented the municipality Mesh & SAR dashboard with gateway-topology snapshot persistence, `GET /api/mesh/topology`, GeoJSON-ready survivor signal coordinates, report/node/responder overlays, resolved-signal fade rules, 30-second topology polling, and web/API test coverage.
+- Deviations: Android passive BLE/acoustic/SOS-beacon capture is now platform-integrated, but passive Wi-Fi probe sniffing remains blocked by standard mobile app sandboxes, so the SAR panel keeps Wi-Fi probe detection visible as an unavailable subsystem rather than shipping a misleading pseudo-implementation.
+- Carryover: Wi-Fi probe capture, manual dual-device SAR field testing, and the remaining 4-EXT.4/4-EXT.5 work stay open in `docs/phase4-extended.md`.
 
 ### Exit Criteria
 
@@ -905,8 +905,3 @@ Add non-MVP improvements only after the MVP phases are stable and verified.
 
 - Stretch work is additive, optional, and does not compromise the MVP emergency coordination workflow.
 - Every added feature has a clear operational reason and verification coverage.
-
-
-
-
-

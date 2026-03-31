@@ -759,3 +759,47 @@ class TestMeshTopologyRoutes:
 
 
 
+
+class TestMeshSurvivorResolveStatusUpdate:
+    def test_survivor_resolve_status_update_applied(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "survivor_signals": [
+                    {
+                        "id": "sig-res-1",
+                        "message_id": "sar-msg-1",
+                        "resolved": False,
+                        "resolved_at": None,
+                        "resolution_note": "",
+                    }
+                ]
+            }
+        )
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="sar-resolve-1",
+            ptype="STATUS_UPDATE",
+            max_hops=15,
+            payload={
+                "targetType": "SURVIVOR_SIGNAL",
+                "survivorMessageId": "sar-msg-1",
+                "signalId": "sig-res-1",
+                "resolved": True,
+                "resolutionNote": "Located under the north stairwell.",
+                "resolvedByUserId": "dept-user-1",
+                "timestamp": "2026-03-31T04:15:00Z",
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["processed_count"] == 1
+            assert data["results"][0]["linkedRecordId"] == "sig-res-1"
+
+        survivor_updates = [update for update in fake._updates if update[0] == "survivor_signals"]
+        assert len(survivor_updates) == 1
+        assert survivor_updates[0][1]["resolved"] is True
+        assert survivor_updates[0][1]["resolution_note"] == "Located under the north stairwell."
+        assert survivor_updates[0][1]["resolved_by"] == "dept-user-1"
+

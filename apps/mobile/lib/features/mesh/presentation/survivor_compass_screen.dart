@@ -116,61 +116,11 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
           .read(authServiceProvider)
           .getSurvivorSignals(status: 'active');
       ref.read(sarModeControllerProvider.notifier).ingestServerSignals(rows);
-      await _flushQueuedResolutions();
     } catch (_) {
       if (!silent && mounted) {
         _showSnack(
           'Live survivor sync is unavailable right now. Local SAR detections are still visible.',
         );
-      }
-    }
-  }
-
-  Future<void> _flushQueuedResolutions() async {
-    final queuedSignals = ref
-        .read(sarModeControllerProvider)
-        .activeSignals
-        .where((signal) => signal.isResolved && signal.isResolutionQueued)
-        .toList();
-    if (queuedSignals.isEmpty) {
-      return;
-    }
-
-    List<Map<String, dynamic>> rows;
-    try {
-      rows = await ref.read(authServiceProvider).getSurvivorSignals();
-    } catch (_) {
-      return;
-    }
-
-    final controller = ref.read(sarModeControllerProvider.notifier);
-    controller.ingestServerSignals(rows);
-
-    for (final signal in queuedSignals) {
-      var signalId = signal.serverSignalId;
-      for (final row in rows) {
-        if ((row['message_id'] as String?) == signal.messageId) {
-          signalId = row['id'] as String?;
-          break;
-        }
-      }
-      if (signalId == null) {
-        continue;
-      }
-
-      try {
-        final resolved = await ref
-            .read(authServiceProvider)
-            .resolveSurvivorSignal(signalId, note: signal.resolutionNote ?? '');
-        controller.ingestServerSignals([resolved]);
-        controller.markSignalResolved(
-          signal.messageId,
-          serverSignalId: signalId,
-          note: signal.resolutionNote,
-          queued: false,
-        );
-      } catch (_) {
-        // Leave the signal queued locally until the next refresh or reconnect.
       }
     }
   }
@@ -204,6 +154,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
 
     final note = _resolutionController.text.trim();
     final controller = ref.read(sarModeControllerProvider.notifier);
+    final responderId = ref.read(sessionControllerProvider).userId;
 
     try {
       final rows = await ref.read(authServiceProvider).getSurvivorSignals();
@@ -217,14 +168,14 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
       }
 
       if (signalId == null) {
-        controller.markSignalResolved(
-          target.messageId,
+        controller.queueSurvivorResolution(
+          signal: target,
           note: note,
-          queued: true,
+          resolvedByUserId: responderId,
         );
         _resolutionController.clear();
         _showSnack(
-          'This signal has not reached the server yet. The resolve note is queued locally for retry.',
+          'This signal has not reached the server yet. The resolve note was added to the mesh queue for relay.',
         );
         return;
       }
@@ -241,10 +192,14 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
       _resolutionController.clear();
       _showSnack('Signal marked as located and synced to the responder feed.');
     } catch (_) {
-      controller.markSignalResolved(target.messageId, note: note, queued: true);
+      controller.queueSurvivorResolution(
+        signal: target,
+        note: note,
+        resolvedByUserId: responderId,
+      );
       _resolutionController.clear();
       _showSnack(
-        'Offline or API unavailable. The resolve note is queued locally for retry.',
+        'Offline or API unavailable. The resolve note was added to the mesh queue for relay.',
       );
     } finally {
       if (mounted) {
@@ -789,7 +744,7 @@ class _CompassSummaryCard extends StatelessWidget {
                     if (target.isResolutionQueued)
                       const _MetricChip(
                         icon: Icons.schedule_send,
-                        label: 'Resolve queued locally',
+                        label: 'Resolve queued for mesh',
                       ),
                   ],
                 ),
@@ -1096,7 +1051,7 @@ class _ResolveSignalCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             target.isResolutionQueued
-                ? 'A previous resolve note is queued locally. Updating it here will retry the sync on the next refresh.'
+                ? 'A previous resolve action is already queued through the mesh. Updating it here will add a fresh relay packet with the latest note.'
                 : 'Add a short note when the rescuer confirms the location, transfer, or false positive outcome.',
             style: const TextStyle(color: _mutedText, height: 1.45),
           ),
@@ -1302,7 +1257,7 @@ class _TargetBoard extends StatelessWidget {
                         if (signal.isResolutionQueued)
                           const _MetricChip(
                             icon: Icons.schedule_send,
-                            label: 'Resolve queued',
+                            label: 'Resolve queued for mesh',
                           ),
                       ],
                     ),

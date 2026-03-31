@@ -172,7 +172,7 @@ signal data flows from the existing mesh and survivor-signal feed.
   estimated target position, and any nearby mesh peer nodes.
 - [x] When the estimated distance to target drops below 3 meters, switch the
   compass view to a proximity pulse animation and play a haptic pattern.
-- [ ] Mark a survivor signal as located directly from the compass screen,
+- [x] Mark a survivor signal as located directly from the compass screen,
   triggering `PUT /api/mesh/survivor-signals/:id/resolve` when connectivity is
   available or queuing the resolve action for mesh relay when offline.
 
@@ -191,8 +191,8 @@ signal data flows from the existing mesh and survivor-signal feed.
 ### Status Note - 4-EXT.2
 
 - Date: `2026-03-31`
-- Completed: the mobile SAR feed now opens a Survivor Compass screen with live heading input, GPS-to-signal bearing math, hop/confidence guidance, target pinning, a minimap inset, and a proximity pulse/haptic state under 3 meters.
-- Remaining: offline resolve actions currently queue a local retry for the HTTP resolve call. They are not yet serialized into a dedicated mesh-relayed resolve packet, so the final checklist item for offline mesh resolve remains open.
+- Completed: the mobile SAR feed now opens a Survivor Compass screen with live heading input, GPS-to-signal bearing math, hop/confidence guidance, target pinning, a minimap inset, a proximity pulse/haptic state under 3 meters, and direct survivor resolve actions that sync over HTTP when online or relay through mesh when offline.
+- Remaining: no additional 4-EXT.2 implementation blockers remain beyond physical device field verification of the live compass workflow.
 - Constraint: nearby mesh peer markers on the minimap are rendered as a relative proximity ring until peer GPS coordinates are added to mesh sync payloads.
 
 ---
@@ -487,7 +487,7 @@ range.
   and generates a `SURVIVOR_SIGNAL` packet that reaches the gateway.
 - [x] The acoustic classifier does not transmit raw audio and runs entirely
   on-device.
-- [ ] The Survivor Compass points toward a pinned `SURVIVOR_SIGNAL` with correct
+- [x] The Survivor Compass points toward a pinned `SURVIVOR_SIGNAL` with correct
   bearing and switches to proximity pulse below 3 m.
 - [ ] The Mesh & SAR map layer renders node markers, survivor signal markers,
   and trail polylines without regressing existing report map functionality.
@@ -516,13 +516,3 @@ range.
   blackout via mesh relay and sync to the backend on gateway restore.
 - All extension work is additive and the canonical Phase 4 exit criteria remain
   satisfied.
-
-
-
-
-
-
-
-
-
-

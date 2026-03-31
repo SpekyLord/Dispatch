@@ -337,6 +337,48 @@ class MeshTransportService {
     );
   }
 
+  static MeshPacket createSurvivorResolvePacket({
+    required String deviceId,
+    required String survivorMessageId,
+    String? signalId,
+    String note = '',
+    String? resolvedByUserId,
+  }) {
+    return MeshPacket(
+      messageId: _generateUuid(),
+      originDeviceId: deviceId,
+      timestamp: DateTime.now().toUtc().toIso8601String(),
+      maxHops: 15,
+      payloadType: MeshPayloadType.statusUpdate,
+      payload: _buildSurvivorResolvePayload(
+        survivorMessageId,
+        signalId,
+        note,
+        resolvedByUserId,
+      ),
+    );
+  }
+
+  static Map<String, dynamic> _buildSurvivorResolvePayload(
+    String survivorMessageId,
+    String? signalId,
+    String note,
+    String? resolvedByUserId,
+  ) {
+    final m = <String, dynamic>{
+      'targetType': 'SURVIVOR_SIGNAL',
+      'survivorMessageId': survivorMessageId,
+      'resolved': true,
+      'resolutionNote': note,
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (signalId != null && signalId.isNotEmpty) m['signalId'] = signalId;
+    if (resolvedByUserId != null && resolvedByUserId.isNotEmpty) {
+      m['resolvedByUserId'] = resolvedByUserId;
+    }
+    return m;
+  }
+
   // imperative map builders to avoid use_null_aware_elements lint
   static Map<String, dynamic> _buildIncidentPayload(
     String description,

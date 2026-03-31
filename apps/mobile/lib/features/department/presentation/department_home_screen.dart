@@ -1,9 +1,8 @@
-// Department home Ã¢â‚¬â€ shows pending/rejected/approved view based on verification status.
+// Department home ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â shows pending/rejected/approved view based on verification status.
 // Rejected view has inline edit + resubmit form (API auto-moves back to pending).
 
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_assessment_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';

@@ -1,6 +1,6 @@
-// Department post creation Ã¢â‚¬â€ verified departments publish announcements to citizen feed.
+// Department post creation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified departments publish announcements to citizen feed.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

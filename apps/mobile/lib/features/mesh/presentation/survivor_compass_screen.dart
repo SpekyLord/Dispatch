@@ -6,7 +6,7 @@ import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';

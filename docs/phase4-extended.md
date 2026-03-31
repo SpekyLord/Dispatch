@@ -385,9 +385,9 @@ citizens and responders in a full connectivity blackout.
 
 - Date: `2026-03-31`
 - Completed: added the `mesh_comms_messages` persistence layer plus the `mesh_originated` post flag, extended mesh ingest for `MESH_MESSAGE` and `MESH_POST`, enforced offline-token validation for department-authored mesh content, added authenticated thread-history fetches, wired a new Offline Comms mobile surface for broadcast and department messages plus mesh posts, surfaced unread badges from the mobile home flows, and added a feed-aligned mesh comms card to the municipality Mesh & SAR dashboard.
-- Verified: Phase 4 backend mesh tests now pass with dedicated `MESH_MESSAGE` and `MESH_POST` coverage (`31 passed`), and the web app passes both its production build and Vitest suite (`31 passed`).
+- Verified: Phase 4 backend mesh tests now pass with dedicated `MESH_MESSAGE` and `MESH_POST` coverage (`31 passed`), the web app passes both its production build and Vitest suite (`31 passed`), and the mobile app now passes full-workspace `flutter analyze` plus `flutter test` (`42 passed`).
 - Remaining: the mobile inbox still persists through the platform cache adapter while the `mesh_inbox` SQLite schema remains unwired to a shared database service, mobile widget coverage for Offline Comms is still open, and the manual two-device blackout field test is still pending.
-- Constraint: the mobile workspace currently has a broader Flutter package-import resolution issue around the existing session state files, so full-app `flutter analyze` is not a trustworthy pass/fail signal for 4-EXT.4 alone in this checkout.
+- Constraint: Offline Comms persistence is intentionally cache-backed on mobile and web until the shared `mesh_inbox` SQLite service is wired, so the inbox is restart-safe today without yet joining the main local database lifecycle.
 - Naming note: the canonical `mesh_messages` table continues to act as the dedup and ingest audit log, so threaded server-side comms history is stored in `mesh_comms_messages` to avoid colliding with that Phase 4 base table.
 
 ---
@@ -525,3 +525,4 @@ range.
   blackout via mesh relay and sync to the backend on gateway restore.
 - All extension work is additive and the canonical Phase 4 exit criteria remain
   satisfied.
+

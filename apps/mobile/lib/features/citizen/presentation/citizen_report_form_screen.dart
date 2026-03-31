@@ -1,8 +1,8 @@
-// Report form — submit a new incident with photos, GPS, and map pin.
+// Report form â€” submit a new incident with photos, GPS, and map pin.
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/shared/presentation/location_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

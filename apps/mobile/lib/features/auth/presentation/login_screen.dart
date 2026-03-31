@@ -1,6 +1,6 @@
-// Login screen — email/password form, delegates auth to SessionController.
+// Login screen â€” email/password form, delegates auth to SessionController.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

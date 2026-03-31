@@ -1,7 +1,7 @@
-// Register screen — citizen or department account creation.
+// Register screen â€” citizen or department account creation.
 // Department fields shown conditionally when role = 'department'.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

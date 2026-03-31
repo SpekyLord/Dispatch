@@ -1,7 +1,7 @@
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

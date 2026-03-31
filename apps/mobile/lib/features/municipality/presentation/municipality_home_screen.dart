@@ -1,6 +1,6 @@
-// Municipality home — placeholder shell. Verification is web-only in Phase 1.
+// Municipality home â€” placeholder shell. Verification is web-only in Phase 1.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/shared/presentation/role_shell_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

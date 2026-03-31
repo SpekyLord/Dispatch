@@ -3,8 +3,7 @@ import 'dart:convert';
 
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

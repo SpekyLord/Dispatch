@@ -797,8 +797,8 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Deviations: Android passive BLE/acoustic/SOS-beacon capture is now platform-integrated, but passive Wi-Fi probe sniffing remains blocked by standard mobile app sandboxes, so the SAR panel keeps Wi-Fi probe detection visible as an unavailable subsystem rather than shipping a misleading pseudo-implementation.
 - Carryover: Wi-Fi probe capture, manual dual-device SAR field testing, and the remaining 4-EXT.4/4-EXT.5 work stay open in `docs/phase4-extended.md`.
 - Date: `2026-03-31` (follow-up)
-- Completed: implemented the 4-EXT.4 mesh communications backend and web/dashboard slice: `MESH_MESSAGE` / `MESH_POST` ingest, `mesh_comms_messages` persistence, `mesh_originated` posts, authenticated thread-history fetches, direct-recipient notification fanout, a municipality Mesh Comms dashboard card, and new Phase 4 API coverage for message ingest/thread recovery/token expiry.
-- Deviations: the mobile Offline Comms surface is wired and restart-safe through the platform cache adapter, but the `mesh_inbox` SQLite schema is not yet connected to a shared DB service, and the mobile workspace currently has a broader session-import resolution issue that prevents using whole-app `flutter analyze` as a clean extension verification signal in this checkout.
+- Completed: implemented the 4-EXT.4 mesh communications backend, mobile, and web/dashboard slice: `MESH_MESSAGE` / `MESH_POST` ingest, `mesh_comms_messages` persistence, `mesh_originated` posts, authenticated thread-history fetches, direct-recipient notification fanout, the mobile Offline Comms surface with unread badges and restart-safe inbox hydration, the municipality Mesh Comms dashboard card, and new Phase 4 API/mobile coverage for message ingest, thread recovery, and token expiry handling.
+- Deviations: the mobile Offline Comms surface is wired and restart-safe through the platform cache adapter, but the `mesh_inbox` SQLite schema is not yet connected to a shared DB service. Verification is now green again after consolidating mobile session imports through `core/state/session.dart`, with full-app `flutter analyze` and `flutter test` passing in this checkout.
 - Carryover: mobile widget tests, two-device blackout verification, SQLite-backed inbox persistence, and all 4-EXT.5 work remain open in `docs/phase4-extended.md`.
 
 ### Exit Criteria
@@ -909,3 +909,4 @@ Add non-MVP improvements only after the MVP phases are stable and verified.
 
 - Stretch work is additive, optional, and does not compromise the MVP emergency coordination workflow.
 - Every added feature has a clear operational reason and verification coverage.
+

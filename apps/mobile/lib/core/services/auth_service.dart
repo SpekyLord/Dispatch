@@ -1,8 +1,8 @@
-// API service â€” wraps Dio for all backend calls. Token managed by SessionController.
+// API service Ã¢â‚¬â€ wraps Dio for all backend calls. Token managed by SessionController.
 
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dio/dio.dart';
 
 class AuthService {
@@ -202,7 +202,7 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  // Decline a report â€” decline_reason is required
+  // Decline a report Ã¢â‚¬â€ decline_reason is required
   Future<Map<String, dynamic>> declineReport(
     String reportId, {
     required String declineReason,

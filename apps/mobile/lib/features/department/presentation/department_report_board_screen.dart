@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

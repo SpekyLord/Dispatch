@@ -1,6 +1,6 @@
-// Damage assessment screen Ã¢â‚¬â€ form to submit + list of past assessments.
+// Damage assessment screen ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â form to submit + list of past assessments.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -69,7 +69,7 @@ class _DepartmentAssessmentScreenState
     });
     try {
       final authService = ref.read(authServiceProvider);
-      // Build body imperatively Ã¢â‚¬â€ no conditional map entries
+      // Build body imperatively ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no conditional map entries
       final area = _areaCtrl.text.trim();
       final casualties = int.tryParse(_casualtiesCtrl.text.trim()) ?? 0;
       final displaced = int.tryParse(_displacedCtrl.text.trim()) ?? 0;

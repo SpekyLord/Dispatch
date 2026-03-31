@@ -1,4 +1,4 @@
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 
 // Fallback in-memory session storage for unsupported platforms.
 class SessionStorage {

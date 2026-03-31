@@ -1,7 +1,7 @@
 // Citizen home - report list with pull-to-refresh, FAB for new report.
 
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';

@@ -1,6 +1,9 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+
 import 'dart:convert';
 import 'dart:html' as html;
 
+// Browser-backed mesh inbox persistence for Flutter web.
 class MeshInboxStorage {
   static const _storageKey = 'dispatch_mobile_mesh_inbox';
 

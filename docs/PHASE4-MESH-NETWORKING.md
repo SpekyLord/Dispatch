@@ -15,7 +15,7 @@ Every mesh message uses this canonical envelope:
   "timestamp": "ISO-8601",
   "hopCount": 0,
   "maxHops": 7,
-  "payloadType": "INCIDENT_REPORT | ANNOUNCEMENT | DISTRESS | STATUS_UPDATE | SYNC_ACK",
+  "payloadType": "INCIDENT_REPORT | ANNOUNCEMENT | DISTRESS | SURVIVOR_SIGNAL | MESH_MESSAGE | MESH_POST | STATUS_UPDATE | SYNC_ACK",
   "payload": {},
   "signature": "hmac-sha256-of-payload-using-device-key"
 }
@@ -43,6 +43,8 @@ Role transitions automatically based on connectivity status.
 | `INCIDENT_REPORT` | Append-only | Creates new report with `is_mesh_origin=true` |
 | `ANNOUNCEMENT` | Append-only | Requires valid offline dept verification token |
 | `DISTRESS` | Immutable | `maxHops=15`, processed with highest priority |
+| `MESH_MESSAGE` | Append-only | Same relay priority as `STATUS_UPDATE`; stored in `mesh_comms_messages` for thread recovery |
+| `MESH_POST` | Append-only | Same relay priority as `ANNOUNCEMENT`; creates a normal `posts` row with `mesh_originated=true` |
 | `STATUS_UPDATE` | Last-write-wins | Compares timestamps; stale updates silently skipped |
 | `SYNC_ACK` | Informational | Rebroadcast so origin devices learn reports reached the server |
 
@@ -134,6 +136,10 @@ Fields: `message_id`, `payload_type`, `origin_device_id`, `hop_count`, `processi
 Persists SOS events uploaded through mesh sync.
 Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`, `reporter_name`, `contact_info`, `hop_count`, `is_resolved`, `resolved_by`, `resolved_at`.
 
+### `mesh_comms_messages`
+Stores server-side thread history for `MESH_MESSAGE` packets.
+Fields: `thread_id`, `message_id`, `recipient_scope`, `recipient_identifier`, `body`, `author_display_name`, `author_role`, `author_identifier`, `author_department_id`, `created_at`.
+
 ### Mobile SQLite Tables
 - `mesh_queue`: Queued outbound packets with status (`queued`, `synced`)
 - `seen_messages`: Dedup log keyed by `message_id`
@@ -183,3 +189,15 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 - `GET /api/mesh/topology` returns only nodes seen within the last 30 minutes and flags them as stale after 5 minutes without a fresh gateway upload. Operators should treat stale nodes as last-known positions rather than live peer discovery.
 - Survivor-signal responses now include GeoJSON-ready `coordinates` and `geometry` fields so the web map can render signal markers directly.
 - The municipality Mesh & SAR page overlays disaster reports, mesh nodes, responder markers, and survivor signals on the same Leaflet map. Topology refreshes every 30 seconds while survivor signals refresh through Supabase Realtime.
+
+## Mesh-Routed Communications Extension (4-EXT.4)
+
+- `MESH_MESSAGE` and `MESH_POST` are now part of the canonical packet envelope. `MESH_MESSAGE` uses the same relay priority as `STATUS_UPDATE`; `MESH_POST` uses the same relay priority as `ANNOUNCEMENT`.
+- The backend keeps using `mesh_messages` as the dedup and ingest audit log. Threaded server-side comms history lives in `mesh_comms_messages` so the original Phase 4 table name is not overloaded.
+- `POST /api/mesh/ingest` now persists `MESH_MESSAGE` packets into `mesh_comms_messages` and `MESH_POST` packets into the normal `posts` table with `mesh_originated = true`.
+- `GET /api/mesh/messages?threadId=` lets authenticated clients recover thread history and mesh-authored post context after connectivity returns.
+- Department-authored `MESH_POST` packets require a valid cached offline verification token on both the mobile client and the gateway ingest path. If a queued post reaches the server after that token expires, the gateway rejects it with a token-expired error and the mobile inbox item remains unsynced until the user signs in again.
+- Broadcast `MESH_MESSAGE` packets are intentionally relayed to all nodes in range, so operators should treat them as low-privacy traffic. Department and direct scopes narrow what is surfaced in the app UI, but broadcast payloads still move through nearby relays during a blackout.
+- Sensitive mesh comms are retained in `mesh_comms_messages` and `posts` for incident audit until normal operational cleanup. Post-incident deletion should remove the corresponding `mesh_comms_messages` rows and any `mesh_originated` posts together when a conversation or advisory must be purged.
+- The current mobile shell keeps the Offline Comms inbox restart-safe through a platform cache adapter while the `mesh_inbox` SQLite schema is reserved for the full shared-database wiring.
+- The municipality Mesh & SAR dashboard now includes a feed-aligned Mesh Comms card so operators can review recent mesh messages and mesh-originated posts without leaving the map workflow.

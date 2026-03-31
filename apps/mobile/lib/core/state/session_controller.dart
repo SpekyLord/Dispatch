@@ -1,4 +1,4 @@
-// Session controller â€” manages auth state, coordinates API + local storage.
+// Session controller — manages auth state, coordinates API + local storage.
 // Returns null on success, error string on failure.
 
 import 'package:dispatch_mobile/core/services/auth_service.dart';
@@ -28,7 +28,6 @@ class SessionController extends StateNotifier<SessionState> {
   final SessionStorage _storage;
   final AuthService _authService;
 
-  // Restore saved session from disk on cold start
   Future<void> _restore() async {
     final restored = await _storage.load();
     state = restored;
@@ -37,7 +36,6 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
-  // Returns null on success, error string on failure
   Future<String?> login({
     required String email,
     required String password,
@@ -53,7 +51,6 @@ class SessionController extends StateNotifier<SessionState> {
 
       _authService.setToken(token);
 
-      // Parse department data if present (department-role users only)
       DepartmentInfo? dept;
       final deptData = result['department'] as Map<String, dynamic>?;
       if (deptData != null) {
@@ -68,6 +65,8 @@ class SessionController extends StateNotifier<SessionState> {
         role: role,
         fullName: user['full_name'] as String?,
         department: dept,
+        offlineVerificationToken:
+            result['offline_verification_token'] as String?,
       );
       await _storage.save(state);
       return null;
@@ -76,7 +75,6 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
-  // Returns null on success (or if email confirmation needed), error string on failure
   Future<String?> register({
     required String email,
     required String password,
@@ -105,7 +103,6 @@ class SessionController extends StateNotifier<SessionState> {
       final user = result['user'] as Map<String, dynamic>? ?? {};
       final roleValue = AppRole.values.where((r) => r.name == role).firstOrNull;
 
-      // No token = email confirmation required, not an error
       if (token == null || roleValue == null) {
         return null;
       }
@@ -125,6 +122,8 @@ class SessionController extends StateNotifier<SessionState> {
         role: roleValue,
         fullName: user['full_name'] as String?,
         department: dept,
+        offlineVerificationToken:
+            result['offline_verification_token'] as String?,
       );
       await _storage.save(state);
       return null;
@@ -138,7 +137,6 @@ class SessionController extends StateNotifier<SessionState> {
     _storage.save(state);
   }
 
-  // Rebuild full state instead of copyWith (copyWith can't set fields to null)
   void updateFullName(String name) {
     state = SessionState(
       accessToken: state.accessToken,
@@ -148,6 +146,7 @@ class SessionController extends StateNotifier<SessionState> {
       role: state.role,
       fullName: name,
       department: state.department,
+      offlineVerificationToken: state.offlineVerificationToken,
     );
     _storage.save(state);
   }
@@ -159,7 +158,6 @@ class SessionController extends StateNotifier<SessionState> {
     await _storage.clear();
   }
 
-  // Try to parse the server error message from Dio's exception string
   String _extractError(Exception e) {
     if (e.toString().contains('DioException')) {
       final str = e.toString();

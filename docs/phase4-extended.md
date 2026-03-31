@@ -308,57 +308,57 @@ citizens and responders in a full connectivity blackout.
 
 #### Database / Supabase
 
-- [ ] Add a `mesh_messages` log table for server-persisted `MESH_MESSAGE`
+- [x] Add a server-side `mesh_comms_messages` table for persisted `MESH_MESSAGE`
   packets: `id`, `thread_id`, `message_id` (FK mesh dedup), `recipient_scope`,
   `recipient_identifier`, `body`, `author_display_name`, `author_role`,
   `created_at`.
-- [ ] Reuse the existing `posts` table for server-side `MESH_POST` ingestion -
+- [x] Reuse the existing `posts` table for server-side `MESH_POST` ingestion -
   the gateway ingest should create a normal `post` record with a
   `mesh_originated = true` flag.
-- [ ] Add a `mesh_originated` boolean column to the `posts` table defaulting to
+- [x] Add a `mesh_originated` boolean column to the `posts` table defaulting to
   `false`. Do not change any existing post flow.
 
 #### Flask API
 
-- [ ] Extend `POST /api/mesh/ingest` to handle `MESH_MESSAGE` and `MESH_POST`
+- [x] Extend `POST /api/mesh/ingest` to handle `MESH_MESSAGE` and `MESH_POST`
   payloadTypes with idempotency on `messageId`.
-- [ ] For `MESH_POST` ingestion, validate the bundled `authorOfflineToken`
+- [x] For `MESH_POST` ingestion, validate the bundled `authorOfflineToken`
   against department authority rules before creating the `posts` record. Reject
   with `403` if invalid or expired.
-- [ ] For `MESH_MESSAGE` ingestion, persist to `mesh_messages` for audit.
+- [x] For `MESH_MESSAGE` ingestion, persist to `mesh_comms_messages` for audit.
   Direct messages that have a known `recipientIdentifier` that is online should
   trigger a realtime notification event.
-- [ ] Add `GET /api/mesh/messages?threadId=` (authenticated) so online clients
+- [x] Add `GET /api/mesh/messages?threadId=` (authenticated) so online clients
   can fetch thread history once connectivity is restored.
 
 #### Mobile App
 
-- [ ] Add an **Offline Comms** tab or panel accessible when SAR Mode is active
+- [x] Add an **Offline Comms** tab or panel accessible when SAR Mode is active
   or when the device is in mesh-only state (no internet).
-- [ ] Allow any authenticated user (citizen or department) to compose and send a
+- [x] Allow any authenticated user (citizen or department) to compose and send a
   `broadcast` mesh message visible to all nodes in range. Max 500 characters.
   Wrap as `MESH_MESSAGE` with `recipientScope = broadcast`.
-- [ ] Allow department users to send `department`-scoped mesh messages visible
+- [x] Allow department users to send `department`-scoped mesh messages visible
   only to devices whose cached role token identifies them as department members.
-- [ ] Allow department users to publish a `MESH_POST` announcement over mesh
+- [x] Allow department users to publish a `MESH_POST` announcement over mesh
   using their cached offline verification token. Block if token is missing or
   expired (consistent with existing announcement relay rule).
-- [ ] Render received `MESH_MESSAGE` and `MESH_POST` packets in the Offline
+- [x] Render received `MESH_MESSAGE` and `MESH_POST` packets in the Offline
   Comms panel in chronological order. Show author display name, role badge, and
   hop count.
 - [ ] Persist received messages in local SQLite `mesh_inbox` table so they
   survive app restart.
-- [ ] When internet is restored, sync the `mesh_inbox` to the backend via the
+- [x] When internet is restored, sync the `mesh_inbox` to the backend via the
   gateway ingest endpoint.
-- [ ] Unread mesh message badge on the Offline Comms tab icon.
+- [x] Unread mesh message badge on the Offline Comms tab icon.
 
 #### Realtime / Offline Transport
 
-- [ ] `MESH_MESSAGE` relay priority: same as `STATUS_UPDATE` (below `DISTRESS`
+- [x] `MESH_MESSAGE` relay priority: same as `STATUS_UPDATE` (below `DISTRESS`
   and `SURVIVOR_SIGNAL`, above `INCIDENT_REPORT`).
-- [ ] `MESH_POST` relay priority: same as `ANNOUNCEMENT`.
-- [ ] Apply seen-message deduplication to both new payload types.
-- [ ] Do not relay `direct`-scoped `MESH_MESSAGE` packets to nodes that are not
+- [x] `MESH_POST` relay priority: same as `ANNOUNCEMENT`.
+- [x] Apply seen-message deduplication to both new payload types.
+- [x] Do not relay `direct`-scoped `MESH_MESSAGE` packets to nodes that are not
   the intended recipient (match on `recipientIdentifier` against local device
   fingerprint before forwarding).
 
@@ -366,7 +366,7 @@ citizens and responders in a full connectivity blackout.
 
 - [ ] Unit tests for `MESH_MESSAGE` and `MESH_POST` serialization and priority
   ordering.
-- [ ] API tests for `MESH_MESSAGE` ingest, thread fetch, and `MESH_POST`
+- [x] API tests for `MESH_MESSAGE` ingest, thread fetch, and `MESH_POST`
   offline-token validation.
 - [ ] Mobile widget tests for Offline Comms panel rendering, unread badge, and
   broadcast compose flow.
@@ -375,11 +375,20 @@ citizens and responders in a full connectivity blackout.
 
 #### Docs
 
-- [ ] Document `MESH_MESSAGE` privacy model (broadcast messages are relayed to
+- [x] Document `MESH_MESSAGE` privacy model (broadcast messages are relayed to
   all nodes in range), retention policy, and how to delete sensitive mesh
   messages post-incident.
-- [ ] Document `MESH_POST` offline verification token requirement and what
+- [x] Document `MESH_POST` offline verification token requirement and what
   happens to queued posts when the token expires mid-incident.
+
+### Status Note - 4-EXT.4
+
+- Date: `2026-03-31`
+- Completed: added the `mesh_comms_messages` persistence layer plus the `mesh_originated` post flag, extended mesh ingest for `MESH_MESSAGE` and `MESH_POST`, enforced offline-token validation for department-authored mesh content, added authenticated thread-history fetches, wired a new Offline Comms mobile surface for broadcast and department messages plus mesh posts, surfaced unread badges from the mobile home flows, and added a feed-aligned mesh comms card to the municipality Mesh & SAR dashboard.
+- Verified: Phase 4 backend mesh tests now pass with dedicated `MESH_MESSAGE` and `MESH_POST` coverage (`31 passed`), and the web app passes both its production build and Vitest suite (`31 passed`).
+- Remaining: the mobile inbox still persists through the platform cache adapter while the `mesh_inbox` SQLite schema remains unwired to a shared database service, mobile widget coverage for Offline Comms is still open, and the manual two-device blackout field test is still pending.
+- Constraint: the mobile workspace currently has a broader Flutter package-import resolution issue around the existing session state files, so full-app `flutter analyze` is not a trustworthy pass/fail signal for 4-EXT.4 alone in this checkout.
+- Naming note: the canonical `mesh_messages` table continues to act as the dedup and ingest audit log, so threaded server-side comms history is stored in `mesh_comms_messages` to avoid colliding with that Phase 4 base table.
 
 ---
 

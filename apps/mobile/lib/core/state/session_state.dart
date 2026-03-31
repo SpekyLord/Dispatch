@@ -47,7 +47,7 @@ class DepartmentInfo {
   };
 }
 
-/// Auth session state â€” serializable to JSON for file-based persistence.
+/// Auth session state — serializable to JSON for file-based persistence.
 class SessionState {
   const SessionState({
     this.accessToken,
@@ -57,6 +57,7 @@ class SessionState {
     this.role,
     this.fullName,
     this.department,
+    this.offlineVerificationToken,
   });
 
   final String? accessToken;
@@ -66,8 +67,8 @@ class SessionState {
   final AppRole? role;
   final String? fullName;
   final DepartmentInfo? department;
+  final String? offlineVerificationToken;
 
-  // Need both role and token to be considered logged in
   bool get isAuthenticated => role != null && accessToken != null;
 
   SessionState copyWith({
@@ -78,6 +79,7 @@ class SessionState {
     AppRole? role,
     String? fullName,
     DepartmentInfo? department,
+    String? offlineVerificationToken,
   }) {
     return SessionState(
       accessToken: accessToken ?? this.accessToken,
@@ -87,6 +89,8 @@ class SessionState {
       role: role ?? this.role,
       fullName: fullName ?? this.fullName,
       department: department ?? this.department,
+      offlineVerificationToken:
+          offlineVerificationToken ?? this.offlineVerificationToken,
     );
   }
 
@@ -99,6 +103,7 @@ class SessionState {
       'role': role?.name,
       'fullName': fullName,
       'department': department?.toJson(),
+      'offlineVerificationToken': offlineVerificationToken,
     };
   }
 
@@ -113,6 +118,7 @@ class SessionState {
       role: AppRole.values.where((value) => value.name == roleName).firstOrNull,
       fullName: json['fullName'] as String?,
       department: deptJson != null ? DepartmentInfo.fromJson(deptJson) : null,
+      offlineVerificationToken: json['offlineVerificationToken'] as String?,
     );
   }
 }

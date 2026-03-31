@@ -1,4 +1,4 @@
-// API service — wraps Dio for all backend calls. Token managed by SessionController.
+// API service â€” wraps Dio for all backend calls. Token managed by SessionController.
 
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
@@ -202,7 +202,7 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  // Decline a report — decline_reason is required
+  // Decline a report â€” decline_reason is required
   Future<Map<String, dynamic>> declineReport(
     String reportId, {
     required String declineReason,
@@ -325,6 +325,30 @@ class AuthService {
         as Map<String, dynamic>;
   }
 
+  // --- Mesh comms (Phase 4 extension) ---
+
+  Future<Map<String, dynamic>> ingestMeshPackets(
+    List<Map<String, dynamic>> packets, {
+    Map<String, dynamic>? topologySnapshot,
+  }) async {
+    final body = <String, dynamic>{'packets': packets};
+    if (topologySnapshot != null) {
+      body['topologySnapshot'] = topologySnapshot;
+    }
+    final response = await _dio.post('/api/mesh/ingest', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshMessages({
+    String? threadId,
+    bool includePosts = false,
+  }) async {
+    final params = <String, dynamic>{};
+    if (threadId != null) params['threadId'] = threadId;
+    if (includePosts) params['include_posts'] = '1';
+    final response = await _dio.get('/api/mesh/messages', queryParameters: params);
+    return response.data as Map<String, dynamic>;
+  }
   // --- Damage assessments (Phase 3) ---
 
   // Submit a new damage assessment for this department

@@ -56,6 +56,29 @@ class LocalDatabase {
       created_at TEXT NOT NULL
     )
     ''',
+    // offline comms cache - keeps mesh messages and posts available after restart
+    '''
+    CREATE TABLE IF NOT EXISTS mesh_inbox (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL UNIQUE,
+      thread_id TEXT,
+      item_type TEXT NOT NULL,
+      recipient_scope TEXT NOT NULL,
+      recipient_identifier TEXT,
+      author_display_name TEXT NOT NULL,
+      author_role TEXT NOT NULL,
+      title TEXT,
+      body TEXT NOT NULL,
+      category TEXT,
+      hop_count INTEGER NOT NULL DEFAULT 0,
+      max_hops INTEGER NOT NULL DEFAULT 7,
+      is_read INTEGER NOT NULL DEFAULT 0,
+      needs_server_sync INTEGER NOT NULL DEFAULT 1,
+      raw_packet TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+    ''',
+
     // generic key-value session cache
     '''
     CREATE TABLE IF NOT EXISTS session_cache (

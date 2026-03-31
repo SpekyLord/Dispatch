@@ -1,13 +1,15 @@
-// Citizen home — report list with pull-to-refresh, FAB for new report.
+// Citizen home - report list with pull-to-refresh, FAB for new report.
 
+import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
-import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,11 +48,12 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final transport = ref.watch(meshTransportProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Reports'),
         actions: [
-          // SOS shortcut
           IconButton(
             icon: Icon(Icons.sos, color: Colors.red.shade600),
             tooltip: 'Emergency SOS',
@@ -58,7 +61,6 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               context,
             ).push(MaterialPageRoute(builder: (_) => const SosScreen())),
           ),
-          // Mesh status
           IconButton(
             icon: const Icon(Icons.cell_tower),
             tooltip: 'Mesh Network',
@@ -66,7 +68,24 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               context,
             ).push(MaterialPageRoute(builder: (_) => const MeshStatusScreen())),
           ),
-          // Feed shortcut
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.forum_outlined),
+                tooltip: 'Offline Comms',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
+                ),
+              ),
+              if (transport.unreadMeshMessageCount > 0)
+                Positioned(
+                  top: 9,
+                  right: 8,
+                  child: _UnreadBadge(count: transport.unreadMeshMessageCount),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.newspaper),
             tooltip: 'Feed',
@@ -74,7 +93,6 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
             ),
           ),
-          // Notifications shortcut
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notifications',
@@ -82,7 +100,6 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             ),
           ),
-          // Profile shortcut
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () => Navigator.of(context).push(
@@ -193,6 +210,31 @@ class _ReportCard extends StatelessWidget {
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  const _UnreadBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFA14B2F),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

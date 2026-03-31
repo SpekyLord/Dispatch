@@ -1,6 +1,7 @@
-// Department home â€” shows pending/rejected/approved view based on verification status.
+// Department home Ã¢â‚¬â€ shows pending/rejected/approved view based on verification status.
 // Rejected view has inline edit + resubmit form (API auto-moves back to pending).
 
+import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session_controller.dart';
 import 'package:dispatch_mobile/core/state/session_state.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
@@ -9,6 +10,7 @@ import 'package:dispatch_mobile/features/department/presentation/department_crea
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -304,12 +306,14 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
   }
 }
 
-class _ApprovedView extends StatelessWidget {
+class _ApprovedView extends ConsumerWidget {
   const _ApprovedView({required this.dept});
   final DepartmentInfo dept;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final transport = ref.watch(meshTransportProvider);
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -401,6 +405,38 @@ class _ApprovedView extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.forum_outlined),
+            title: const Text('Offline Comms'),
+            subtitle: Text(
+              transport.unreadMeshMessageCount > 0
+                  ? '${transport.unreadMeshMessageCount} unread mesh messages'
+                  : 'Broadcasts, department chatter, and mesh posts',
+            ),
+            trailing: transport.unreadMeshMessageCount > 0
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.brown.shade600,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${transport.unreadMeshMessageCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
             ),
           ),
         ),

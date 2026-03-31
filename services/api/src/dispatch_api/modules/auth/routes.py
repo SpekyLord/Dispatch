@@ -9,9 +9,30 @@ from flask import current_app, jsonify, request
 from dispatch_api.auth import get_current_user, require_auth
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.auth import blueprint
+from dispatch_api.services.offline_token_service import OfflineTokenService
 
 # Municipality accounts are pre-seeded, not self-registered
 VALID_ROLES = {"citizen", "department"}
+
+
+def _offline_token_service() -> OfflineTokenService:
+    settings = current_app.config["SETTINGS"]
+    return OfflineTokenService(secret=settings.supabase_service_role_key)
+
+
+def _issue_offline_token(
+    *,
+    user_id: str | None,
+    role: str | None,
+    department: dict | None = None,
+) -> str | None:
+    if not user_id or not role:
+        return None
+    return _offline_token_service().issue_token(
+        user_id=user_id,
+        role=role,
+        department_id=(department or {}).get("id"),
+    )
 
 
 @blueprint.post("/register")
@@ -113,6 +134,11 @@ def register():
                 },
                 "department": dept_data,
                 "access_token": access_token,
+                "offline_verification_token": _issue_offline_token(
+                    user_id=user_id,
+                    role=role,
+                    department=dept_data,
+                ),
             }
         ),
         HTTPStatus.CREATED,
@@ -190,6 +216,11 @@ def login():
                 "avatar_url": (profile or {}).get("avatar_url"),
             },
             "department": department,
+            "offline_verification_token": _issue_offline_token(
+                user_id=user_id,
+                role=role,
+                department=department,
+            ),
         }
     )
 
@@ -250,5 +281,10 @@ def me():
                 "avatar_url": (profile or {}).get("avatar_url"),
             },
             "department": department,
+            "offline_verification_token": _issue_offline_token(
+                user_id=user.id,
+                role=user.role,
+                department=department,
+            ),
         }
     )

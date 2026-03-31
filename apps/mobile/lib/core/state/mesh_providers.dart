@@ -1,11 +1,18 @@
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/sar_platform_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+final meshInboxStorageProvider = Provider<MeshInboxStorage>((ref) {
+  return MeshInboxStorage();
+});
+
 final meshTransportProvider = Provider<MeshTransportService>((ref) {
-  final transport = MeshTransportService();
+  final transport = MeshTransportService(
+    inboxStorage: ref.read(meshInboxStorageProvider),
+  );
   ref.onDispose(transport.dispose);
   return transport;
 });

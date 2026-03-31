@@ -1,10 +1,11 @@
 // Mesh transport - BLE discovery, WiFi Direct handoff, packet relay, and gateway sync.
-// Uses nearby_connections API abstraction; actual plugin integration requires
-// Android/iOS permissions and is tested via manual device-to-device field tests.
+// The transport now also keeps a restart-safe Offline Comms inbox for mesh messages and posts.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 
 enum MeshNodeRole { origin, relay, gateway }
 
@@ -13,11 +14,12 @@ enum MeshPayloadType {
   announcement,
   distress,
   survivorSignal,
+  meshMessage,
+  meshPost,
   statusUpdate,
   syncAck,
 }
 
-// canonical mesh packet envelope
 class MeshPacket {
   final String messageId;
   final String originDeviceId;
@@ -39,19 +41,19 @@ class MeshPacket {
     this.signature = '',
   });
 
-  // payload type string for API
   String get payloadTypeString {
     return switch (payloadType) {
       MeshPayloadType.incidentReport => 'INCIDENT_REPORT',
       MeshPayloadType.announcement => 'ANNOUNCEMENT',
       MeshPayloadType.distress => 'DISTRESS',
       MeshPayloadType.survivorSignal => 'SURVIVOR_SIGNAL',
+      MeshPayloadType.meshMessage => 'MESH_MESSAGE',
+      MeshPayloadType.meshPost => 'MESH_POST',
       MeshPayloadType.statusUpdate => 'STATUS_UPDATE',
       MeshPayloadType.syncAck => 'SYNC_ACK',
     };
   }
 
-  // serialize to JSON map for transmission
   Map<String, dynamic> toJson() {
     return {
       'messageId': messageId,
@@ -65,7 +67,6 @@ class MeshPacket {
     };
   }
 
-  // deserialize from JSON map
   factory MeshPacket.fromJson(Map<String, dynamic> json) {
     final typeStr = json['payloadType'] as String? ?? '';
     final type = switch (typeStr) {
@@ -73,6 +74,8 @@ class MeshPacket {
       'ANNOUNCEMENT' => MeshPayloadType.announcement,
       'DISTRESS' => MeshPayloadType.distress,
       'SURVIVOR_SIGNAL' => MeshPayloadType.survivorSignal,
+      'MESH_MESSAGE' => MeshPayloadType.meshMessage,
+      'MESH_POST' => MeshPayloadType.meshPost,
       'STATUS_UPDATE' => MeshPayloadType.statusUpdate,
       'SYNC_ACK' => MeshPayloadType.syncAck,
       _ => MeshPayloadType.statusUpdate,
@@ -89,14 +92,12 @@ class MeshPacket {
     );
   }
 
-  // check if payload is above BLE threshold (10 KB)
   bool get requiresWifiDirect {
     final encoded = utf8.encode(jsonEncode(payload));
     return encoded.length > 10240;
   }
 }
 
-// peer info from discovery
 class MeshPeer {
   final String endpointId;
   final String deviceName;
@@ -111,11 +112,168 @@ class MeshPeer {
   }) : lastSeen = lastSeen ?? DateTime.now();
 }
 
+class MeshInboxItem {
+  const MeshInboxItem({
+    required this.id,
+    required this.messageId,
+    required this.itemType,
+    required this.recipientScope,
+    required this.authorDisplayName,
+    required this.authorRole,
+    required this.body,
+    required this.hopCount,
+    required this.maxHops,
+    required this.isRead,
+    required this.needsServerSync,
+    required this.rawPacket,
+    required this.createdAt,
+    this.threadId,
+    this.recipientIdentifier,
+    this.title,
+    this.category,
+  });
+
+  final String id;
+  final String messageId;
+  final String itemType;
+  final String recipientScope;
+  final String? threadId;
+  final String? recipientIdentifier;
+  final String authorDisplayName;
+  final String authorRole;
+  final String? title;
+  final String body;
+  final String? category;
+  final int hopCount;
+  final int maxHops;
+  final bool isRead;
+  final bool needsServerSync;
+  final Map<String, dynamic> rawPacket;
+  final String createdAt;
+
+  factory MeshInboxItem.fromPacket(
+    MeshPacket packet, {
+    required bool isRead,
+    required bool needsServerSync,
+  }) {
+    final payload = packet.payload;
+    final isPost = packet.payloadType == MeshPayloadType.meshPost;
+    return MeshInboxItem(
+      id: packet.messageId,
+      messageId: packet.messageId,
+      itemType: isPost ? 'mesh_post' : 'mesh_message',
+      recipientScope: isPost
+          ? 'broadcast'
+          : (payload['recipientScope'] as String? ?? 'broadcast'),
+      threadId: isPost ? null : payload['threadId'] as String?,
+      recipientIdentifier: isPost
+          ? null
+          : payload['recipientIdentifier'] as String?,
+      authorDisplayName: isPost
+          ? 'Department Broadcast'
+          : (payload['authorDisplayName'] as String? ?? 'Unknown'),
+      authorRole: isPost
+          ? 'department'
+          : (payload['authorRole'] as String? ?? 'anonymous'),
+      title: isPost ? payload['title'] as String? : null,
+      body: isPost
+          ? (payload['body'] as String? ?? '')
+          : (payload['body'] as String? ?? ''),
+      category: isPost ? payload['category'] as String? : null,
+      hopCount: packet.hopCount,
+      maxHops: packet.maxHops,
+      isRead: isRead,
+      needsServerSync: needsServerSync,
+      rawPacket: packet.toJson(),
+      createdAt: packet.timestamp,
+    );
+  }
+
+  factory MeshInboxItem.fromJson(Map<String, dynamic> json) {
+    return MeshInboxItem(
+      id: json['id'] as String? ?? '',
+      messageId: json['messageId'] as String? ?? '',
+      itemType: json['itemType'] as String? ?? 'mesh_message',
+      recipientScope: json['recipientScope'] as String? ?? 'broadcast',
+      threadId: json['threadId'] as String?,
+      recipientIdentifier: json['recipientIdentifier'] as String?,
+      authorDisplayName: json['authorDisplayName'] as String? ?? 'Unknown',
+      authorRole: json['authorRole'] as String? ?? 'anonymous',
+      title: json['title'] as String?,
+      body: json['body'] as String? ?? '',
+      category: json['category'] as String?,
+      hopCount: json['hopCount'] as int? ?? 0,
+      maxHops: json['maxHops'] as int? ?? 7,
+      isRead: json['isRead'] == true,
+      needsServerSync: json['needsServerSync'] != false,
+      rawPacket: json['rawPacket'] as Map<String, dynamic>? ?? {},
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'messageId': messageId,
+      'itemType': itemType,
+      'recipientScope': recipientScope,
+      'threadId': threadId,
+      'recipientIdentifier': recipientIdentifier,
+      'authorDisplayName': authorDisplayName,
+      'authorRole': authorRole,
+      'title': title,
+      'body': body,
+      'category': category,
+      'hopCount': hopCount,
+      'maxHops': maxHops,
+      'isRead': isRead,
+      'needsServerSync': needsServerSync,
+      'rawPacket': rawPacket,
+      'createdAt': createdAt,
+    };
+  }
+
+  MeshInboxItem copyWith({
+    bool? isRead,
+    bool? needsServerSync,
+    int? hopCount,
+    int? maxHops,
+    Map<String, dynamic>? rawPacket,
+  }) {
+    return MeshInboxItem(
+      id: id,
+      messageId: messageId,
+      itemType: itemType,
+      recipientScope: recipientScope,
+      threadId: threadId,
+      recipientIdentifier: recipientIdentifier,
+      authorDisplayName: authorDisplayName,
+      authorRole: authorRole,
+      title: title,
+      body: body,
+      category: category,
+      hopCount: hopCount ?? this.hopCount,
+      maxHops: maxHops ?? this.maxHops,
+      isRead: isRead ?? this.isRead,
+      needsServerSync: needsServerSync ?? this.needsServerSync,
+      rawPacket: rawPacket ?? this.rawPacket,
+      createdAt: createdAt,
+    );
+  }
+}
+
 class MeshTransportService {
+  MeshTransportService({MeshInboxStorage? inboxStorage})
+    : _inboxStorage = inboxStorage,
+      _localDeviceId = _generateUuid();
+
+  final MeshInboxStorage? _inboxStorage;
+  final String _localDeviceId;
   MeshNodeRole _role = MeshNodeRole.origin;
   final List<MeshPeer> _peers = [];
   final Set<String> _seenMessageIds = {};
   final List<MeshPacket> _outboundQueue = [];
+  final List<MeshInboxItem> _inbox = [];
   final StreamController<MeshPacket> _packetController =
       StreamController<MeshPacket>.broadcast();
   DateTime? _lastSyncTime;
@@ -123,8 +281,8 @@ class MeshTransportService {
   bool _hasInternet = false;
   bool _isSosBeaconBroadcasting = false;
   String? _sosBeaconDeviceId;
+  bool _hydratedInbox = false;
 
-  // read-only accessors
   MeshNodeRole get role => _role;
   List<MeshPeer> get peers => List.unmodifiable(_peers);
   int get peerCount => _peers.length;
@@ -135,69 +293,98 @@ class MeshTransportService {
   bool get isSosBeaconBroadcasting => _isSosBeaconBroadcasting;
   String? get sosBeaconDeviceId => _sosBeaconDeviceId;
   Stream<MeshPacket> get packetStream => _packetController.stream;
+  String get localDeviceId => _localDeviceId;
+  bool get isMeshOnlyState => !_hasInternet;
+  List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
+  int get unreadMeshMessageCount =>
+      _inbox.where((item) => !item.isRead && item.itemType == 'mesh_message').length;
+
+  List<MeshInboxItem> threadItems(String threadId) {
+    return _sortedInbox()
+        .where((item) => item.threadId == threadId)
+        .toList(growable: false);
+  }
 
   Future<void> initialize() async {
-    // detect connectivity and set initial role
     _role = _hasInternet ? MeshNodeRole.gateway : MeshNodeRole.origin;
+    await _hydrateInbox();
   }
 
-  // start BLE discovery for nearby mesh peers
+  Future<void> _hydrateInbox() async {
+    final storage = _inboxStorage;
+    if (_hydratedInbox || storage == null) {
+      return;
+    }
+    final stored = await storage.load();
+    _inbox
+      ..clear()
+      ..addAll(stored.map(MeshInboxItem.fromJson));
+    for (final item in _inbox) {
+      _seenMessageIds.add(item.messageId);
+    }
+    _hydratedInbox = true;
+    if (_role == MeshNodeRole.gateway) {
+      _rehydratePendingInboxPackets();
+    }
+  }
+
+  Future<void> _persistInbox() async {
+    final storage = _inboxStorage;
+    if (storage == null) {
+      return;
+    }
+    await storage.save(_inbox.map((item) => item.toJson()).toList());
+  }
+
   Future<void> startDiscovery() async {
     _isDiscovering = true;
-    // nearby_connections.startDiscovery() would be called here
-    // on peer found: _onPeerDiscovered(endpointId, deviceName)
   }
 
-  // stop discovery
   Future<void> stopDiscovery() async {
     _isDiscovering = false;
   }
 
-  // update internet connectivity status
   void setConnectivity(bool hasInternet) {
     _hasInternet = hasInternet;
     if (hasInternet && _role != MeshNodeRole.gateway) {
       _role = MeshNodeRole.gateway;
+      _rehydratePendingInboxPackets();
     } else if (!hasInternet && _role == MeshNodeRole.gateway) {
       _role = MeshNodeRole.origin;
     }
   }
 
-  // queue a packet for mesh broadcast
   void enqueuePacket(MeshPacket packet) {
     _outboundQueue.add(packet);
     _seenMessageIds.add(packet.messageId);
+    _recordPacketInInbox(packet, authoredLocally: true);
   }
 
-  // receive an incoming packet from another peer
   bool receivePacket(MeshPacket packet) {
-    // dedup: skip if already seen
     if (_seenMessageIds.contains(packet.messageId)) {
       return false;
     }
-    _seenMessageIds.add(packet.messageId);
-
-    // drop if hop limit exceeded
+    if (_isDirectMessage(packet) && !_isPacketForThisDevice(packet)) {
+      return false;
+    }
     if (packet.hopCount >= packet.maxHops) {
       return false;
     }
 
-    // increment hop count for relay
+    _seenMessageIds.add(packet.messageId);
     packet.hopCount++;
 
-    // if we're a gateway, queue for server upload
     if (_role == MeshNodeRole.gateway) {
       _outboundQueue.add(packet);
     }
 
+    _recordPacketInInbox(packet, authoredLocally: false);
     _packetController.add(packet);
-
-    // relay to other peers (would call nearby_connections.sendPayload)
     return true;
   }
 
-  // get all queued packets for gateway upload
   List<MeshPacket> drainQueue() {
+    _rehydratePendingInboxPackets();
     final packets = List<MeshPacket>.from(_outboundQueue)
       ..sort(
         (a, b) =>
@@ -208,17 +395,113 @@ class MeshTransportService {
     return packets;
   }
 
-  // process SYNC_ACK packets from server
   void processSyncAcks(List<Map<String, dynamic>> acks) {
+    var changed = false;
     for (final ack in acks) {
       final msgId = ack['messageId'] as String? ?? '';
-      if (msgId.isNotEmpty) {
-        _seenMessageIds.add(msgId);
+      if (msgId.isEmpty) {
+        continue;
       }
+      _seenMessageIds.add(msgId);
+      final index = _inbox.indexWhere((item) => item.messageId == msgId);
+      if (index >= 0) {
+        _inbox[index] = _inbox[index].copyWith(needsServerSync: false);
+        changed = true;
+      }
+    }
+    if (changed) {
+      unawaited(_persistInbox());
     }
   }
 
-  // handle peer discovery callback
+  void ingestServerMessages(List<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      final messageId = row['message_id'] as String? ?? '';
+      if (messageId.isEmpty || _inbox.any((item) => item.messageId == messageId)) {
+        continue;
+      }
+      _inbox.add(
+        MeshInboxItem(
+          id: row['id'] as String? ?? messageId,
+          messageId: messageId,
+          itemType: 'mesh_message',
+          recipientScope: row['recipient_scope'] as String? ?? 'broadcast',
+          threadId: row['thread_id'] as String?,
+          recipientIdentifier: row['recipient_identifier'] as String?,
+          authorDisplayName: row['author_display_name'] as String? ?? 'Unknown',
+          authorRole: row['author_role'] as String? ?? 'anonymous',
+          body: row['body'] as String? ?? '',
+          hopCount: 0,
+          maxHops: 7,
+          isRead: false,
+          needsServerSync: false,
+          rawPacket: const {},
+          createdAt: row['created_at'] as String? ?? '',
+        ),
+      );
+    }
+    unawaited(_persistInbox());
+  }
+
+  void ingestServerMeshPosts(List<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      final messageId = row['mesh_message_id'] as String?;
+      final fallbackId = row['id'] as String? ?? '';
+      final uniqueId = messageId ?? 'mesh-post-$fallbackId';
+      if (_inbox.any((item) => item.messageId == uniqueId)) {
+        continue;
+      }
+      _inbox.add(
+        MeshInboxItem(
+          id: fallbackId,
+          messageId: uniqueId,
+          itemType: 'mesh_post',
+          recipientScope: 'broadcast',
+          authorDisplayName: 'Department Broadcast',
+          authorRole: 'department',
+          title: row['title'] as String?,
+          body: row['content'] as String? ?? '',
+          category: row['category'] as String?,
+          hopCount: 0,
+          maxHops: 7,
+          isRead: false,
+          needsServerSync: false,
+          rawPacket: const {},
+          createdAt: row['created_at'] as String? ?? '',
+        ),
+      );
+    }
+    unawaited(_persistInbox());
+  }
+
+  void markAllCommsRead() {
+    var changed = false;
+    for (var index = 0; index < _inbox.length; index++) {
+      if (_inbox[index].isRead) {
+        continue;
+      }
+      _inbox[index] = _inbox[index].copyWith(isRead: true);
+      changed = true;
+    }
+    if (changed) {
+      unawaited(_persistInbox());
+    }
+  }
+
+  void markThreadRead(String threadId) {
+    var changed = false;
+    for (var index = 0; index < _inbox.length; index++) {
+      if (_inbox[index].threadId != threadId || _inbox[index].isRead) {
+        continue;
+      }
+      _inbox[index] = _inbox[index].copyWith(isRead: true);
+      changed = true;
+    }
+    if (changed) {
+      unawaited(_persistInbox());
+    }
+  }
+
   void onPeerDiscovered(String endpointId, String deviceName) {
     final existing = _peers.where((p) => p.endpointId == endpointId);
     if (existing.isNotEmpty) {
@@ -228,7 +511,6 @@ class MeshTransportService {
     }
   }
 
-  // remove stale peers (not seen in last 5 minutes)
   void pruneStalePeers() {
     final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
     _peers.removeWhere((p) => p.lastSeen.isBefore(cutoff));
@@ -236,7 +518,6 @@ class MeshTransportService {
 
   void pruneStaleePeers() => pruneStalePeers();
 
-  // decide transport: BLE for small, WiFi Direct for >10KB
   String transportForPacket(MeshPacket packet) {
     return packet.requiresWifiDirect ? 'wifi_direct' : 'ble';
   }
@@ -251,14 +532,64 @@ class MeshTransportService {
     _sosBeaconDeviceId = null;
   }
 
-  // estimate mesh reach based on peer count and avg hops
+  void _recordPacketInInbox(
+    MeshPacket packet, {
+    required bool authoredLocally,
+  }) {
+    if (packet.payloadType != MeshPayloadType.meshMessage &&
+        packet.payloadType != MeshPayloadType.meshPost) {
+      return;
+    }
+
+    final nextItem = MeshInboxItem.fromPacket(
+      packet,
+      isRead: authoredLocally,
+      needsServerSync: true,
+    );
+    final index = _inbox.indexWhere((item) => item.messageId == packet.messageId);
+    if (index >= 0) {
+      _inbox[index] = nextItem.copyWith(
+        isRead: authoredLocally ? true : _inbox[index].isRead,
+      );
+    } else {
+      _inbox.add(nextItem);
+    }
+    unawaited(_persistInbox());
+  }
+
+  void _rehydratePendingInboxPackets() {
+    for (final item in _inbox.where((entry) => entry.needsServerSync)) {
+      if (_outboundQueue.any((packet) => packet.messageId == item.messageId)) {
+        continue;
+      }
+      if (item.rawPacket.isEmpty) {
+        continue;
+      }
+      _outboundQueue.add(MeshPacket.fromJson(item.rawPacket));
+    }
+  }
+
+  bool _isDirectMessage(MeshPacket packet) {
+    return packet.payloadType == MeshPayloadType.meshMessage &&
+        (packet.payload['recipientScope'] as String? ?? '').toLowerCase() == 'direct';
+  }
+
+  bool _isPacketForThisDevice(MeshPacket packet) {
+    final recipient = packet.payload['recipientIdentifier'] as String?;
+    return recipient == _localDeviceId || recipient == packet.originDeviceId;
+  }
+
   int _estimateReach() {
     if (_peers.isEmpty) return 1;
-    // rough estimate: each peer extends reach by ~2 devices
     return min(_peers.length * 2, 50);
   }
 
-  // create a distress packet with maxHops=15, no login required
+  List<MeshInboxItem> _sortedInbox() {
+    final items = List<MeshInboxItem>.from(_inbox);
+    items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return items;
+  }
+
   static MeshPacket createDistressPacket({
     required String deviceId,
     double? latitude,
@@ -271,7 +602,7 @@ class MeshTransportService {
       messageId: _generateUuid(),
       originDeviceId: deviceId,
       timestamp: DateTime.now().toUtc().toIso8601String(),
-      maxHops: 15, // distress gets wider propagation
+      maxHops: 15,
       payloadType: MeshPayloadType.distress,
       payload: {
         'latitude': latitude,
@@ -283,7 +614,6 @@ class MeshTransportService {
     );
   }
 
-  // create an offline incident report packet
   static MeshPacket createIncidentPacket({
     required String deviceId,
     required String description,
@@ -311,7 +641,6 @@ class MeshTransportService {
     );
   }
 
-  // create an offline announcement packet (requires dept verification token)
   static MeshPacket createAnnouncementPacket({
     required String deviceId,
     required String departmentId,
@@ -337,6 +666,60 @@ class MeshTransportService {
     );
   }
 
+  static MeshPacket createMeshMessagePacket({
+    required String deviceId,
+    required String threadId,
+    required String recipientScope,
+    String? recipientIdentifier,
+    required String body,
+    required String authorDisplayName,
+    required String authorRole,
+    String? authorOfflineToken,
+  }) {
+    return MeshPacket(
+      messageId: _generateUuid(),
+      originDeviceId: deviceId,
+      timestamp: DateTime.now().toUtc().toIso8601String(),
+      payloadType: MeshPayloadType.meshMessage,
+      payload: {
+        'threadId': threadId,
+        'recipientScope': recipientScope,
+        'recipientIdentifier': recipientIdentifier,
+        'body': body,
+        'authorDisplayName': authorDisplayName,
+        'authorRole': authorRole,
+        'authorOfflineToken': authorOfflineToken,
+      },
+    );
+  }
+
+  static MeshPacket createMeshPostPacket({
+    required String deviceId,
+    required String postId,
+    required String category,
+    required String title,
+    required String body,
+    required String authorDepartmentId,
+    required String authorOfflineToken,
+    List<String> attachmentRefs = const [],
+  }) {
+    return MeshPacket(
+      messageId: _generateUuid(),
+      originDeviceId: deviceId,
+      timestamp: DateTime.now().toUtc().toIso8601String(),
+      payloadType: MeshPayloadType.meshPost,
+      payload: {
+        'postId': postId,
+        'category': category,
+        'title': title,
+        'body': body,
+        'authorDepartmentId': authorDepartmentId,
+        'authorOfflineToken': authorOfflineToken,
+        'attachmentRefs': attachmentRefs,
+      },
+    );
+  }
+
   static MeshPacket createSurvivorResolvePacket({
     required String deviceId,
     required String survivorMessageId,
@@ -359,6 +742,27 @@ class MeshTransportService {
     );
   }
 
+  static String generateUuid() => _generateUuid();
+
+  static String broadcastThreadId() => '00000000-0000-4000-8000-000000000001';
+
+  static String departmentThreadId(String departmentId) {
+    final digest = md5Hash('department:$departmentId');
+    return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
+        '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
+        '${digest.substring(20, 32)}';
+  }
+
+  static String md5Hash(String input) {
+    final bytes = utf8.encode(input);
+    var hash = 0;
+    for (final byte in bytes) {
+      hash = ((hash * 31) + byte) & 0x7fffffff;
+    }
+    final seed = hash.toRadixString(16).padLeft(8, '0');
+    return (seed * 4).substring(0, 32);
+  }
+
   static Map<String, dynamic> _buildSurvivorResolvePayload(
     String survivorMessageId,
     String? signalId,
@@ -379,7 +783,6 @@ class MeshTransportService {
     return m;
   }
 
-  // imperative map builders to avoid use_null_aware_elements lint
   static Map<String, dynamic> _buildIncidentPayload(
     String description,
     String category,
@@ -420,13 +823,11 @@ class MeshTransportService {
     return m;
   }
 
-  // Distress and survivor detection packets drain first so gateway uploads keep
-  // life-safety traffic ahead of routine reports and acknowledgements.
   static int _priorityFor(MeshPayloadType payloadType) {
     return switch (payloadType) {
       MeshPayloadType.distress || MeshPayloadType.survivorSignal => 0,
-      MeshPayloadType.statusUpdate => 1,
-      MeshPayloadType.announcement => 2,
+      MeshPayloadType.statusUpdate || MeshPayloadType.meshMessage => 1,
+      MeshPayloadType.announcement || MeshPayloadType.meshPost => 2,
       MeshPayloadType.incidentReport => 3,
       MeshPayloadType.syncAck => 4,
     };
@@ -436,12 +837,11 @@ class MeshTransportService {
     _packetController.close();
   }
 
-  // simple uuid v4 generator
   static String _generateUuid() {
     final rng = Random();
     final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
-    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
     final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'

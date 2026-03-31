@@ -8,6 +8,9 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
+
+from dispatch_api.services.offline_token_service import OfflineTokenService
 
 from dispatch_api.errors import ApiError
 
@@ -20,6 +23,8 @@ VALID_PAYLOAD_TYPES = {
     "SURVIVOR_SIGNAL",
     "STATUS_UPDATE",
     "SYNC_ACK",
+    "MESH_MESSAGE",
+    "MESH_POST",
 }
 
 MAX_HOPS_DEFAULT = 7
@@ -28,10 +33,14 @@ MAX_HOPS_SURVIVOR_SIGNAL = 15
 TOPOLOGY_STALE_AFTER_MINUTES = 5
 TOPOLOGY_ACTIVE_WINDOW_MINUTES = 30
 
+VALID_RECIPIENT_SCOPES = {"broadcast", "department", "direct"}
+VALID_MESSAGE_AUTHOR_ROLES = {"citizen", "department", "anonymous"}
+
 
 class MeshService:
-    def __init__(self, client) -> None:
+    def __init__(self, client, offline_token_service: OfflineTokenService | None = None) -> None:
         self.client = client
+        self.offline_token_service = offline_token_service
 
     # -- batch ingest from a gateway device --
     def ingest_packets(self, packets: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -153,12 +162,22 @@ class MeshService:
         history = self.client.db_query(
             "report_status_history", params=history_params, use_service_role=True
         )
+        mesh_posts = [
+            row
+            for row in self.client.db_query(
+                "posts",
+                params={"select": "*", "order": "created_at.desc", "limit": "50"},
+                use_service_role=True,
+            )
+            if row.get("mesh_originated") or row.get("is_mesh_origin")
+        ]
 
         return {
             "report_updates": reports,
             "distress_signals": distress,
             "survivor_signals": [_decorate_survivor_signal(row) for row in survivor_rows],
             "status_history": history,
+            "mesh_posts": mesh_posts,
             "synced_at": datetime.now(tz=UTC).isoformat(),
         }
 
@@ -245,6 +264,73 @@ class MeshService:
         resolved_row = rows[0] if rows else existing[0]
         return _decorate_survivor_signal(resolved_row)
 
+    def list_messages(
+        self,
+        *,
+        thread_id: str | None = None,
+        viewer_user_id: str | None = None,
+        viewer_role: str | None = None,
+        viewer_department_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, str] = {"select": "*", "order": "created_at.asc", "limit": "200"}
+        if thread_id:
+            params["thread_id"] = f"eq.{thread_id}"
+
+        rows = self.client.db_query(
+            "mesh_comms_messages",
+            params=params,
+            use_service_role=True,
+        )
+        return [
+            _serialize_mesh_message(row)
+            for row in rows
+            if self._viewer_can_access_message(
+                row,
+                viewer_user_id=viewer_user_id,
+                viewer_role=viewer_role,
+                viewer_department_id=viewer_department_id,
+            )
+        ]
+
+    def list_mesh_posts(self) -> list[dict[str, Any]]:
+        rows = self.client.db_query(
+            "posts",
+            params={"select": "*", "order": "created_at.desc", "limit": "50"},
+            use_service_role=True,
+        )
+        return [
+            row
+            for row in rows
+            if row.get("mesh_originated") or row.get("is_mesh_origin")
+        ]
+
+    def _viewer_can_access_message(
+        self,
+        row: dict[str, Any],
+        *,
+        viewer_user_id: str | None,
+        viewer_role: str | None,
+        viewer_department_id: str | None,
+    ) -> bool:
+        scope = str(row.get("recipient_scope") or "broadcast").lower()
+        if scope == "broadcast":
+            return True
+        if scope == "department":
+            return viewer_role == "municipality" or (
+                viewer_role == "department"
+                and viewer_department_id is not None
+                and str(row.get("recipient_identifier") or "") == str(viewer_department_id)
+            )
+        if scope == "direct":
+            participants = {
+                str(row.get("author_identifier") or ""),
+                str(row.get("recipient_identifier") or ""),
+            }
+            return viewer_role == "municipality" or (
+                viewer_user_id is not None and str(viewer_user_id) in participants
+            )
+        return False
+
     # -- process one mesh packet --
     def _process_single(self, pkt: dict[str, Any]) -> dict[str, Any]:
         message_id = pkt.get("messageId", "")
@@ -309,6 +395,10 @@ class MeshService:
                 )
             elif payload_type == "STATUS_UPDATE":
                 linked_id = self._process_status_update(payload)
+            elif payload_type == "MESH_MESSAGE":
+                linked_id = self._process_mesh_message(message_id, payload)
+            elif payload_type == "MESH_POST":
+                linked_id = self._process_mesh_post(message_id, payload)
 
             self.client.db_update(
                 "mesh_messages",
@@ -384,11 +474,12 @@ class MeshService:
 
         if not dept_id:
             raise ApiError("Announcement missing department_id.", code="validation_error")
-        if not offline_token:
-            raise ApiError(
-                "Announcement missing offline verification token.",
-                code="token_missing",
-            )
+
+        token_payload = self._validate_offline_token(
+            offline_token,
+            expected_role="department",
+            expected_department_id=str(dept_id),
+        )
 
         depts = self.client.db_query(
             "departments",
@@ -403,12 +494,13 @@ class MeshService:
 
         row = {
             "department_id": dept_id,
-            "author_id": payload.get("author_id", depts[0].get("user_id", "")),
+            "author_id": token_payload.get("sub") or payload.get("author_id") or depts[0].get("user_id", ""),
             "title": payload.get("title", "Offline Announcement"),
             "content": payload.get("content", ""),
             "category": payload.get("category", "update"),
             "image_urls": payload.get("image_urls", []),
             "is_mesh_origin": True,
+            "mesh_originated": True,
             "mesh_message_id": message_id,
             "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
         }
@@ -486,6 +578,167 @@ class MeshService:
         }
         rows = self.client.db_insert("survivor_signals", data=row, use_service_role=True)
         return rows[0]["id"] if rows else None
+
+    def _process_mesh_message(self, message_id: str, payload: dict[str, Any]) -> str | None:
+        thread_id = _require_uuid(payload.get("threadId"), field_name="threadId")
+        recipient_scope = str(payload.get("recipientScope") or "").strip().lower()
+        recipient_identifier = payload.get("recipientIdentifier")
+        body = str(payload.get("body") or "").strip()
+        author_display_name = str(payload.get("authorDisplayName") or "").strip()
+        author_role = str(payload.get("authorRole") or "").strip().lower()
+        author_token = payload.get("authorOfflineToken")
+
+        if recipient_scope not in VALID_RECIPIENT_SCOPES:
+            raise ApiError("Mesh message recipientScope is invalid.", code="validation_error")
+        if recipient_scope in {"department", "direct"} and not recipient_identifier:
+            raise ApiError(
+                "Mesh message recipientIdentifier is required for this scope.",
+                code="validation_error",
+            )
+        if not body or len(body) > 500:
+            raise ApiError("Mesh message body must be 1 to 500 characters.", code="validation_error")
+        if not author_display_name:
+            raise ApiError("Mesh message authorDisplayName is required.", code="validation_error")
+        if author_role not in VALID_MESSAGE_AUTHOR_ROLES:
+            raise ApiError("Mesh message authorRole is invalid.", code="validation_error")
+        if recipient_scope == "department" and author_role != "department":
+            raise ApiError(
+                "Only department responders can send department-scoped mesh messages.",
+                code="validation_error",
+            )
+
+        author_identifier = None
+        author_department_id = None
+        if author_role != "anonymous":
+            token_payload = self._validate_offline_token(author_token, expected_role=author_role)
+            author_identifier = token_payload.get("sub")
+            author_department_id = token_payload.get("department_id")
+
+        row = {
+            "thread_id": str(thread_id),
+            "message_id": message_id,
+            "recipient_scope": recipient_scope,
+            "recipient_identifier": recipient_identifier,
+            "body": body,
+            "author_display_name": author_display_name,
+            "author_role": author_role,
+            "author_identifier": author_identifier,
+            "author_department_id": author_department_id,
+            "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
+        }
+        rows = self.client.db_insert("mesh_comms_messages", data=row, use_service_role=True)
+        inserted = rows[0] if rows else None
+
+        if recipient_scope == "direct" and recipient_identifier:
+            self._notify_direct_mesh_recipient(
+                recipient_identifier=str(recipient_identifier),
+                body=body,
+                thread_id=str(thread_id),
+                linked_record_id=(inserted or {}).get("id"),
+                author_display_name=author_display_name,
+            )
+
+        return (inserted or {}).get("id")
+
+    def _process_mesh_post(self, message_id: str, payload: dict[str, Any]) -> str | None:
+        post_id = _require_uuid(payload.get("postId"), field_name="postId")
+        category = str(payload.get("category") or "").strip()
+        title = str(payload.get("title") or "").strip()
+        body = str(payload.get("body") or "").strip()
+        department_id = payload.get("authorDepartmentId")
+        author_token = payload.get("authorOfflineToken")
+        attachment_refs = payload.get("attachmentRefs") or []
+
+        if category not in {"alert", "warning", "safety_tip", "update", "situational_report"}:
+            raise ApiError("Mesh post category is invalid.", code="validation_error")
+        if not title or len(title) > 100:
+            raise ApiError("Mesh post title must be 1 to 100 characters.", code="validation_error")
+        if not body or len(body) > 1000:
+            raise ApiError("Mesh post body must be 1 to 1000 characters.", code="validation_error")
+        if not department_id:
+            raise ApiError("Mesh post authorDepartmentId is required.", code="validation_error")
+        if not isinstance(attachment_refs, list):
+            raise ApiError("Mesh post attachmentRefs must be an array.", code="validation_error")
+
+        token_payload = self._validate_offline_token(
+            author_token,
+            expected_role="department",
+            expected_department_id=str(department_id),
+        )
+        departments = self.client.db_query(
+            "departments",
+            params={"select": "id,verification_status,user_id", "id": f"eq.{department_id}"},
+            use_service_role=True,
+        )
+        if not departments or departments[0].get("verification_status") != "approved":
+            raise ApiError(
+                "Department not verified - mesh post rejected.",
+                code="token_invalid",
+            )
+
+        row = {
+            "id": str(post_id),
+            "department_id": department_id,
+            "author_id": token_payload.get("sub") or departments[0].get("user_id"),
+            "title": title,
+            "content": body,
+            "category": category,
+            "image_urls": attachment_refs,
+            "mesh_message_id": message_id,
+            "is_mesh_origin": True,
+            "mesh_originated": True,
+            "created_at": payload.get("timestamp", datetime.now(tz=UTC).isoformat()),
+        }
+        rows = self.client.db_insert("posts", data=row, use_service_role=True)
+        return rows[0]["id"] if rows else None
+
+    def _notify_direct_mesh_recipient(
+        self,
+        *,
+        recipient_identifier: str,
+        body: str,
+        thread_id: str,
+        linked_record_id: str | None,
+        author_display_name: str,
+    ) -> None:
+        users = self.client.db_query(
+            "users",
+            params={"select": "id", "id": f"eq.{recipient_identifier}"},
+            use_service_role=True,
+        )
+        if not users:
+            return
+
+        preview = body if len(body) <= 120 else f"{body[:117]}..."
+        self.client.db_insert(
+            "notifications",
+            data={
+                "user_id": recipient_identifier,
+                "type": "announcement",
+                "title": "Direct mesh message",
+                "message": f"{author_display_name}: {preview}",
+                "reference_id": linked_record_id,
+                "reference_type": f"mesh_thread:{thread_id}",
+                "created_at": datetime.now(tz=UTC).isoformat(),
+            },
+            use_service_role=True,
+            return_repr=False,
+        )
+
+    def _validate_offline_token(
+        self,
+        token: str | None,
+        *,
+        expected_role: str | None = None,
+        expected_department_id: str | None = None,
+    ) -> dict[str, Any]:
+        if self.offline_token_service is None:
+            raise ApiError("Offline token verification is unavailable.", code="token_invalid")
+        return self.offline_token_service.validate_token(
+            token or "",
+            expected_role=expected_role,
+            expected_department_id=expected_department_id,
+        )
 
     # -- status update: last-write-wins by timestamp --
     def _process_status_update(self, payload: dict[str, Any]) -> str | None:
@@ -624,8 +877,35 @@ def _record_type_for(
         "ANNOUNCEMENT": "post",
         "DISTRESS": "distress_signal",
         "SURVIVOR_SIGNAL": "survivor_signal",
+        "MESH_MESSAGE": "mesh_comm_message",
+        "MESH_POST": "post",
         "SYNC_ACK": None,
     }.get(payload_type)
+
+
+def _require_uuid(value: Any, *, field_name: str) -> UUID:
+    if not isinstance(value, str) or not value.strip():
+        raise ApiError(f"{field_name} is required.", code="validation_error")
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise ApiError(f"{field_name} must be a valid UUID.", code="validation_error") from exc
+
+
+def _serialize_mesh_message(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "thread_id": row.get("thread_id"),
+        "message_id": row.get("message_id"),
+        "recipient_scope": row.get("recipient_scope"),
+        "recipient_identifier": row.get("recipient_identifier"),
+        "body": row.get("body"),
+        "author_display_name": row.get("author_display_name"),
+        "author_role": row.get("author_role"),
+        "author_identifier": row.get("author_identifier"),
+        "author_department_id": row.get("author_department_id"),
+        "created_at": row.get("created_at"),
+    }
 
 
 # GeoJSON helpers keep the web map thin and consistent across endpoints.

@@ -1,4 +1,4 @@
-"""Phase 4 API tests — mesh ingest, dedup, distress, sync, and token validation."""
+"""Phase 4 API tests â€” mesh ingest, dedup, distress, sync, and token validation."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ import pytest
 
 from dispatch_api.app import create_app
 from dispatch_api.config import Settings
+from dispatch_api.services.offline_token_service import OfflineTokenService
 
-# ── Helpers ────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class FakeUser:
@@ -140,7 +141,7 @@ def _packet(
     }
 
 
-# ── Ingest endpoint ──────────────────────────────────────────
+# â”€â”€ Ingest endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshIngest:
@@ -199,7 +200,7 @@ class TestMeshIngest:
             assert "hop limit" in data["results"][0]["error"]
 
 
-# ── Deduplication ─────────────────────────────────────────────
+# â”€â”€ Deduplication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshDedup:
@@ -228,7 +229,7 @@ class TestMeshDedup:
             assert data["processed_count"] == 2
 
 
-# ── Distress signal ───────────────────────────────────────────
+# â”€â”€ Distress signal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshDistress:
@@ -288,7 +289,7 @@ class TestMeshDistress:
             assert data["results"][0]["messageId"] == "sos-2"
 
 
-# ── Announcement token validation ─────────────────────────────
+# â”€â”€ Announcement token validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshAnnouncement:
@@ -330,7 +331,12 @@ class TestMeshAnnouncement:
             ptype="ANNOUNCEMENT",
             payload={
                 "department_id": "dept-2",
-                "offline_verification_token": "some-token",
+                "offline_verification_token": _offline_token(
+                    settings,
+                    user_id="u2",
+                    role="department",
+                    department_id="dept-2",
+                ),
                 "title": "Test",
                 "content": "Body",
             },
@@ -355,7 +361,12 @@ class TestMeshAnnouncement:
             ptype="ANNOUNCEMENT",
             payload={
                 "department_id": "dept-3",
-                "offline_verification_token": "valid-token",
+                "offline_verification_token": _offline_token(
+                    settings,
+                    user_id="u3",
+                    role="department",
+                    department_id="dept-3",
+                ),
                 "title": "Alert",
                 "content": "Evacuation notice",
                 "category": "alert",
@@ -371,7 +382,7 @@ class TestMeshAnnouncement:
         assert post_inserts[0][1]["is_mesh_origin"] is True
 
 
-# ── Status update (last-write-wins) ──────────────────────────
+# â”€â”€ Status update (last-write-wins) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshStatusUpdate:
@@ -438,7 +449,7 @@ class TestMeshStatusUpdate:
             assert len(fake._updates) == 1  # only the mesh_messages update
 
 
-# ── Sync-updates endpoint ────────────────────────────────────
+# â”€â”€ Sync-updates endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshSyncUpdates:
@@ -476,7 +487,7 @@ class TestMeshSyncUpdates:
             assert resp.status_code == 200
 
 
-# ── SYNC_ACK generation ──────────────────────────────────────
+# â”€â”€ SYNC_ACK generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestSyncAcks:
@@ -803,3 +814,240 @@ class TestMeshSurvivorResolveStatusUpdate:
         assert survivor_updates[0][1]["resolution_note"] == "Located under the north stairwell."
         assert survivor_updates[0][1]["resolved_by"] == "dept-user-1"
 
+
+
+def _offline_token(
+    settings: Settings,
+    *,
+    user_id: str,
+    role: str,
+    department_id: str | None = None,
+    ttl_days: int = 30,
+) -> str:
+    return OfflineTokenService(
+        secret=settings.supabase_service_role_key,
+        ttl_days=ttl_days,
+    ).issue_token(user_id=user_id, role=role, department_id=department_id)
+
+
+class TestMeshCommunicationsIngest:
+    def test_mesh_message_ingested_and_direct_notification_created(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "users": [{"id": "citizen-recipient"}],
+            }
+        )
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="mesh-msg-1",
+            ptype="MESH_MESSAGE",
+            payload={
+                "threadId": "00000000-0000-4000-8000-000000000101",
+                "recipientScope": "direct",
+                "recipientIdentifier": "citizen-recipient",
+                "body": "Evacuate northbound through the school gate.",
+                "authorDisplayName": "Responder A",
+                "authorRole": "citizen",
+                "authorOfflineToken": _offline_token(
+                    settings,
+                    user_id="citizen-author",
+                    role="citizen",
+                ),
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            data = resp.get_json()
+            assert data["processed_count"] == 1
+            assert data["results"][0]["status"] == "processed"
+
+        message_inserts = [(t, d) for t, d in fake._inserts if t == "mesh_comms_messages"]
+        assert len(message_inserts) == 1
+        assert message_inserts[0][1]["recipient_scope"] == "direct"
+        assert message_inserts[0][1]["author_identifier"] == "citizen-author"
+
+        notif_inserts = [(t, d) for t, d in fake._inserts if t == "notifications"]
+        assert len(notif_inserts) == 1
+        assert notif_inserts[0][1]["user_id"] == "citizen-recipient"
+        assert notif_inserts[0][1]["title"] == "Direct mesh message"
+
+    def test_mesh_post_rejects_expired_offline_token(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "departments": [
+                    {"id": "dept-1", "verification_status": "approved", "user_id": "dept-user-1"}
+                ],
+            }
+        )
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="mesh-post-expired",
+            ptype="MESH_POST",
+            payload={
+                "postId": "00000000-0000-4000-8000-000000000201",
+                "category": "alert",
+                "title": "Bridge closure",
+                "body": "Bridge is unsafe for crossing.",
+                "authorDepartmentId": "dept-1",
+                "authorOfflineToken": _offline_token(
+                    settings,
+                    user_id="dept-user-1",
+                    role="department",
+                    department_id="dept-1",
+                    ttl_days=-1,
+                ),
+                "attachmentRefs": [],
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            data = resp.get_json()
+            assert data["error_count"] == 1
+            assert "expired" in data["results"][0]["error"].lower()
+
+    def test_mesh_post_persists_mesh_originated_flag(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "departments": [
+                    {"id": "dept-2", "verification_status": "approved", "user_id": "dept-user-2"}
+                ],
+            }
+        )
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="mesh-post-1",
+            ptype="MESH_POST",
+            payload={
+                "postId": "00000000-0000-4000-8000-000000000202",
+                "category": "warning",
+                "title": "River surge watch",
+                "body": "Move equipment away from the floodplain.",
+                "authorDepartmentId": "dept-2",
+                "authorOfflineToken": _offline_token(
+                    settings,
+                    user_id="dept-user-2",
+                    role="department",
+                    department_id="dept-2",
+                ),
+                "attachmentRefs": ["mesh://photo-1"],
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            data = resp.get_json()
+            assert data["processed_count"] == 1
+
+        post_inserts = [(t, d) for t, d in fake._inserts if t == "posts"]
+        assert len(post_inserts) == 1
+        assert post_inserts[0][1]["mesh_originated"] is True
+        assert post_inserts[0][1]["is_mesh_origin"] is True
+
+
+class TestMeshMessageRoutes:
+    def test_get_mesh_messages_filters_visible_threads_for_direct_recipient(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-recipient", email="citizen@test.com", role="citizen"),
+            db_rows={
+                "mesh_comms_messages": [
+                    {
+                        "id": "msg-1",
+                        "thread_id": "00000000-0000-4000-8000-000000000301",
+                        "message_id": "mesh-msg-visible-1",
+                        "recipient_scope": "broadcast",
+                        "recipient_identifier": None,
+                        "body": "Stay tuned to local advisories.",
+                        "author_display_name": "Ops Center",
+                        "author_role": "department",
+                        "author_identifier": "dept-user-1",
+                        "created_at": "2026-03-31T05:00:00Z",
+                    },
+                    {
+                        "id": "msg-2",
+                        "thread_id": "00000000-0000-4000-8000-000000000302",
+                        "message_id": "mesh-msg-visible-2",
+                        "recipient_scope": "direct",
+                        "recipient_identifier": "citizen-recipient",
+                        "body": "Nearest evacuation jeep is on Rizal Ave.",
+                        "author_display_name": "Responder B",
+                        "author_role": "department",
+                        "author_identifier": "dept-user-2",
+                        "created_at": "2026-03-31T05:01:00Z",
+                    },
+                    {
+                        "id": "msg-3",
+                        "thread_id": "00000000-0000-4000-8000-000000000303",
+                        "message_id": "mesh-msg-hidden",
+                        "recipient_scope": "direct",
+                        "recipient_identifier": "another-user",
+                        "body": "Hidden thread",
+                        "author_display_name": "Responder C",
+                        "author_role": "department",
+                        "author_identifier": "dept-user-3",
+                        "created_at": "2026-03-31T05:02:00Z",
+                    },
+                ],
+                "posts": [
+                    {
+                        "id": "mesh-post-web-1",
+                        "title": "Mesh advisory",
+                        "mesh_originated": True,
+                        "created_at": "2026-03-31T05:03:00Z",
+                    }
+                ],
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/messages",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert [message["id"] for message in data["messages"]] == ["msg-1", "msg-2"]
+            assert len(data["mesh_posts"]) == 1
+
+    def test_get_mesh_messages_returns_thread_history(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="dept-user-1", email="dept@test.com", role="department"),
+            db_rows={
+                "departments": [{"id": "dept-1", "user_id": "dept-user-1"}],
+                "mesh_comms_messages": [
+                    {
+                        "id": "msg-thread-1",
+                        "thread_id": "00000000-0000-4000-8000-000000000401",
+                        "message_id": "mesh-thread-1",
+                        "recipient_scope": "department",
+                        "recipient_identifier": "dept-1",
+                        "body": "Stage water rescue gear at checkpoint bravo.",
+                        "author_display_name": "Command",
+                        "author_role": "department",
+                        "author_identifier": "dept-user-1",
+                        "author_department_id": "dept-1",
+                        "created_at": "2026-03-31T05:10:00Z",
+                    },
+                    {
+                        "id": "msg-thread-2",
+                        "thread_id": "00000000-0000-4000-8000-000000000499",
+                        "message_id": "mesh-thread-2",
+                        "recipient_scope": "broadcast",
+                        "recipient_identifier": None,
+                        "body": "This belongs to another thread.",
+                        "author_display_name": "Ops",
+                        "author_role": "department",
+                        "author_identifier": "dept-user-9",
+                        "created_at": "2026-03-31T05:11:00Z",
+                    },
+                ],
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/messages?threadId=00000000-0000-4000-8000-000000000401",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["messages"][0]["id"] == "msg-thread-1"

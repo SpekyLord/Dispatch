@@ -42,6 +42,28 @@ type SurvivorSignalResponse = {
   count: number;
 };
 
+type MeshCommsMessage = {
+  id: string;
+  thread_id?: string | null;
+  recipient_scope: string;
+  recipient_identifier?: string | null;
+  body: string;
+  author_display_name: string;
+  author_role: string;
+  created_at: string;
+};
+
+type MeshCommsResponse = {
+  messages: MeshCommsMessage[];
+  mesh_posts?: Array<{
+    id: string;
+    title: string;
+    content?: string;
+    category?: string;
+    created_at: string;
+  }>;
+};
+
 type MunicipalityReportResponse = {
   reports: Array<DisasterReportMarker | (Omit<DisasterReportMarker, "latitude" | "longitude"> & {
     latitude?: number | null;
@@ -123,6 +145,10 @@ export function MunicipalityMeshPage() {
   const [responderNodes, setResponderNodes] = useState<MeshTopologyNode[]>([]);
   const [survivorSignals, setSurvivorSignals] = useState<MeshSurvivorSignal[]>([]);
   const [reports, setReports] = useState<DisasterReportMarker[]>([]);
+  const [recentMessages, setRecentMessages] = useState<MeshCommsMessage[]>([]);
+  const [recentMeshPosts, setRecentMeshPosts] = useState<
+    Array<{ id: string; title: string; content?: string; category?: string; created_at: string }>
+  >([]);
   const [lastTopologySync, setLastTopologySync] = useState<string | null>(null);
   const [resolvingSignalId, setResolvingSignalId] = useState<string | null>(null);
 
@@ -144,6 +170,12 @@ export function MunicipalityMeshPage() {
     );
   }
 
+  async function fetchMessages() {
+    const response = await apiRequest<MeshCommsResponse>("/api/mesh/messages?include_posts=1");
+    setRecentMessages(response.messages.slice(-6).reverse());
+    setRecentMeshPosts((response.mesh_posts ?? []).slice(0, 4));
+  }
+
   async function fetchReports() {
     const response = await apiRequest<MunicipalityReportResponse>("/api/municipality/reports");
     setReports(response.reports.map(toMapReport).filter((report): report is DisasterReportMarker => report !== null));
@@ -158,7 +190,7 @@ export function MunicipalityMeshPage() {
     }
 
     try {
-      await Promise.all([fetchTopology(), fetchSignals(), fetchReports()]);
+      await Promise.all([fetchTopology(), fetchSignals(), fetchReports(), fetchMessages()]);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to load mesh dashboard.");
     } finally {
@@ -388,6 +420,56 @@ export function MunicipalityMeshPage() {
               </Card>
 
               <Card className={warmPanelClassName}>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Mesh comms</p>
+                <div className="mt-5 space-y-4">
+                  {recentMessages.length === 0 && recentMeshPosts.length === 0 ? (
+                    <p className="text-sm text-on-surface-variant">
+                      Mesh-routed conversations and posts will appear here after a gateway sync.
+                    </p>
+                  ) : (
+                    <>
+                      {recentMessages.map((message) => (
+                        <div key={message.id} className="rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                                {message.recipient_scope} mesh message
+                              </p>
+                              <p className="mt-2 text-base font-semibold text-on-surface">
+                                {message.author_display_name}
+                              </p>
+                            </div>
+                            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
+                              {message.author_role}
+                            </span>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{message.body}</p>
+                          <p className="mt-3 text-[12px] text-[#6f625b]">{formatDateTime(message.created_at)}</p>
+                        </div>
+                      ))}
+                      {recentMeshPosts.map((post) => (
+                        <div key={post.id} className="rounded-2xl border border-[#d8b7aa] bg-[#fff0ea] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                                Mesh post
+                              </p>
+                              <p className="mt-2 text-base font-semibold text-on-surface">{post.title}</p>
+                            </div>
+                            <span className="rounded-full border border-[#f1b3a4] bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                              {titleCase(post.category ?? "update")}
+                            </span>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{post.content ?? "No post copy available."}</p>
+                          <p className="mt-3 text-[12px] text-[#6f625b]">{formatDateTime(post.created_at)}</p>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </Card>
+
+              <Card className={warmPanelClassName}>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Report overlay</p>
                 <h3 className="mt-3 text-2xl text-on-surface">{reports.length} mapped reports</h3>
                 <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
@@ -401,5 +483,3 @@ export function MunicipalityMeshPage() {
     </AppShell>
   );
 }
-
-

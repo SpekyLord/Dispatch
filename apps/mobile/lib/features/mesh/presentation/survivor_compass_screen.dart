@@ -7,6 +7,7 @@ import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -897,11 +898,7 @@ class _CompassMapCard extends StatelessWidget {
                   ),
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.dispatch.mobile',
-                  ),
+                  ...buildDispatchMapTileLayers(),
                   PolylineLayer(
                     polylines: [
                       Polyline(
@@ -1288,3 +1285,6 @@ class _TargetBoard extends StatelessWidget {
     return '${diff.inHours}h ago';
   }
 }
+
+
+

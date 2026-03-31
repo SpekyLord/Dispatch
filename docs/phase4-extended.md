@@ -346,7 +346,7 @@ citizens and responders in a full connectivity blackout.
 - [x] Render received `MESH_MESSAGE` and `MESH_POST` packets in the Offline
   Comms panel in chronological order. Show author display name, role badge, and
   hop count.
-- [ ] Persist received messages in local SQLite `mesh_inbox` table so they
+- [x] Persist received messages in local SQLite `mesh_inbox` table so they
   survive app restart.
 - [x] When internet is restored, sync the `mesh_inbox` to the backend via the
   gateway ingest endpoint.
@@ -364,11 +364,11 @@ citizens and responders in a full connectivity blackout.
 
 #### Tests
 
-- [ ] Unit tests for `MESH_MESSAGE` and `MESH_POST` serialization and priority
+- [x] Unit tests for `MESH_MESSAGE` and `MESH_POST` serialization and priority
   ordering.
 - [x] API tests for `MESH_MESSAGE` ingest, thread fetch, and `MESH_POST`
   offline-token validation.
-- [ ] Mobile widget tests for Offline Comms panel rendering, unread badge, and
+- [x] Mobile widget tests for Offline Comms panel rendering, unread badge, and
   broadcast compose flow.
 - [ ] Manual test: two offline devices exchange a broadcast mesh message; on
   internet restore the gateway ingests both; thread appears in web dashboard.
@@ -385,9 +385,9 @@ citizens and responders in a full connectivity blackout.
 
 - Date: `2026-03-31`
 - Completed: added the `mesh_comms_messages` persistence layer plus the `mesh_originated` post flag, extended mesh ingest for `MESH_MESSAGE` and `MESH_POST`, enforced offline-token validation for department-authored mesh content, added authenticated thread-history fetches, wired a new Offline Comms mobile surface for broadcast and department messages plus mesh posts, surfaced unread badges from the mobile home flows, and added a feed-aligned mesh comms card to the municipality Mesh & SAR dashboard.
-- Verified: Phase 4 backend mesh tests now pass with dedicated `MESH_MESSAGE` and `MESH_POST` coverage (`31 passed`), the web app passes both its production build and Vitest suite (`31 passed`), and the mobile app now passes full-workspace `flutter analyze` plus `flutter test` (`42 passed`).
-- Remaining: the mobile inbox still persists through the platform cache adapter while the `mesh_inbox` SQLite schema remains unwired to a shared database service, mobile widget coverage for Offline Comms is still open, and the manual two-device blackout field test is still pending.
-- Constraint: Offline Comms persistence is intentionally cache-backed on mobile and web until the shared `mesh_inbox` SQLite service is wired, so the inbox is restart-safe today without yet joining the main local database lifecycle.
+- Verified: Phase 4 backend mesh tests now pass with dedicated `MESH_MESSAGE` and `MESH_POST` coverage (`31 passed`), the web app passes both its production build and Vitest suite (`31 passed`), and the mobile app now passes full-workspace `flutter analyze` plus the full `flutter test` suite (`49 passed`).
+- Remaining: the only open 4-EXT.4 follow-up in this checkout is the manual two-device blackout field test.
+- Constraint: native mobile now persists Offline Comms through the shared `mesh_inbox` SQLite service, while Flutter web continues to use browser localStorage because the shared database layer is native-only.
 - Naming note: the canonical `mesh_messages` table continues to act as the dedup and ingest audit log, so threaded server-side comms history is stored in `mesh_comms_messages` to avoid colliding with that Phase 4 base table.
 
 ---

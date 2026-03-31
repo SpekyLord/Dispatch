@@ -1,3 +1,4 @@
+import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -54,10 +55,7 @@ class _LocationPickerState extends State<LocationPicker> {
                 onTap: _handleTap,
               ),
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.dispatch.mobile',
-                ),
+                ...buildDispatchMapTileLayers(),
                 MarkerLayer(
                   markers: [
                     Marker(

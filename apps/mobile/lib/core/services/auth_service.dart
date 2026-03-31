@@ -349,6 +349,28 @@ class AuthService {
     final response = await _dio.get('/api/mesh/messages', queryParameters: params);
     return response.data as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> getMeshLastSeen() async {
+    final response = await _dio.get('/api/mesh/last-seen');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshTrail(
+    String deviceFingerprint, {
+    int limit = 120,
+    String? timeStart,
+    String? timeEnd,
+  }) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (timeStart != null) params['time_start'] = timeStart;
+    if (timeEnd != null) params['time_end'] = timeEnd;
+    final response = await _dio.get(
+      '/api/mesh/trail/${Uri.encodeComponent(deviceFingerprint)}',
+      queryParameters: params,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   // --- Damage assessments (Phase 3) ---
 
   // Submit a new damage assessment for this department

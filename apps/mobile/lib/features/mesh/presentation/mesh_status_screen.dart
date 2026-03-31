@@ -56,10 +56,15 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
     }
 
     try {
-      final rows = await ref
-          .read(authServiceProvider)
-          .getSurvivorSignals(status: 'active');
+      final auth = ref.read(authServiceProvider);
+      final rows = await auth.getSurvivorSignals(status: 'active');
       ref.read(sarModeControllerProvider.notifier).ingestServerSignals(rows);
+
+      final lastSeenResponse = await auth.getMeshLastSeen();
+      final devices =
+          (lastSeenResponse['devices'] as List<dynamic>? ?? const [])
+              .cast<Map<String, dynamic>>();
+      ref.read(meshTransportProvider).ingestServerLastSeen(devices);
     } catch (_) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -307,6 +312,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                     },
                     sarState: sarState,
                     sosBeaconBroadcasting: transport.isSosBeaconBroadcasting,
+                    lastSeenLookup: transport.lastSeenForDevice,
                   ),
                   const SizedBox(height: 18),
                   if (transport.peers.isNotEmpty)
@@ -341,6 +347,14 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
       return '${diff.inMinutes}m ago';
     }
     return '${diff.inHours}h ago';
+  }
+
+  static String _formatCoordinates(double lat, double lng) {
+    return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+  }
+
+  static String _appStateLabel(String appState) {
+    return appState.replaceAll('_', ' ');
   }
 }
 
@@ -614,6 +628,7 @@ class _SarModePanel extends StatelessWidget {
     required this.onToggle,
     required this.sarState,
     required this.sosBeaconBroadcasting,
+    required this.lastSeenLookup,
   });
 
   final SurvivorSignalEvent? activeTarget;
@@ -625,6 +640,7 @@ class _SarModePanel extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final SarModeState sarState;
   final bool sosBeaconBroadcasting;
+  final DeviceLocationTrailPoint? Function(String deviceFingerprint) lastSeenLookup;
 
   @override
   Widget build(BuildContext context) {
@@ -768,6 +784,9 @@ class _SarModePanel extends StatelessWidget {
                 pinned: signal.messageId == sarState.activeTargetMessageId,
                 canOpenCompass: canOpenCompass,
                 signal: signal,
+                lastSeenBeacon: lastSeenLookup(
+                  signal.detectedDeviceIdentifier,
+                ),
                 onOpen: signal.isResolved
                     ? null
                     : () => onOpenSignal(signal.messageId),
@@ -927,12 +946,14 @@ class _SignalCard extends StatelessWidget {
     required this.canOpenCompass,
     required this.signal,
     required this.onOpen,
+    this.lastSeenBeacon,
   });
 
   final bool pinned;
   final bool canOpenCompass;
   final SurvivorSignalEvent signal;
   final VoidCallback? onOpen;
+  final DeviceLocationTrailPoint? lastSeenBeacon;
 
   @override
   Widget build(BuildContext context) {
@@ -988,6 +1009,42 @@ class _SignalCard extends StatelessWidget {
             _MeshStatusScreenState._formatTime(signal.lastSeenTimestamp),
             style: const TextStyle(color: _mutedText, fontSize: 12),
           ),
+          if (lastSeenBeacon != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7EADF),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Last Seen beacon ${_MeshStatusScreenState._formatTime(lastSeenBeacon!.recordedAt)}',
+                    style: const TextStyle(
+                      color: _deepText,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _MeshStatusScreenState._formatCoordinates(
+                      lastSeenBeacon!.lat,
+                      lastSeenBeacon!.lng,
+                    ),
+                    style: const TextStyle(color: _mutedText),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'State ${_MeshStatusScreenState._appStateLabel(lastSeenBeacon!.appState)}${lastSeenBeacon!.batteryPct == null ? '' : ' | Battery ${lastSeenBeacon!.batteryPct}%'}',
+                    style: const TextStyle(color: _mutedText),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

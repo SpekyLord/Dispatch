@@ -31,6 +31,7 @@ def _priority_for(packet: dict) -> int:
         "MESH_MESSAGE": 1,
         "ANNOUNCEMENT": 2,
         "MESH_POST": 2,
+        "LOCATION_BEACON": 3,
         "INCIDENT_REPORT": 3,
         "SYNC_ACK": 4,
     }.get(payload_type, 5)
@@ -143,7 +144,9 @@ def get_mesh_messages():
 
     thread_id = request.args.get("threadId")
     include_posts = request.args.get("include_posts") == "1"
-    department_id = _viewer_department_id(current_user.id) if current_user.role == "department" else None
+    department_id = (
+        _viewer_department_id(current_user.id) if current_user.role == "department" else None
+    )
     svc = _mesh_service()
     messages = svc.list_messages(
         thread_id=thread_id,
@@ -210,3 +213,31 @@ def resolve_survivor_signal(signal_id: str):
         note=body.get("note", ""),
     )
     return jsonify({"survivor_signal": signal})
+
+
+@blueprint.get("/trail/<path:device_fingerprint>")
+@require_role("department", "municipality")
+def get_device_trail(device_fingerprint: str):
+    svc = _mesh_service()
+    points = svc.list_device_trail(
+        device_fingerprint,
+        time_start=request.args.get("time_start"),
+        time_end=request.args.get("time_end"),
+        limit=int(request.args.get("limit", "240")),
+    )
+    return jsonify(
+        {
+            "device_fingerprint": device_fingerprint,
+            "points": points,
+            "count": len(points),
+            "last_seen": points[-1] if points else None,
+        }
+    )
+
+
+@blueprint.get("/last-seen")
+@require_role("department", "municipality")
+def get_last_seen_devices():
+    svc = _mesh_service()
+    devices = svc.list_last_seen_devices()
+    return jsonify({"devices": devices, "count": len(devices)})

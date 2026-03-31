@@ -1,7 +1,16 @@
 // Phase 4 mobile tests - offline queue, dedup, hop limit, token rejection.
 
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _FakeLocationService extends LocationService {
+  @override
+  Future<LocationData?> getCurrentPosition() async => null;
+
+  @override
+  Stream<LocationData> watchPosition() => const Stream<LocationData>.empty();
+}
 
 void main() {
   group('MeshPacket', () {
@@ -56,7 +65,7 @@ void main() {
     late MeshTransportService svc;
 
     setUp(() {
-      svc = MeshTransportService();
+      svc = MeshTransportService(locationService: _FakeLocationService());
     });
 
     tearDown(() {
@@ -207,6 +216,17 @@ void main() {
       expect(svc.sosBeaconDeviceId, 'sos-dev');
       svc.stopSosBeaconBroadcast();
       expect(svc.isSosBeaconBroadcasting, false);
+    });
+
+    test('location beacon scheduler switches between normal and SOS cadence', () {
+      svc.setConnectivity(false);
+      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
+
+      svc.startSosBeaconBroadcast(deviceId: 'sos-dev');
+      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 10));
+
+      svc.stopSosBeaconBroadcast();
+      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
     });
   });
 

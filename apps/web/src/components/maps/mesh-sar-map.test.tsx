@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MeshSarMap, type DisasterReportMarker, type MeshSurvivorSignal, type MeshTopologyNode } from "./mesh-sar-map";
+import {
+  MeshSarMap,
+  type DisasterReportMarker,
+  type MeshDeviceTrail,
+  type MeshSurvivorSignal,
+  type MeshTopologyNode,
+} from "./mesh-sar-map";
 
 const mapApi = vi.hoisted(() => ({
   fitBounds: vi.fn(),
@@ -23,6 +29,7 @@ vi.mock("react-leaflet", () => ({
   ),
   Popup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Circle: () => <div data-testid="circle" />,
+  Polyline: () => <div data-testid="polyline" />,
   useMap: () => mapApi,
 }));
 
@@ -87,6 +94,38 @@ describe("MeshSarMap", () => {
     },
   ];
 
+  const deviceTrails: MeshDeviceTrail[] = [
+    {
+      device_fingerprint: "device-1",
+      display_name: "Responder One",
+      battery_pct: 54,
+      app_state: "foreground",
+      recorded_at: "2026-03-31T02:19:00Z",
+      lat: 14.628,
+      lng: 121.006,
+      points: [
+        {
+          device_fingerprint: "device-1",
+          display_name: "Responder One",
+          battery_pct: 56,
+          app_state: "background",
+          recorded_at: "2026-03-31T02:14:00Z",
+          lat: 14.626,
+          lng: 121.004,
+        },
+        {
+          device_fingerprint: "device-1",
+          display_name: "Responder One",
+          battery_pct: 54,
+          app_state: "foreground",
+          recorded_at: "2026-03-31T02:19:00Z",
+          lat: 14.628,
+          lng: 121.006,
+        },
+      ],
+    },
+  ];
+
   it("respects the mesh layer toggle and renders overlay markers when enabled", () => {
     const { rerender } = render(
       <MeshSarMap
@@ -95,6 +134,7 @@ describe("MeshSarMap", () => {
         topologyNodes={topologyNodes}
         responderNodes={responderNodes}
         survivorSignals={survivorSignals}
+        deviceTrails={deviceTrails}
       />,
     );
 
@@ -109,13 +149,21 @@ describe("MeshSarMap", () => {
         topologyNodes={topologyNodes}
         responderNodes={responderNodes}
         survivorSignals={survivorSignals}
+        deviceTrails={deviceTrails}
       />,
     );
 
     const enabledMarkers = screen.getAllByTestId("marker").map((marker) => marker.getAttribute("data-title"));
     expect(enabledMarkers).toEqual(
-      expect.arrayContaining(["report:report-1", "mesh-node:node-1", "responder:resp-1", "survivor:signal-1"]),
+      expect.arrayContaining([
+        "report:report-1",
+        "mesh-node:node-1",
+        "responder:resp-1",
+        "survivor:signal-1",
+        "trail:device-1",
+      ]),
     );
+    expect(screen.getAllByTestId("polyline").length).toBeGreaterThan(0);
   });
 
   it("renders survivor popup details and resolves active signals", () => {
@@ -128,6 +176,7 @@ describe("MeshSarMap", () => {
         topologyNodes={topologyNodes}
         responderNodes={responderNodes}
         survivorSignals={survivorSignals}
+        deviceTrails={deviceTrails}
         onResolveSignal={handleResolve}
       />,
     );
@@ -138,5 +187,25 @@ describe("MeshSarMap", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Resolve Signal" }));
     expect(handleResolve).toHaveBeenCalledWith("signal-1");
+  });
+
+  it("opens the trail detail action from the last-seen popup", () => {
+    const handleSelectTrail = vi.fn();
+
+    render(
+      <MeshSarMap
+        meshLayerEnabled
+        reports={reports}
+        topologyNodes={topologyNodes}
+        responderNodes={responderNodes}
+        survivorSignals={survivorSignals}
+        deviceTrails={deviceTrails}
+        onSelectTrailDevice={handleSelectTrail}
+      />,
+    );
+
+    expect(screen.getByText("Last Seen Device")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Trail" }));
+    expect(handleSelectTrail).toHaveBeenCalledWith("device-1");
   });
 });

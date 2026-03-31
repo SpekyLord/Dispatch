@@ -15,7 +15,7 @@ Every mesh message uses this canonical envelope:
   "timestamp": "ISO-8601",
   "hopCount": 0,
   "maxHops": 7,
-  "payloadType": "INCIDENT_REPORT | ANNOUNCEMENT | DISTRESS | SURVIVOR_SIGNAL | MESH_MESSAGE | MESH_POST | STATUS_UPDATE | SYNC_ACK",
+  "payloadType": "INCIDENT_REPORT | ANNOUNCEMENT | DISTRESS | SURVIVOR_SIGNAL | MESH_MESSAGE | MESH_POST | LOCATION_BEACON | STATUS_UPDATE | SYNC_ACK",
   "payload": {},
   "signature": "hmac-sha256-of-payload-using-device-key"
 }
@@ -45,6 +45,7 @@ Role transitions automatically based on connectivity status.
 | `DISTRESS` | Immutable | `maxHops=15`, processed with highest priority |
 | `MESH_MESSAGE` | Append-only | Same relay priority as `STATUS_UPDATE`; stored in `mesh_comms_messages` for thread recovery |
 | `MESH_POST` | Append-only | Same relay priority as `ANNOUNCEMENT`; creates a normal `posts` row with `mesh_originated=true` |
+| `LOCATION_BEACON` | Append-only | Same relay priority as `INCIDENT_REPORT`; retained for 72 hours by default |
 | `STATUS_UPDATE` | Last-write-wins | Compares timestamps; stale updates silently skipped |
 | `SYNC_ACK` | Informational | Rebroadcast so origin devices learn reports reached the server |
 
@@ -89,6 +90,14 @@ Gateway upload endpoint for batch packet ingestion.
 ### `GET /api/mesh/sync-updates`
 
 Pull server-side changes for gateway to rebroadcast into mesh.
+
+### `GET /api/mesh/trail/:deviceFingerprint`
+
+Returns the ordered location-beacon history for a single anonymized device fingerprint. Municipality and department users only.
+
+### `GET /api/mesh/last-seen`
+
+Returns the freshest active `LOCATION_BEACON` per device fingerprint so operators can render the latest endpoint pin before loading the full trail. Municipality and department users only.
 
 **Query params:** `since` (ISO-8601 timestamp, optional)
 
@@ -140,6 +149,11 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 Stores server-side thread history for `MESH_MESSAGE` packets.
 Fields: `thread_id`, `message_id`, `recipient_scope`, `recipient_identifier`, `body`, `author_display_name`, `author_role`, `author_identifier`, `author_department_id`, `created_at`.
 
+### `device_location_trail`
+Stores append-only `LOCATION_BEACON` points linked back to `mesh_messages.message_id`.
+Fields: `message_id`, `device_fingerprint`, `display_name`, `location`, `accuracy_meters`, `battery_pct`, `app_state`, `recorded_at`.
+Retention: 72 hours by default, configurable through the database cleanup setting.
+
 ### Mobile SQLite Tables
 - `mesh_queue`: Queued outbound packets with status (`queued`, `synced`)
 - `seen_messages`: Dedup log keyed by `message_id`
@@ -189,6 +203,16 @@ Fields: `thread_id`, `message_id`, `recipient_scope`, `recipient_identifier`, `b
 - `GET /api/mesh/topology` returns only nodes seen within the last 30 minutes and flags them as stale after 5 minutes without a fresh gateway upload. Operators should treat stale nodes as last-known positions rather than live peer discovery.
 - Survivor-signal responses now include GeoJSON-ready `coordinates` and `geometry` fields so the web map can render signal markers directly.
 - The municipality Mesh & SAR page overlays disaster reports, mesh nodes, responder markers, and survivor signals on the same Leaflet map. Topology refreshes every 30 seconds while survivor signals refresh through Supabase Realtime.
+
+
+## Survivor Trail Extension (4-EXT.5)
+
+- Mobile emits `LOCATION_BEACON` packets every 30 seconds while SAR Mode is active or the device is operating in mesh-only mode. The cadence tightens to 10 seconds while SOS advertising is active so responders get a denser breadcrumb trail during a live rescue.
+- Device fingerprints remain anonymized before the beacon is queued. The same anonymized identifier is reused by survivor detection and trail rendering so the SAR feed, compass, and web map can converge on the same device history.
+- Municipality and department users can fetch trail history through `/api/mesh/trail/:deviceFingerprint` and the active endpoint list through `/api/mesh/last-seen`. Citizens do not receive these location-history surfaces.
+- The Survivor Compass minimap now layers breadcrumb trail points under the target marker. Points older than 10 minutes stay visible but render in a faded treatment so responders can distinguish stale movement from the current corridor.
+- The municipality Mesh & SAR dashboard renders semi-transparent trail polylines, endpoint pins with last-seen metadata, and a trail sidebar styled to match the warm feed/comms cards already used elsewhere in the site.
+- Trail data is retained for 72 hours by default and should be removed earlier when an approved privacy request or post-incident cleanup plan requires it. Early deletion should remove the matching `device_location_trail` rows and any exported copies derived from the same anonymized fingerprint.
 
 ## Mesh-Routed Communications Extension (4-EXT.4)
 

@@ -1,5 +1,13 @@
 import { useEffect } from "react";
-import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  Circle,
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
 import { divIcon, latLngBounds } from "leaflet";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +46,29 @@ export type MeshSurvivorSignal = {
   lng: number;
 };
 
+export type MeshDeviceTrailPoint = {
+  message_id?: string;
+  device_fingerprint: string;
+  display_name?: string | null;
+  accuracy_meters?: number | null;
+  battery_pct?: number | null;
+  app_state: string;
+  recorded_at: string;
+  lat: number;
+  lng: number;
+};
+
+export type MeshDeviceTrail = {
+  device_fingerprint: string;
+  display_name?: string | null;
+  battery_pct?: number | null;
+  app_state: string;
+  recorded_at: string;
+  lat: number;
+  lng: number;
+  points: MeshDeviceTrailPoint[];
+};
+
 export type DisasterReportMarker = {
   id: string;
   category: string;
@@ -56,13 +87,15 @@ type MeshSarMapProps = {
   topologyNodes: MeshTopologyNode[];
   responderNodes: MeshTopologyNode[];
   survivorSignals: MeshSurvivorSignal[];
+  deviceTrails: MeshDeviceTrail[];
+  selectedTrailDeviceFingerprint?: string | null;
   resolvingSignalId?: string | null;
   onResolveSignal?: (signalId: string) => void;
+  onSelectTrailDevice?: (deviceFingerprint: string) => void;
 };
 
 const DEFAULT_CENTER: [number, number] = [14.5995, 120.9842];
 
-// Re-fit the map whenever the visible overlays change so operators land on the incident area.
 function MapViewportController({ points }: { points: Array<[number, number]> }) {
   const map = useMap();
 
@@ -127,6 +160,21 @@ function survivorIcon(resolved: boolean) {
   });
 }
 
+function trailEndpointIcon(appState: string, isSelected: boolean) {
+  const modifier = appState.toLowerCase().replace(/[^a-z_]+/g, "") || "foreground";
+  return divIcon({
+    className: "mesh-sar-icon-shell",
+    iconSize: [28, 34],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -24],
+    html: `
+      <span class="mesh-sar-trail-pin mesh-sar-trail-pin--${modifier}${isSelected ? " mesh-sar-trail-pin--selected" : ""}">
+        <span class="mesh-sar-trail-pin__core"></span>
+      </span>
+    `,
+  });
+}
+
 function reportIcon(category: string) {
   return divIcon({
     className: "mesh-sar-icon-shell",
@@ -152,20 +200,30 @@ function titleCase(value: string) {
   return value.replace(/_/g, " ");
 }
 
+function formatCoordinates(lat: number, lng: number) {
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+
 export function MeshSarMap({
   meshLayerEnabled,
   reports,
   topologyNodes,
   responderNodes,
   survivorSignals,
+  deviceTrails,
+  selectedTrailDeviceFingerprint,
   resolvingSignalId,
   onResolveSignal,
+  onSelectTrailDevice,
 }: MeshSarMapProps) {
   const visiblePoints: Array<[number, number]> = reports.map((report) => [report.latitude, report.longitude]);
 
   if (meshLayerEnabled) {
     visiblePoints.push(...topologyNodes.map((node) => [node.lat, node.lng] as [number, number]));
     visiblePoints.push(...survivorSignals.map((signal) => [signal.lat, signal.lng] as [number, number]));
+    visiblePoints.push(
+      ...deviceTrails.flatMap((trail) => trail.points.map((point) => [point.lat, point.lng] as [number, number])),
+    );
   }
 
   return (
@@ -255,6 +313,67 @@ export function MeshSarMap({
               </Popup>
             </Marker>
           ))}
+
+        {meshLayerEnabled &&
+          deviceTrails.map((trail) => {
+            const isSelected = selectedTrailDeviceFingerprint === trail.device_fingerprint;
+            const positions = trail.points.map((point) => [point.lat, point.lng] as [number, number]);
+            const lastPoint = trail.points.at(-1);
+            if (!lastPoint) {
+              return null;
+            }
+
+            return (
+              <div key={`trail-${trail.device_fingerprint}`}>
+                {positions.length >= 2 ? (
+                  <Polyline
+                    positions={positions}
+                    pathOptions={{
+                      color: isSelected ? "#a14b2f" : "#cd7d63",
+                      opacity: isSelected ? 0.88 : 0.4,
+                      weight: isSelected ? 5 : 3,
+                      lineCap: "round",
+                    }}
+                  />
+                ) : null}
+                <Marker
+                  eventHandlers={{
+                    click: () => onSelectTrailDevice?.(trail.device_fingerprint),
+                  }}
+                  icon={trailEndpointIcon(trail.app_state, isSelected)}
+                  position={[lastPoint.lat, lastPoint.lng]}
+                  title={`trail:${trail.device_fingerprint}`}
+                >
+                  <Popup>
+                    <div className="space-y-3 text-sm text-[#4e4742]">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                          Last Seen Device
+                        </p>
+                        <p className="mt-1 font-semibold text-[#373831]">
+                          {trail.display_name || trail.device_fingerprint}
+                        </p>
+                      </div>
+                      <div className="grid gap-1 text-[12px] text-[#6f625b]">
+                        <span>Last seen: {formatDateTime(trail.recorded_at)}</span>
+                        <span>Location: {formatCoordinates(lastPoint.lat, lastPoint.lng)}</span>
+                        <span>State: {titleCase(trail.app_state)}</span>
+                        <span>Battery: {trail.battery_pct == null ? "-" : `${trail.battery_pct}%`}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full justify-center"
+                        onClick={() => onSelectTrailDevice?.(trail.device_fingerprint)}
+                      >
+                        Open Trail
+                      </Button>
+                    </div>
+                  </Popup>
+                </Marker>
+              </div>
+            );
+          })}
 
         {meshLayerEnabled &&
           survivorSignals.map((signal) => (

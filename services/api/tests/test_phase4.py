@@ -1,4 +1,4 @@
-"""Phase 4 API tests â€” mesh ingest, dedup, distress, sync, and token validation."""
+"""Phase 4 API tests - mesh ingest, dedup, distress, sync, and token validation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ import pytest
 from dispatch_api.app import create_app
 from dispatch_api.config import Settings
 from dispatch_api.services.offline_token_service import OfflineTokenService
-
-# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class FakeUser:
@@ -141,7 +139,6 @@ def _packet(
     }
 
 
-# â”€â”€ Ingest endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshIngest:
@@ -200,7 +197,6 @@ class TestMeshIngest:
             assert "hop limit" in data["results"][0]["error"]
 
 
-# â”€â”€ Deduplication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshDedup:
@@ -229,7 +225,6 @@ class TestMeshDedup:
             assert data["processed_count"] == 2
 
 
-# â”€â”€ Distress signal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshDistress:
@@ -289,7 +284,6 @@ class TestMeshDistress:
             assert data["results"][0]["messageId"] == "sos-2"
 
 
-# â”€â”€ Announcement token validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshAnnouncement:
@@ -382,7 +376,6 @@ class TestMeshAnnouncement:
         assert post_inserts[0][1]["is_mesh_origin"] is True
 
 
-# â”€â”€ Status update (last-write-wins) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshStatusUpdate:
@@ -449,7 +442,6 @@ class TestMeshStatusUpdate:
             assert len(fake._updates) == 1  # only the mesh_messages update
 
 
-# â”€â”€ Sync-updates endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMeshSyncUpdates:
@@ -487,7 +479,6 @@ class TestMeshSyncUpdates:
             assert resp.status_code == 200
 
 
-# â”€â”€ SYNC_ACK generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestSyncAcks:
@@ -621,6 +612,132 @@ class TestSurvivorSignalRoutes:
         assert survivor_updates[0][1]["resolved"] is True
         assert survivor_updates[0][1]["resolution_note"] == "Located and handed off to responders."
 
+
+class TestMeshLocationTrail:
+    def test_location_beacon_ingest_persists_device_trail(self, settings):
+        fake = FakeSupabaseClient()
+        app = make_app(settings, fake)
+        pkt = _packet(
+            msg_id="trail-1",
+            ptype="LOCATION_BEACON",
+            payload={
+                "deviceFingerprint": "AA:BB:CC:DD:00:00",
+                "displayName": "Survivor A",
+                "lat": 14.612,
+                "lng": 121.004,
+                "accuracyMeters": 8,
+                "batteryPct": 34,
+                "appState": "sos_active",
+            },
+        )
+        with app.test_client() as c:
+            resp = c.post("/api/mesh/ingest", json={"packets": [pkt]})
+            data = resp.get_json()
+            assert resp.status_code == 200
+            assert data["processed_count"] == 1
+
+        trail_inserts = [(t, d) for t, d in fake._inserts if t == "device_location_trail"]
+        assert len(trail_inserts) == 1
+        assert trail_inserts[0][1]["device_fingerprint"] == "AA:BB:CC:DD:00:00"
+        assert trail_inserts[0][1]["app_state"] == "sos_active"
+
+    def test_trail_route_returns_ordered_points(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="dept-1", email="dept@test.com", role="department"),
+            db_rows={
+                "device_location_trail": [
+                    {
+                        "id": "trail-row-1",
+                        "message_id": "trail-msg-1",
+                        "device_fingerprint": "AA:BB:CC:DD:00:00",
+                        "display_name": "Survivor A",
+                        "location": {"lat": 14.611, "lng": 121.003},
+                        "accuracy_meters": 9,
+                        "battery_pct": 33,
+                        "app_state": "foreground",
+                        "recorded_at": "2026-03-31T03:00:00Z",
+                    },
+                    {
+                        "id": "trail-row-2",
+                        "message_id": "trail-msg-2",
+                        "device_fingerprint": "AA:BB:CC:DD:00:00",
+                        "display_name": "Survivor A",
+                        "location": {"lat": 14.612, "lng": 121.004},
+                        "accuracy_meters": 8,
+                        "battery_pct": 31,
+                        "app_state": "sos_active",
+                        "recorded_at": "2026-03-31T03:02:00Z",
+                    },
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/trail/AA%3ABB%3ACC%3ADD%3A00%3A00",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 2
+            assert data["points"][0]["coordinates"] == [121.003, 14.611]
+            assert data["last_seen"]["app_state"] == "sos_active"
+
+    def test_last_seen_route_returns_latest_active_beacon_per_device(self, settings):
+        recent = (datetime.now(tz=UTC) - timedelta(minutes=4)).isoformat()
+        fresher = (datetime.now(tz=UTC) - timedelta(minutes=2)).isoformat()
+        stale = (datetime.now(tz=UTC) - timedelta(minutes=40)).isoformat()
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="muni-1", email="admin@test.com", role="municipality"),
+            db_rows={
+                "device_location_trail": [
+                    {
+                        "id": "trail-last-1",
+                        "message_id": "trail-last-msg-1",
+                        "device_fingerprint": "device-1",
+                        "display_name": "Responder One",
+                        "location": {"lat": 14.615, "lng": 121.002},
+                        "battery_pct": 56,
+                        "app_state": "foreground",
+                        "recorded_at": recent,
+                    },
+                    {
+                        "id": "trail-last-2",
+                        "message_id": "trail-last-msg-2",
+                        "device_fingerprint": "device-1",
+                        "display_name": "Responder One",
+                        "location": {"lat": 14.616, "lng": 121.003},
+                        "battery_pct": 54,
+                        "app_state": "background",
+                        "recorded_at": fresher,
+                    },
+                    {
+                        "id": "trail-stale-1",
+                        "message_id": "trail-stale-msg-1",
+                        "device_fingerprint": "device-2",
+                        "display_name": "Old device",
+                        "location": {"lat": 14.5, "lng": 121.1},
+                        "battery_pct": 10,
+                        "app_state": "background",
+                        "recorded_at": stale,
+                    },
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/last-seen",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["devices"][0]["device_fingerprint"] == "device-1"
+            assert data["devices"][0]["battery_pct"] == 54
+            assert data["devices"][0]["coordinates"] == [121.003, 14.616]
+
+
 class TestMeshTopologyIngest:
     def test_ingest_topology_snapshot_without_packets(self, settings):
         fake = FakeSupabaseClient()
@@ -662,9 +779,7 @@ class TestMeshTopologyIngest:
             assert data["processed_count"] == 0
 
         topology_inserts = [
-            (table, row)
-            for table, row in fake._inserts
-            if table == "mesh_topology_nodes"
+            (table, row) for table, row in fake._inserts if table == "mesh_topology_nodes"
         ]
         assert len(topology_inserts) == 2
         assert topology_inserts[0][1]["gateway_device_id"] == "gw-1"
@@ -768,9 +883,6 @@ class TestMeshTopologyRoutes:
             assert data["survivor_signals"][0]["accuracy_radius_meters"] == 7.5
 
 
-
-
-
 class TestMeshSurvivorResolveStatusUpdate:
     def test_survivor_resolve_status_update_applied(self, settings):
         fake = FakeSupabaseClient(
@@ -813,7 +925,6 @@ class TestMeshSurvivorResolveStatusUpdate:
         assert survivor_updates[0][1]["resolved"] is True
         assert survivor_updates[0][1]["resolution_note"] == "Located under the north stairwell."
         assert survivor_updates[0][1]["resolved_by"] == "dept-user-1"
-
 
 
 def _offline_token(

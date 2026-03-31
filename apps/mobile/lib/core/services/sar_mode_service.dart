@@ -426,6 +426,7 @@ class SarModeController extends StateNotifier<SarModeState> {
       clearActiveTarget: !enabled,
     );
 
+    _transport.setSarModeEnabled(enabled);
     if (enabled) {
       await _startPassiveSensing();
     } else {
@@ -510,7 +511,7 @@ class SarModeController extends StateNotifier<SarModeState> {
   }) {
     _transport.enqueuePacket(
       MeshTransportService.createSurvivorResolvePacket(
-        deviceId: _transport.sosBeaconDeviceId ?? 'local-device',
+        deviceId: _transport.sosBeaconDeviceId ?? _transport.localDeviceId,
         survivorMessageId: signal.messageId,
         signalId: signal.serverSignalId,
         note: note,
@@ -949,19 +950,7 @@ class SarModeController extends StateNotifier<SarModeState> {
   }
 
   static String anonymizeDeviceIdentifier(String rawIdentifier) {
-    final segments = rawIdentifier
-        .toUpperCase()
-        .replaceAll('-', ':')
-        .split(':');
-    if (segments.length < 6) {
-      final cleaned = rawIdentifier.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
-      if (cleaned.length <= 4) {
-        return cleaned.padRight(4, 'X');
-      }
-      return '${cleaned.substring(0, cleaned.length - 4)}XXXX';
-    }
-    final normalized = [...segments.take(4), '00', '00'];
-    return normalized.join(':');
+    return MeshTransportService.anonymizeDeviceFingerprint(rawIdentifier);
   }
 
   String _generateLocalMessageId() {

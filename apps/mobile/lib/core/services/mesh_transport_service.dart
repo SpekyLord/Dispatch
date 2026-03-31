@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 
 enum MeshNodeRole { origin, relay, gateway }
@@ -16,6 +17,7 @@ enum MeshPayloadType {
   survivorSignal,
   meshMessage,
   meshPost,
+  locationBeacon,
   statusUpdate,
   syncAck,
 }
@@ -49,6 +51,7 @@ class MeshPacket {
       MeshPayloadType.survivorSignal => 'SURVIVOR_SIGNAL',
       MeshPayloadType.meshMessage => 'MESH_MESSAGE',
       MeshPayloadType.meshPost => 'MESH_POST',
+      MeshPayloadType.locationBeacon => 'LOCATION_BEACON',
       MeshPayloadType.statusUpdate => 'STATUS_UPDATE',
       MeshPayloadType.syncAck => 'SYNC_ACK',
     };
@@ -76,6 +79,7 @@ class MeshPacket {
       'SURVIVOR_SIGNAL' => MeshPayloadType.survivorSignal,
       'MESH_MESSAGE' => MeshPayloadType.meshMessage,
       'MESH_POST' => MeshPayloadType.meshPost,
+      'LOCATION_BEACON' => MeshPayloadType.locationBeacon,
       'STATUS_UPDATE' => MeshPayloadType.statusUpdate,
       'SYNC_ACK' => MeshPayloadType.syncAck,
       _ => MeshPayloadType.statusUpdate,
@@ -262,25 +266,117 @@ class MeshInboxItem {
   }
 }
 
+class DeviceLocationTrailPoint {
+  const DeviceLocationTrailPoint({
+    required this.messageId,
+    required this.deviceFingerprint,
+    required this.lat,
+    required this.lng,
+    required this.recordedAt,
+    this.displayName,
+    this.accuracyMeters,
+    this.batteryPct,
+    this.appState = 'foreground',
+  });
+
+  final String messageId;
+  final String deviceFingerprint;
+  final String? displayName;
+  final double lat;
+  final double lng;
+  final double? accuracyMeters;
+  final int? batteryPct;
+  final String appState;
+  final DateTime recordedAt;
+
+  factory DeviceLocationTrailPoint.fromPacket(MeshPacket packet) {
+    final payload = packet.payload;
+    return DeviceLocationTrailPoint(
+      messageId: packet.messageId,
+      deviceFingerprint: payload['deviceFingerprint'] as String? ?? '',
+      displayName: payload['displayName'] as String?,
+      lat: (payload['lat'] as num?)?.toDouble() ?? 0,
+      lng: (payload['lng'] as num?)?.toDouble() ?? 0,
+      accuracyMeters: (payload['accuracyMeters'] as num?)?.toDouble(),
+      batteryPct: (payload['batteryPct'] as num?)?.toInt(),
+      appState: payload['appState'] as String? ?? 'foreground',
+      recordedAt:
+          DateTime.tryParse(packet.timestamp)?.toUtc() ?? DateTime.now().toUtc(),
+    );
+  }
+
+  factory DeviceLocationTrailPoint.fromJson(Map<String, dynamic> json) {
+    final location = json['location'] as Map<String, dynamic>? ?? const {};
+    final lat =
+        (json['lat'] as num?)?.toDouble() ??
+        (location['lat'] as num?)?.toDouble() ??
+        0;
+    final lng =
+        (json['lng'] as num?)?.toDouble() ??
+        (location['lng'] as num?)?.toDouble() ??
+        0;
+    return DeviceLocationTrailPoint(
+      messageId:
+          json['message_id'] as String? ?? json['messageId'] as String? ?? '',
+      deviceFingerprint:
+          json['device_fingerprint'] as String? ??
+          json['deviceFingerprint'] as String? ??
+          '',
+      displayName:
+          json['display_name'] as String? ?? json['displayName'] as String?,
+      lat: lat,
+      lng: lng,
+      accuracyMeters:
+          (json['accuracy_meters'] as num?)?.toDouble() ??
+          (json['accuracyMeters'] as num?)?.toDouble() ??
+          (location['accuracyMeters'] as num?)?.toDouble(),
+      batteryPct:
+          (json['battery_pct'] as num?)?.toInt() ??
+          (json['batteryPct'] as num?)?.toInt(),
+      appState: json['app_state'] as String? ?? json['appState'] as String? ?? 'foreground',
+      recordedAt:
+          DateTime.tryParse(
+            json['recorded_at'] as String? ??
+                json['recordedAt'] as String? ??
+                json['created_at'] as String? ??
+                DateTime.now().toUtc().toIso8601String(),
+          )?.toUtc() ??
+          DateTime.now().toUtc(),
+    );
+  }
+}
+
 class MeshTransportService {
-  MeshTransportService({MeshInboxStorage? inboxStorage})
-    : _inboxStorage = inboxStorage,
-      _localDeviceId = _generateUuid();
+  MeshTransportService({
+    MeshInboxStorage? inboxStorage,
+    LocationService? locationService,
+    bool automaticLocationBeaconing = true,
+  }) : _inboxStorage = inboxStorage,
+       _locationService = locationService ?? LocationService(),
+       _automaticLocationBeaconing = automaticLocationBeaconing,
+       _localDeviceId = _generateUuid();
 
   final MeshInboxStorage? _inboxStorage;
+  final LocationService _locationService;
+  final bool _automaticLocationBeaconing;
   final String _localDeviceId;
   MeshNodeRole _role = MeshNodeRole.origin;
   final List<MeshPeer> _peers = [];
   final Set<String> _seenMessageIds = {};
   final List<MeshPacket> _outboundQueue = [];
   final List<MeshInboxItem> _inbox = [];
+  final Map<String, List<DeviceLocationTrailPoint>> _locationTrailByDevice = {};
+  final Map<String, DeviceLocationTrailPoint> _lastSeenByDevice = {};
   final StreamController<MeshPacket> _packetController =
       StreamController<MeshPacket>.broadcast();
   DateTime? _lastSyncTime;
   bool _isDiscovering = false;
   bool _hasInternet = false;
   bool _isSosBeaconBroadcasting = false;
+  bool _sarModeEnabled = false;
   String? _sosBeaconDeviceId;
+  Timer? _locationBeaconTimer;
+  Duration? _activeLocationBeaconInterval;
   bool _hydratedInbox = false;
 
   MeshNodeRole get role => _role;
@@ -295,6 +391,7 @@ class MeshTransportService {
   Stream<MeshPacket> get packetStream => _packetController.stream;
   String get localDeviceId => _localDeviceId;
   bool get isMeshOnlyState => !_hasInternet;
+  Duration? get activeLocationBeaconInterval => _activeLocationBeaconInterval;
   List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
   int get unreadMeshMessageCount =>
       _inbox.where((item) => !item.isRead && item.itemType == 'mesh_message').length;
@@ -305,9 +402,54 @@ class MeshTransportService {
         .toList(growable: false);
   }
 
+  DeviceLocationTrailPoint? lastSeenForDevice(String deviceFingerprint) {
+    return _lastSeenByDevice[deviceFingerprint];
+  }
+
+  List<DeviceLocationTrailPoint> trailForDevice(String deviceFingerprint) {
+    final points = List<DeviceLocationTrailPoint>.from(
+      _locationTrailByDevice[deviceFingerprint] ?? const [],
+    );
+    points.sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
+    return points;
+  }
+
+  void ingestServerLastSeen(Iterable<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      _upsertTrailPoint(DeviceLocationTrailPoint.fromJson(row));
+    }
+  }
+
+  void ingestServerTrail(
+    String deviceFingerprint,
+    Iterable<Map<String, dynamic>> rows,
+  ) {
+    for (final row in rows) {
+      final point = DeviceLocationTrailPoint.fromJson(row);
+      if (point.deviceFingerprint.isEmpty && deviceFingerprint.isNotEmpty) {
+        _upsertTrailPoint(
+          DeviceLocationTrailPoint(
+            messageId: point.messageId,
+            deviceFingerprint: deviceFingerprint,
+            displayName: point.displayName,
+            lat: point.lat,
+            lng: point.lng,
+            accuracyMeters: point.accuracyMeters,
+            batteryPct: point.batteryPct,
+            appState: point.appState,
+            recordedAt: point.recordedAt,
+          ),
+        );
+        continue;
+      }
+      _upsertTrailPoint(point);
+    }
+  }
+
   Future<void> initialize() async {
     _role = _hasInternet ? MeshNodeRole.gateway : MeshNodeRole.origin;
     await _hydrateInbox();
+    _syncLocationBeaconSchedule();
   }
 
   Future<void> _hydrateInbox() async {
@@ -352,11 +494,13 @@ class MeshTransportService {
     } else if (!hasInternet && _role == MeshNodeRole.gateway) {
       _role = MeshNodeRole.origin;
     }
+    _syncLocationBeaconSchedule();
   }
 
   void enqueuePacket(MeshPacket packet) {
     _outboundQueue.add(packet);
     _seenMessageIds.add(packet.messageId);
+    _recordLocationTrail(packet);
     _recordPacketInInbox(packet, authoredLocally: true);
   }
 
@@ -378,6 +522,7 @@ class MeshTransportService {
       _outboundQueue.add(packet);
     }
 
+    _recordLocationTrail(packet);
     _recordPacketInInbox(packet, authoredLocally: false);
     _packetController.add(packet);
     return true;
@@ -525,11 +670,18 @@ class MeshTransportService {
   void startSosBeaconBroadcast({required String deviceId}) {
     _isSosBeaconBroadcasting = true;
     _sosBeaconDeviceId = deviceId;
+    _syncLocationBeaconSchedule();
   }
 
   void stopSosBeaconBroadcast() {
     _isSosBeaconBroadcasting = false;
     _sosBeaconDeviceId = null;
+    _syncLocationBeaconSchedule();
+  }
+
+  void setSarModeEnabled(bool enabled) {
+    _sarModeEnabled = enabled;
+    _syncLocationBeaconSchedule();
   }
 
   void _recordPacketInInbox(
@@ -567,6 +719,99 @@ class MeshTransportService {
       }
       _outboundQueue.add(MeshPacket.fromJson(item.rawPacket));
     }
+  }
+
+  // Location beacons stay in memory because they are refreshed often and only
+  // drive the live compass and map overlays.
+  void _recordLocationTrail(MeshPacket packet) {
+    if (packet.payloadType != MeshPayloadType.locationBeacon) {
+      return;
+    }
+    final point = DeviceLocationTrailPoint.fromPacket(packet);
+    if (point.deviceFingerprint.isEmpty) {
+      return;
+    }
+    _upsertTrailPoint(point);
+  }
+
+  void _upsertTrailPoint(DeviceLocationTrailPoint point) {
+    if (point.deviceFingerprint.isEmpty) {
+      return;
+    }
+    final trail = _locationTrailByDevice.putIfAbsent(
+      point.deviceFingerprint,
+      () => <DeviceLocationTrailPoint>[],
+    );
+    final existingIndex = trail.indexWhere(
+      (entry) => entry.messageId == point.messageId && entry.messageId.isNotEmpty,
+    );
+    if (existingIndex >= 0) {
+      trail[existingIndex] = point;
+    } else {
+      trail.add(point);
+    }
+    trail.sort((a, b) => a.recordedAt.compareTo(b.recordedAt));
+    if (trail.length > 240) {
+      trail.removeRange(0, trail.length - 240);
+    }
+
+    final currentLastSeen = _lastSeenByDevice[point.deviceFingerprint];
+    if (currentLastSeen == null || point.recordedAt.isAfter(currentLastSeen.recordedAt)) {
+      _lastSeenByDevice[point.deviceFingerprint] = point;
+    }
+  }
+
+  void _syncLocationBeaconSchedule() {
+    if (!_automaticLocationBeaconing) {
+      _locationBeaconTimer?.cancel();
+      _locationBeaconTimer = null;
+      _activeLocationBeaconInterval = null;
+      return;
+    }
+
+    final shouldBroadcast =
+        _sarModeEnabled || isMeshOnlyState || _isSosBeaconBroadcasting;
+    final nextInterval = shouldBroadcast
+        ? (_isSosBeaconBroadcasting
+              ? const Duration(seconds: 10)
+              : const Duration(seconds: 30))
+        : null;
+
+    if (nextInterval == null) {
+      _locationBeaconTimer?.cancel();
+      _locationBeaconTimer = null;
+      _activeLocationBeaconInterval = null;
+      return;
+    }
+
+    if (_locationBeaconTimer != null && _activeLocationBeaconInterval == nextInterval) {
+      return;
+    }
+
+    _locationBeaconTimer?.cancel();
+    _activeLocationBeaconInterval = nextInterval;
+    _locationBeaconTimer = Timer.periodic(nextInterval, (_) {
+      unawaited(_emitLocationBeacon());
+    });
+    unawaited(_emitLocationBeacon());
+  }
+
+  Future<void> _emitLocationBeacon() async {
+    final location = await _locationService.getCurrentPosition();
+    if (location == null) {
+      return;
+    }
+
+    enqueuePacket(
+      MeshTransportService.createLocationBeaconPacket(
+        deviceId: _sosBeaconDeviceId ?? _localDeviceId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracyMeters: location.accuracyMeters,
+        displayName: null,
+        appState: _isSosBeaconBroadcasting ? 'sos_active' : 'foreground',
+      ),
+    );
   }
 
   bool _isDirectMessage(MeshPacket packet) {
@@ -720,6 +965,33 @@ class MeshTransportService {
     );
   }
 
+  static MeshPacket createLocationBeaconPacket({
+    required String deviceId,
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+    int? batteryPct,
+    String? displayName,
+    String appState = 'foreground',
+  }) {
+    return MeshPacket(
+      messageId: _generateUuid(),
+      originDeviceId: deviceId,
+      timestamp: DateTime.now().toUtc().toIso8601String(),
+      maxHops: 7,
+      payloadType: MeshPayloadType.locationBeacon,
+      payload: {
+        'deviceFingerprint': anonymizeDeviceFingerprint(deviceId),
+        'displayName': displayName,
+        'lat': latitude,
+        'lng': longitude,
+        'accuracyMeters': accuracyMeters,
+        'batteryPct': batteryPct,
+        'appState': appState,
+      },
+    );
+  }
+
   static MeshPacket createSurvivorResolvePacket({
     required String deviceId,
     required String survivorMessageId,
@@ -751,6 +1023,19 @@ class MeshTransportService {
     return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
         '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
         '${digest.substring(20, 32)}';
+  }
+
+  static String anonymizeDeviceFingerprint(String rawIdentifier) {
+    final segments = rawIdentifier.toUpperCase().replaceAll('-', ':').split(':');
+    if (segments.length < 6) {
+      final cleaned = rawIdentifier.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+      if (cleaned.length <= 4) {
+        return cleaned.padRight(4, 'X');
+      }
+      return '${cleaned.substring(0, cleaned.length - 4)}XXXX';
+    }
+    final normalized = [...segments.take(4), '00', '00'];
+    return normalized.join(':');
   }
 
   static String md5Hash(String input) {
@@ -828,12 +1113,13 @@ class MeshTransportService {
       MeshPayloadType.distress || MeshPayloadType.survivorSignal => 0,
       MeshPayloadType.statusUpdate || MeshPayloadType.meshMessage => 1,
       MeshPayloadType.announcement || MeshPayloadType.meshPost => 2,
-      MeshPayloadType.incidentReport => 3,
+      MeshPayloadType.incidentReport || MeshPayloadType.locationBeacon => 3,
       MeshPayloadType.syncAck => 4,
     };
   }
 
   void dispose() {
+    _locationBeaconTimer?.cancel();
     _packetController.close();
   }
 

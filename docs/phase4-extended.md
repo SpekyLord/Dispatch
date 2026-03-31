@@ -419,53 +419,60 @@ range.
 
 #### Database / Supabase
 
-- [ ] Add a `device_location_trail` table: `id`, `message_id` (FK mesh dedup),
+- [x] Add a `device_location_trail` table: `id`, `message_id` (FK mesh dedup),
   `device_fingerprint`, `display_name`, `location` (PostGIS point or JSON),
   `accuracy_meters`, `battery_pct`, `app_state`, `recorded_at`.
-- [ ] Add a composite index on `(device_fingerprint, recorded_at DESC)` for
+- [x] Add a composite index on `(device_fingerprint, recorded_at DESC)` for
   efficient last-known-location queries.
-- [ ] Add a TTL policy or scheduled delete job that removes trail points older
+- [x] Add a TTL policy or scheduled delete job that removes trail points older
   than 72 hours post-incident (configurable, default 72 h).
 
 #### Flask API
 
-- [ ] Extend `POST /api/mesh/ingest` to handle `LOCATION_BEACON` payloadType.
-- [ ] Add `GET /api/mesh/trail/:deviceFingerprint` returning the trail for a
+- [x] Extend `POST /api/mesh/ingest` to handle `LOCATION_BEACON` payloadType.
+- [x] Add `GET /api/mesh/trail/:deviceFingerprint` returning the trail for a
   specific device over a time range (municipality and department roles).
-- [ ] Add `GET /api/mesh/last-seen` returning the most recent `LOCATION_BEACON`
+- [x] Add `GET /api/mesh/last-seen` returning the most recent `LOCATION_BEACON`
   per unique device fingerprint currently active on the mesh (municipality and
   department roles).
 
 #### Mobile App
 
-- [ ] Broadcast a `LOCATION_BEACON` packet every 30 seconds when SAR Mode is
+- [x] Broadcast a `LOCATION_BEACON` packet every 30 seconds when SAR Mode is
   active or when the device is in mesh-only state. Use `maxHops = 7`.
-- [ ] When the no-login SOS action is triggered, increase beacon frequency to
+- [x] When the no-login SOS action is triggered, increase beacon frequency to
   every 10 seconds and set `appState = sos_active`.
-- [ ] Show the survivor trail as a polyline overlay on the Survivor Compass
+- [x] Show the survivor trail as a polyline overlay on the Survivor Compass
   minimap. Points older than 10 minutes render as faded.
-- [ ] Display a **Last Seen** timestamp and location on the SAR detection feed
+- [x] Display a **Last Seen** timestamp and location on the SAR detection feed
   entry for any device whose most recent detection was a `LOCATION_BEACON`.
 
 #### Web App
 
-- [ ] On the Mesh & SAR map layer (4-EXT.3), render `LOCATION_BEACON` trails as
+- [x] On the Mesh & SAR map layer (4-EXT.3), render `LOCATION_BEACON` trails as
   semi-transparent polylines per device fingerprint. Endpoints show a pin with
   last-seen timestamp.
-- [ ] Allow operators to click a trail pin to open a sidebar showing the device
+- [x] Allow operators to click a trail pin to open a sidebar showing the device
   display name, battery level, app state, and the last 10 trail points.
 
 #### Tests
 
-- [ ] API tests for `LOCATION_BEACON` ingest, trail fetch, and last-seen
+- [x] API tests for `LOCATION_BEACON` ingest, trail fetch, and last-seen
   endpoint.
-- [ ] Mobile unit test for beacon interval scheduler switching between normal
+- [x] Mobile unit test for beacon interval scheduler switching between normal
   (30 s) and SOS (10 s) modes.
 
 #### Docs
 
-- [ ] Document the privacy model for location trail data, who can access it,
+- [x] Document the privacy model for location trail data, who can access it,
   the 72-hour TTL, and how to request early deletion.
+
+### Status Note - 4-EXT.5
+
+- Date: `2026-03-31`
+- Completed: added the `device_location_trail` persistence layer plus the `LOCATION_BEACON` payload type, 72-hour TTL cleanup helpers, authenticated `/api/mesh/trail` and `/api/mesh/last-seen` routes, automatic 30-second mobile beacons that tighten to 10 seconds during SOS, in-memory last-seen and trail hydration on mobile, breadcrumb overlays on the Survivor Compass minimap, last-seen cards in the mobile SAR feed, and warm-styled trail polylines plus a selectable trail sidebar on the municipality Mesh & SAR dashboard.
+- Verified: Phase 4 API trail coverage passes (`34 passed` in `services/api/tests/test_phase4.py`), the focused web Mesh & SAR map Vitest suite passes (`3 passed`), the web production build completes, `flutter analyze` passes, and the focused mobile trail/compass tests pass (`22 passed`).
+- Constraint: location trails intentionally store anonymized device fingerprints, remain municipality/department visible only, and are pruned after the configured retention window (default 72 hours). Early deletion should remove the matching `device_location_trail` rows and any downstream exported incident artifacts together when a privacy request is approved.
 
 ---
 
@@ -498,7 +505,7 @@ range.
   on-device.
 - [x] The Survivor Compass points toward a pinned `SURVIVOR_SIGNAL` with correct
   bearing and switches to proximity pulse below 3 m.
-- [ ] The Mesh & SAR map layer renders node markers, survivor signal markers,
+- [x] The Mesh & SAR map layer renders node markers, survivor signal markers,
   and trail polylines without regressing existing report map functionality.
 - [ ] A broadcast `MESH_MESSAGE` authored offline on one device appears in the
   Offline Comms panel of a second device within mesh range.

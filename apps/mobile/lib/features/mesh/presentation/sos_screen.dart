@@ -36,7 +36,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     final sarPlatform = ref.read(sarPlatformServiceProvider);
 
     final packet = MeshTransportService.createDistressPacket(
-      deviceId: 'local-device',
+      deviceId: transport.localDeviceId,
       description: _descCtrl.text.trim(),
       reporterName: _nameCtrl.text.trim(),
       contactInfo: _contactCtrl.text.trim(),
@@ -49,7 +49,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     var beaconStatusNote = capabilities.sosBeaconNote;
     if (capabilities.sosBeaconSupported) {
       beaconActive = await sarPlatform.startSosBeaconBroadcast(
-        deviceId: 'local-device',
+        deviceId: transport.localDeviceId,
       );
     }
 

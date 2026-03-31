@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/compass_sensor_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
@@ -113,10 +115,19 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
 
   Future<void> _hydrateSignals({bool silent = false}) async {
     try {
-      final rows = await ref
-          .read(authServiceProvider)
-          .getSurvivorSignals(status: 'active');
+      final auth = ref.read(authServiceProvider);
+      final rows = await auth.getSurvivorSignals(status: 'active');
       ref.read(sarModeControllerProvider.notifier).ingestServerSignals(rows);
+
+      final lastSeenResponse = await auth.getMeshLastSeen();
+      final devices =
+          (lastSeenResponse['devices'] as List<dynamic>? ?? const [])
+              .cast<Map<String, dynamic>>();
+      ref.read(meshTransportProvider).ingestServerLastSeen(devices);
+      await _hydrateTrailForActiveTarget(authOverride: auth);
+      if (mounted) {
+        setState(() {});
+      }
     } catch (_) {
       if (!silent && mounted) {
         _showSnack(
@@ -124,6 +135,33 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         );
       }
     }
+  }
+
+  Future<void> _hydrateTrailForActiveTarget({
+    AuthService? authOverride,
+    String? deviceFingerprint,
+  }) async {
+    final fingerprint =
+        deviceFingerprint ??
+        ref.read(sarModeControllerProvider).activeTarget?.detectedDeviceIdentifier;
+    if (fingerprint == null || fingerprint.isEmpty) {
+      return;
+    }
+
+    try {
+      final AuthService auth = authOverride ?? ref.read(authServiceProvider);
+      final trailResponse = await auth.getMeshTrail(
+        fingerprint,
+        limit: 120,
+      );
+      final points =
+          (trailResponse['points'] as List<dynamic>? ?? const [])
+              .cast<Map<String, dynamic>>();
+      ref.read(meshTransportProvider).ingestServerTrail(fingerprint, points);
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleRefresh() async {
@@ -141,6 +179,17 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
 
   void _handlePinTarget(String messageId) {
     ref.read(sarModeControllerProvider.notifier).pinTarget(messageId);
+    final signals = ref.read(sarModeControllerProvider).activeSignals;
+    for (final signal in signals) {
+      if (signal.messageId == messageId) {
+        unawaited(
+          _hydrateTrailForActiveTarget(
+            deviceFingerprint: signal.detectedDeviceIdentifier,
+          ),
+        );
+        break;
+      }
+    }
     _syncPulseState();
   }
 
@@ -297,6 +346,9 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
             peers: transport.peers,
           )
         : null;
+    final trailPoints = target == null
+        ? const <DeviceLocationTrailPoint>[]
+        : transport.trailForDevice(target.detectedDeviceIdentifier);
 
     return Scaffold(
       backgroundColor: _warmBackground,
@@ -430,7 +482,11 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
               ),
               if (snapshot != null && widget.showMiniMap) ...[
                 const SizedBox(height: 18),
-                _CompassMapCard(snapshot: snapshot, target: target),
+                _CompassMapCard(
+                  snapshot: snapshot,
+                  target: target,
+                  trailPoints: trailPoints,
+                ),
               ],
               const SizedBox(height: 18),
               _ResolveSignalCard(
@@ -445,6 +501,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
               activeTargetMessageId: sarState.activeTargetMessageId,
               onPinTarget: _handlePinTarget,
               signals: sarState.activeSignals,
+              lastSeenLookup: transport.lastSeenForDevice,
             ),
           ],
         ),
@@ -832,10 +889,15 @@ class _MetricChip extends StatelessWidget {
 }
 
 class _CompassMapCard extends StatelessWidget {
-  const _CompassMapCard({required this.snapshot, required this.target});
+  const _CompassMapCard({
+    required this.snapshot,
+    required this.target,
+    required this.trailPoints,
+  });
 
   final SurvivorCompassSnapshot snapshot;
   final SurvivorSignalEvent target;
+  final List<DeviceLocationTrailPoint> trailPoints;
 
   @override
   Widget build(BuildContext context) {
@@ -860,6 +922,26 @@ class _CompassMapCard extends StatelessWidget {
           ),
         )
         .toList();
+    final trailLatLngs = trailPoints
+        .map((point) => LatLng(point.lat, point.lng))
+        .toList(growable: false);
+    final staleCutoff = DateTime.now().subtract(const Duration(minutes: 10));
+    final recentTrail = trailPoints
+        .where((point) => point.recordedAt.isAfter(staleCutoff))
+        .map((point) => LatLng(point.lat, point.lng))
+        .toList(growable: false);
+    final trailMarkers = trailPoints
+        .map(
+          (point) => Marker(
+            point: LatLng(point.lat, point.lng),
+            width: 16,
+            height: 16,
+            child: _TrailDot(
+              faded: point.recordedAt.isBefore(staleCutoff),
+            ),
+          ),
+        )
+        .toList(growable: false);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -901,6 +983,18 @@ class _CompassMapCard extends StatelessWidget {
                   ...buildDispatchMapTileLayers(),
                   PolylineLayer(
                     polylines: [
+                      if (trailLatLngs.length >= 2)
+                        Polyline(
+                          points: trailLatLngs,
+                          strokeWidth: 5,
+                          color: _warmAccent.withValues(alpha: 0.18),
+                        ),
+                      if (recentTrail.length >= 2)
+                        Polyline(
+                          points: recentTrail,
+                          strokeWidth: 4,
+                          color: _warmAccent.withValues(alpha: 0.72),
+                        ),
                       Polyline(
                         points: [snapshot.rescuerPoint, snapshot.targetPoint],
                         strokeWidth: 4,
@@ -931,6 +1025,7 @@ class _CompassMapCard extends StatelessWidget {
                         ),
                       ),
                       ...peerMarkers,
+                      ...trailMarkers,
                     ],
                   ),
                 ],
@@ -951,9 +1046,39 @@ class _CompassMapCard extends StatelessWidget {
                 icon: Icons.people_alt_outlined,
                 label: '${snapshot.peerPreviewPoints.length} nearby peers',
               ),
+              if (trailPoints.isNotEmpty)
+                _MetricChip(
+                  icon: Icons.timeline,
+                  label: '${trailPoints.length} trail points',
+                ),
+              if (trailPoints.isNotEmpty)
+                _MetricChip(
+                  icon: Icons.history,
+                  label:
+                      'Last beacon ${_TargetBoard._formatLastSeen(trailPoints.last.recordedAt)}',
+                ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TrailDot extends StatelessWidget {
+  const _TrailDot({required this.faded});
+
+  final bool faded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: faded
+            ? _warmAccent.withValues(alpha: 0.28)
+            : _warmAccent.withValues(alpha: 0.82),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
       ),
     );
   }
@@ -1107,11 +1232,13 @@ class _TargetBoard extends StatelessWidget {
     required this.activeTargetMessageId,
     required this.onPinTarget,
     required this.signals,
+    required this.lastSeenLookup,
   });
 
   final String? activeTargetMessageId;
   final ValueChanged<String> onPinTarget;
   final List<SurvivorSignalEvent> signals;
+  final DeviceLocationTrailPoint? Function(String deviceFingerprint) lastSeenLookup;
 
   @override
   Widget build(BuildContext context) {
@@ -1150,6 +1277,9 @@ class _TargetBoard extends StatelessWidget {
             ...signals.map((signal) {
               final isPinned = signal.messageId == activeTargetMessageId;
               final resolved = signal.isResolved;
+              final lastSeenBeacon = lastSeenLookup(
+                signal.detectedDeviceIdentifier,
+              );
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(14),
@@ -1258,6 +1388,39 @@ class _TargetBoard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (lastSeenBeacon != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7EADF),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Last Seen beacon ${_formatLastSeen(lastSeenBeacon.recordedAt)}',
+                              style: const TextStyle(
+                                color: _deepText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${lastSeenBeacon.lat.toStringAsFixed(4)}, ${lastSeenBeacon.lng.toStringAsFixed(4)}',
+                              style: const TextStyle(color: _mutedText),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "State ${lastSeenBeacon.appState.replaceAll('_', ' ')}${lastSeenBeacon.batteryPct == null ? '' : ' | Battery ${lastSeenBeacon.batteryPct}%'}",
+                              style: const TextStyle(color: _mutedText),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if ((signal.resolutionNote ?? '').isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Text(

@@ -79,7 +79,10 @@ void main() {
     required SarNodeLocation targetLocation,
     AuthService? authService,
   }) async {
-    final transport = MeshTransportService();
+    final transport = MeshTransportService(
+      locationService: FakeLocationService(currentPosition: rescuerLocation),
+      automaticLocationBeaconing: false,
+    );
     final controller = SarModeController(transport: transport);
     await controller.setSarModeEnabled(true);
     final signal = controller.registerSosBeacon(

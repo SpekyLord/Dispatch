@@ -12,6 +12,7 @@ final meshInboxStorageProvider = Provider<MeshInboxStorage>((ref) {
 final meshTransportProvider = Provider<MeshTransportService>((ref) {
   final transport = MeshTransportService(
     inboxStorage: ref.read(meshInboxStorageProvider),
+    locationService: ref.read(locationServiceProvider),
   );
   ref.onDispose(transport.dispose);
   return transport;

@@ -10,9 +10,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from dispatch_api.services.offline_token_service import OfflineTokenService
-
 from dispatch_api.errors import ApiError
+from dispatch_api.services.offline_token_service import OfflineTokenService
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +20,7 @@ VALID_PAYLOAD_TYPES = {
     "ANNOUNCEMENT",
     "DISTRESS",
     "SURVIVOR_SIGNAL",
+    "LOCATION_BEACON",
     "STATUS_UPDATE",
     "SYNC_ACK",
     "MESH_MESSAGE",
@@ -32,6 +32,7 @@ MAX_HOPS_DISTRESS = 15
 MAX_HOPS_SURVIVOR_SIGNAL = 15
 TOPOLOGY_STALE_AFTER_MINUTES = 5
 TOPOLOGY_ACTIVE_WINDOW_MINUTES = 30
+LOCATION_BEACON_ACTIVE_WINDOW_MINUTES = 30
 
 VALID_RECIPIENT_SCOPES = {"broadcast", "department", "direct"}
 VALID_MESSAGE_AUTHOR_ROLES = {"citizen", "department", "anonymous"}
@@ -264,6 +265,59 @@ class MeshService:
         resolved_row = rows[0] if rows else existing[0]
         return _decorate_survivor_signal(resolved_row)
 
+    def list_device_trail(
+        self,
+        device_fingerprint: str,
+        *,
+        time_start: str | None = None,
+        time_end: str | None = None,
+        limit: int = 240,
+    ) -> list[dict[str, Any]]:
+        rows = self.client.db_query(
+            "device_location_trail",
+            params={
+                "select": "*",
+                "device_fingerprint": f"eq.{device_fingerprint}",
+                "order": "recorded_at.desc",
+                "limit": str(limit),
+            },
+            use_service_role=True,
+        )
+
+        if time_start:
+            rows = [row for row in rows if (row.get("recorded_at") or "") >= time_start]
+        if time_end:
+            rows = [row for row in rows if (row.get("recorded_at") or "") <= time_end]
+
+        rows.sort(key=lambda row: str(row.get("recorded_at") or ""))
+        return [_decorate_location_trail_point(row) for row in rows]
+
+    def list_last_seen_devices(self) -> list[dict[str, Any]]:
+        active_cutoff = datetime.now(tz=UTC) - timedelta(
+            minutes=LOCATION_BEACON_ACTIVE_WINDOW_MINUTES
+        )
+        rows = self.client.db_query(
+            "device_location_trail",
+            params={
+                "select": "*",
+                "recorded_at": f"gte.{active_cutoff.isoformat()}",
+                "order": "recorded_at.desc",
+                "limit": "1200",
+            },
+            use_service_role=True,
+        )
+        rows.sort(key=lambda row: str(row.get("recorded_at") or ""), reverse=True)
+        latest_by_device: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            device_fingerprint = str(row.get("device_fingerprint") or "").strip()
+            recorded_at = _parse_iso_datetime(row.get("recorded_at"))
+            if not device_fingerprint or recorded_at is None or recorded_at < active_cutoff:
+                continue
+            if device_fingerprint not in latest_by_device:
+                latest_by_device[device_fingerprint] = row
+
+        return [_decorate_location_trail_point(row) for row in latest_by_device.values()]
+
     def list_messages(
         self,
         *,
@@ -298,11 +352,7 @@ class MeshService:
             params={"select": "*", "order": "created_at.desc", "limit": "50"},
             use_service_role=True,
         )
-        return [
-            row
-            for row in rows
-            if row.get("mesh_originated") or row.get("is_mesh_origin")
-        ]
+        return [row for row in rows if row.get("mesh_originated") or row.get("is_mesh_origin")]
 
     def _viewer_can_access_message(
         self,
@@ -391,6 +441,12 @@ class MeshService:
                     message_id,
                     origin_device,
                     hop_count,
+                    payload,
+                )
+            elif payload_type == "LOCATION_BEACON":
+                linked_id = self._process_location_beacon(
+                    message_id,
+                    pkt.get("timestamp"),
                     payload,
                 )
             elif payload_type == "STATUS_UPDATE":
@@ -494,7 +550,9 @@ class MeshService:
 
         row = {
             "department_id": dept_id,
-            "author_id": token_payload.get("sub") or payload.get("author_id") or depts[0].get("user_id", ""),
+            "author_id": token_payload.get("sub")
+            or payload.get("author_id")
+            or depts[0].get("user_id", ""),
             "title": payload.get("title", "Offline Announcement"),
             "content": payload.get("content", ""),
             "category": payload.get("category", "update"),
@@ -579,6 +637,51 @@ class MeshService:
         rows = self.client.db_insert("survivor_signals", data=row, use_service_role=True)
         return rows[0]["id"] if rows else None
 
+    def _process_location_beacon(
+        self,
+        message_id: str,
+        packet_timestamp: str | None,
+        payload: dict[str, Any],
+    ) -> str | None:
+        device_fingerprint = str(payload.get("deviceFingerprint") or "").strip()
+        if not device_fingerprint:
+            raise ApiError(
+                "Location beacon missing deviceFingerprint.",
+                code="validation_error",
+            )
+
+        lat = payload.get("lat")
+        lng = payload.get("lng")
+        if lat is None or lng is None:
+            raise ApiError(
+                "Location beacon requires lat and lng.",
+                code="validation_error",
+            )
+
+        recorded_at = (
+            packet_timestamp
+            or payload.get("recordedAt")
+            or payload.get("timestamp")
+            or datetime.now(tz=UTC).isoformat()
+        )
+        row = {
+            "message_id": message_id,
+            "device_fingerprint": device_fingerprint,
+            "display_name": payload.get("displayName"),
+            "location": {"lat": lat, "lng": lng},
+            "accuracy_meters": payload.get("accuracyMeters"),
+            "battery_pct": payload.get("batteryPct"),
+            "app_state": payload.get("appState", "foreground"),
+            "recorded_at": recorded_at,
+            "created_at": recorded_at,
+        }
+        rows = self.client.db_insert(
+            "device_location_trail",
+            data=row,
+            use_service_role=True,
+        )
+        return rows[0]["id"] if rows else None
+
     def _process_mesh_message(self, message_id: str, payload: dict[str, Any]) -> str | None:
         thread_id = _require_uuid(payload.get("threadId"), field_name="threadId")
         recipient_scope = str(payload.get("recipientScope") or "").strip().lower()
@@ -596,7 +699,9 @@ class MeshService:
                 code="validation_error",
             )
         if not body or len(body) > 500:
-            raise ApiError("Mesh message body must be 1 to 500 characters.", code="validation_error")
+            raise ApiError(
+                "Mesh message body must be 1 to 500 characters.", code="validation_error"
+            )
         if not author_display_name:
             raise ApiError("Mesh message authorDisplayName is required.", code="validation_error")
         if author_role not in VALID_MESSAGE_AUTHOR_ROLES:
@@ -743,9 +848,7 @@ class MeshService:
     # -- status update: last-write-wins by timestamp --
     def _process_status_update(self, payload: dict[str, Any]) -> str | None:
         target_type = str(
-            payload.get("targetType")
-            or payload.get("target_type")
-            or "INCIDENT_REPORT"
+            payload.get("targetType") or payload.get("target_type") or "INCIDENT_REPORT"
         ).upper()
         if target_type == "SURVIVOR_SIGNAL":
             return self._process_survivor_signal_status_update(payload)
@@ -813,9 +916,7 @@ class MeshService:
             or payload.get("note")
             or ""
         ).strip()
-        resolved_by = payload.get("resolvedByUserId") or payload.get(
-            "resolved_by_user_id"
-        )
+        resolved_by = payload.get("resolvedByUserId") or payload.get("resolved_by_user_id")
 
         query_params = {"select": "*"}
         if signal_id:
@@ -877,6 +978,7 @@ def _record_type_for(
         "ANNOUNCEMENT": "post",
         "DISTRESS": "distress_signal",
         "SURVIVOR_SIGNAL": "survivor_signal",
+        "LOCATION_BEACON": "device_location_trail",
         "MESH_MESSAGE": "mesh_comm_message",
         "MESH_POST": "post",
         "SYNC_ACK": None,
@@ -923,16 +1025,27 @@ def _decorate_survivor_signal(row: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
+def _decorate_location_trail_point(row: dict[str, Any]) -> dict[str, Any]:
+    lat, lng = _extract_coordinates(row.get("location") or {})
+    enriched = dict(row)
+    enriched["lat"] = lat
+    enriched["lng"] = lng
+    enriched["coordinates"] = [lng, lat] if lat is not None and lng is not None else None
+    enriched["geometry"] = (
+        {"type": "Point", "coordinates": [lng, lat]}
+        if lat is not None and lng is not None
+        else None
+    )
+    return enriched
+
+
 def _build_topology_row(
     node: dict[str, Any],
     gateway_device_id: str,
     captured_at: str,
 ) -> dict[str, Any] | None:
     node_device_id = (
-        node.get("nodeDeviceId")
-        or node.get("deviceId")
-        or node.get("originDeviceId")
-        or ""
+        node.get("nodeDeviceId") or node.get("deviceId") or node.get("originDeviceId") or ""
     )
     if not node_device_id:
         return None
@@ -964,11 +1077,7 @@ def _build_topology_row(
 
     department_name = str(node.get("departmentName") or "")
     display_name = str(node.get("displayName") or node.get("deviceName") or department_name)
-    last_seen_at = (
-        node.get("lastSeenTimestamp")
-        or node.get("lastSeenAt")
-        or captured_at
-    )
+    last_seen_at = node.get("lastSeenTimestamp") or node.get("lastSeenAt") or captured_at
 
     explicit_responder = node.get("isResponder")
     is_responder = bool(

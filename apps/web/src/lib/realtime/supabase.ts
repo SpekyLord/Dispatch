@@ -9,7 +9,9 @@ export type RealtimeTable =
   | "notifications"
   | "department_feed_posts"
   | "department_feed_comment"
-  | "distress_signals";
+  | "distress_signals"
+  | "survivor_signals"
+  | "mesh_topology_nodes";
 
 export function getRealtimeClient() {
   const url = import.meta.env.VITE_SUPABASE_URL;
@@ -82,3 +84,4 @@ export function subscribeToTable(
     },
   };
 }
+

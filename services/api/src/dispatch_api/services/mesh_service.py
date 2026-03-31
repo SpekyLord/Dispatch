@@ -1,4 +1,4 @@
-"""Mesh gateway service - idempotent ingest, dedup, sync, and survivor signal workflows."""
+"""Mesh gateway service - idempotent ingest, dedup, sync, topology, and survivor workflows."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from dispatch_api.errors import ApiError
@@ -25,6 +25,8 @@ VALID_PAYLOAD_TYPES = {
 MAX_HOPS_DEFAULT = 7
 MAX_HOPS_DISTRESS = 15
 MAX_HOPS_SURVIVOR_SIGNAL = 15
+TOPOLOGY_STALE_AFTER_MINUTES = 5
+TOPOLOGY_ACTIVE_WINDOW_MINUTES = 30
 
 
 class MeshService:
@@ -34,6 +36,78 @@ class MeshService:
     # -- batch ingest from a gateway device --
     def ingest_packets(self, packets: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [self._process_single(pkt) for pkt in packets]
+
+    def upsert_topology_snapshot(self, snapshot: dict[str, Any]) -> int:
+        captured_at = snapshot.get("capturedAt") or datetime.now(tz=UTC).isoformat()
+        gateway_device_id = snapshot.get("gatewayDeviceId") or ""
+        nodes = snapshot.get("nodes") or []
+        gateway_node = snapshot.get("gateway")
+
+        if not isinstance(nodes, list):
+            raise ApiError(
+                "topologySnapshot.nodes must be an array.",
+                code="validation_error",
+            )
+
+        if isinstance(gateway_node, dict):
+            nodes = [gateway_node, *nodes]
+
+        ingested = 0
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+
+            row = _build_topology_row(node, gateway_device_id, captured_at)
+            if row is None:
+                continue
+
+            existing = self.client.db_query(
+                "mesh_topology_nodes",
+                params={"select": "id", "node_device_id": f"eq.{row['node_device_id']}"},
+                use_service_role=True,
+            )
+            if existing:
+                self.client.db_update(
+                    "mesh_topology_nodes",
+                    data=row,
+                    params={"node_device_id": f"eq.{row['node_device_id']}"},
+                    use_service_role=True,
+                    return_repr=False,
+                )
+            else:
+                self.client.db_insert(
+                    "mesh_topology_nodes",
+                    data=row,
+                    use_service_role=True,
+                    return_repr=False,
+                )
+            ingested += 1
+
+        return ingested
+
+    def list_topology_nodes(self, *, viewer_role: str | None) -> dict[str, Any]:
+        rows = self.client.db_query(
+            "mesh_topology_nodes",
+            params={"select": "*", "order": "last_seen_at.desc", "limit": "300"},
+            use_service_role=True,
+        )
+
+        now = datetime.now(tz=UTC)
+        nodes: list[dict[str, Any]] = []
+        responders: list[dict[str, Any]] = []
+        for row in rows:
+            formatted = _format_topology_node(row, now)
+            if formatted is None:
+                continue
+            nodes.append(formatted)
+            if viewer_role == "municipality" and _is_responder_node(formatted):
+                responders.append(formatted)
+
+        return {
+            "nodes": nodes,
+            "responders": responders,
+            "synced_at": now.isoformat(),
+        }
 
     # -- pull server-side updates for gateway rebroadcast --
     def get_sync_updates(self, *, since: str | None = None) -> dict[str, Any]:
@@ -65,7 +139,7 @@ class MeshService:
         }
         if since:
             survivor_params["created_at"] = f"gte.{since}"
-        survivor_signals = self.client.db_query(
+        survivor_rows = self.client.db_query(
             "survivor_signals", params=survivor_params, use_service_role=True
         )
 
@@ -83,7 +157,7 @@ class MeshService:
         return {
             "report_updates": reports,
             "distress_signals": distress,
-            "survivor_signals": survivor_signals,
+            "survivor_signals": [_decorate_survivor_signal(row) for row in survivor_rows],
             "status_history": history,
             "synced_at": datetime.now(tz=UTC).isoformat(),
         }
@@ -140,7 +214,7 @@ class MeshService:
                 )
             ]
 
-        return rows
+        return [_decorate_survivor_signal(row) for row in rows]
 
     def resolve_survivor_signal(
         self,
@@ -168,7 +242,8 @@ class MeshService:
             params={"id": f"eq.{signal_id}"},
             use_service_role=True,
         )
-        return rows[0] if rows else existing[0]
+        resolved_row = rows[0] if rows else existing[0]
+        return _decorate_survivor_signal(resolved_row)
 
     # -- process one mesh packet --
     def _process_single(self, pkt: dict[str, Any]) -> dict[str, Any]:
@@ -473,6 +548,135 @@ def _record_type_for(payload_type: str) -> str | None:
     }.get(payload_type)
 
 
+# GeoJSON helpers keep the web map thin and consistent across endpoints.
+def _decorate_survivor_signal(row: dict[str, Any]) -> dict[str, Any]:
+    lat, lng = _extract_coordinates(row.get("node_location") or {})
+    enriched = dict(row)
+    enriched["coordinates"] = [lng, lat] if lat is not None and lng is not None else None
+    enriched["geometry"] = (
+        {"type": "Point", "coordinates": [lng, lat]}
+        if lat is not None and lng is not None
+        else None
+    )
+    enriched["marker_state"] = "resolved" if row.get("resolved") else "active"
+    enriched["accuracy_radius_meters"] = row.get("estimated_distance_meters", 0)
+    return enriched
+
+
+def _build_topology_row(
+    node: dict[str, Any],
+    gateway_device_id: str,
+    captured_at: str,
+) -> dict[str, Any] | None:
+    node_device_id = (
+        node.get("nodeDeviceId")
+        or node.get("deviceId")
+        or node.get("originDeviceId")
+        or ""
+    )
+    if not node_device_id:
+        return None
+
+    location = node.get("nodeLocation") or node.get("location") or {}
+    if not isinstance(location, dict):
+        location = {}
+    lat = node.get("lat", location.get("lat"))
+    lng = node.get("lng", location.get("lng"))
+    if lat is None or lng is None:
+        return None
+
+    accuracy = node.get("accuracyMeters", location.get("accuracyMeters"))
+    node_role = str(
+        node.get("role")
+        or node.get("nodeRole")
+        or ("gateway" if node_device_id == gateway_device_id and gateway_device_id else "relay")
+    ).lower()
+    if node_role not in {"origin", "relay", "gateway"}:
+        node_role = "relay"
+
+    operator_role = node.get("operatorRole")
+    if operator_role not in {"citizen", "department", "municipality"}:
+        operator_role = None
+
+    department_id = node.get("departmentId")
+    if not isinstance(department_id, str) or not department_id.strip():
+        department_id = None
+
+    department_name = str(node.get("departmentName") or "")
+    display_name = str(node.get("displayName") or node.get("deviceName") or department_name)
+    last_seen_at = (
+        node.get("lastSeenTimestamp")
+        or node.get("lastSeenAt")
+        or captured_at
+    )
+
+    explicit_responder = node.get("isResponder")
+    is_responder = bool(
+        explicit_responder
+        if explicit_responder is not None
+        else operator_role == "department" or department_id
+    )
+
+    return {
+        "node_device_id": node_device_id,
+        "gateway_device_id": str(node.get("gatewayDeviceId") or gateway_device_id or ""),
+        "node_role": node_role,
+        "node_location": {
+            "lat": float(lat),
+            "lng": float(lng),
+            "accuracyMeters": float(accuracy) if accuracy is not None else None,
+        },
+        "peer_count": int(node.get("peerCount") or 0),
+        "queue_depth": int(node.get("queueDepth") or 0),
+        "last_seen_at": last_seen_at,
+        "last_sync_at": captured_at,
+        "display_name": display_name,
+        "operator_role": operator_role,
+        "department_id": department_id,
+        "department_name": department_name,
+        "is_responder": is_responder,
+        "metadata": _topology_metadata(node),
+    }
+
+
+def _format_topology_node(row: dict[str, Any], now: datetime) -> dict[str, Any] | None:
+    lat, lng = _extract_coordinates(row.get("node_location") or {})
+    if lat is None or lng is None:
+        return None
+
+    last_seen = _parse_iso_datetime(row.get("last_seen_at"))
+    if last_seen is None:
+        return None
+
+    if last_seen < now - timedelta(minutes=TOPOLOGY_ACTIVE_WINDOW_MINUTES):
+        return None
+
+    enriched = dict(row)
+    enriched["coordinates"] = [lng, lat]
+    enriched["geometry"] = {"type": "Point", "coordinates": [lng, lat]}
+    enriched["lat"] = lat
+    enriched["lng"] = lng
+    enriched["is_stale"] = last_seen < now - timedelta(minutes=TOPOLOGY_STALE_AFTER_MINUTES)
+    return enriched
+
+
+def _is_responder_node(node: dict[str, Any]) -> bool:
+    return bool(
+        node.get("is_responder")
+        or node.get("department_id")
+        or node.get("operator_role") == "department"
+    )
+
+
+def _topology_metadata(node: dict[str, Any]) -> dict[str, Any]:
+    metadata = node.get("metadata")
+    clean_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    for key in ("batteryPct", "appState", "lastRelayHopCount"):
+        if key in node:
+            clean_metadata[key] = node[key]
+    return clean_metadata
+
+
 def _location_in_bbox(
     node_location: dict[str, Any],
     min_lat: float,
@@ -485,6 +689,26 @@ def _location_in_bbox(
     if lat is None or lng is None:
         return False
     return min_lat <= float(lat) <= max_lat and min_lng <= float(lng) <= max_lng
+
+
+def _extract_coordinates(node_location: dict[str, Any]) -> tuple[float | None, float | None]:
+    lat = node_location.get("lat")
+    lng = node_location.get("lng")
+    if lat is None or lng is None:
+        return None, None
+    try:
+        return float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None, None
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _error_result(message_id: str, error: str) -> dict[str, Any]:

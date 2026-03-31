@@ -176,3 +176,12 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 - The minimap shows the rescuer position, estimated target point, and nearby mesh peers. Peer dots are rendered as a relative proximity ring until peer GPS coordinates are included in mesh sync uploads.
 - When the rescuer closes to roughly 3 meters, the UI switches to a pulse animation and haptic cue to support a short-range sweep.
 - Resolve actions call the existing survivor-signal resolve API when the device is online. If the request fails, the current mobile implementation keeps a local retry queue; it does not yet emit a dedicated mesh-relayed resolve packet.
+
+## Interactive Mesh Map Extension (4-EXT.3)
+
+- Gateways can attach a `topologySnapshot` payload to `POST /api/mesh/ingest`. The server persists the latest node state in `mesh_topology_nodes` and exposes it through `GET /api/mesh/topology` for municipality and department dashboards.
+- `GET /api/mesh/topology` returns only nodes seen within the last 30 minutes and flags them as stale after 5 minutes without a fresh gateway upload. Operators should treat stale nodes as last-known positions rather than live peer discovery.
+- Survivor-signal responses now include GeoJSON-ready `coordinates` and `geometry` fields so the web map can render signal markers directly.
+- The municipality Mesh & SAR page overlays disaster reports, mesh nodes, responder markers, and survivor signals on the same Leaflet map. Topology refreshes every 30 seconds while survivor signals refresh through Supabase Realtime.
+
+

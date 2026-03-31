@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * Phase 1 — Aegis Risk design-system tokens.
+ * Phase 1 - Aegis Risk design-system tokens.
  * Warm scholarly palette: cream backgrounds, olive text, terracotta accents.
  */
 :root {
@@ -67,7 +67,7 @@ h3 {
   scrollbar-width: none;
 }
 
-/* Form focus ring — Aegis style */
+/* Form focus ring - Aegis style */
 .aegis-input {
   @apply w-full border-none rounded-md px-4 py-3 text-sm transition-all outline-none;
   background-color: #eae9de;
@@ -81,8 +81,168 @@ h3 {
   box-shadow: 0 0 0 4px rgba(199, 219, 254, 0.2);
 }
 
-/* Label style — tiny uppercase tracking */
+/* Label style - tiny uppercase tracking */
 .aegis-label {
   @apply block text-[11px] font-bold uppercase tracking-widest mb-2 ml-1;
   color: #64655d;
+}
+
+.mesh-sar-map .leaflet-popup-content-wrapper {
+  border: 1px solid #ecd8cf;
+  border-radius: 18px;
+  background: #fff8f3;
+  box-shadow: 0 18px 36px rgba(56, 56, 49, 0.12);
+}
+
+.mesh-sar-map .leaflet-popup-tip {
+  background: #fff8f3;
+}
+
+.mesh-sar-icon-shell {
+  background: transparent;
+  border: 0;
+}
+
+.mesh-sar-node-marker,
+.mesh-sar-survivor-marker,
+.mesh-sar-responder-marker,
+.mesh-sar-report-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mesh-sar-node-marker {
+  width: 18px;
+  height: 18px;
+}
+
+.mesh-sar-node-marker__triangle {
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 16px solid #c0c3c8;
+  filter: drop-shadow(0 4px 10px rgba(56, 56, 49, 0.18));
+}
+
+.mesh-sar-node-marker--gateway .mesh-sar-node-marker__triangle {
+  border-bottom-color: #3f9366;
+}
+
+.mesh-sar-node-marker--relay .mesh-sar-node-marker__triangle {
+  border-bottom-color: #d89a34;
+}
+
+.mesh-sar-node-marker--origin .mesh-sar-node-marker__triangle {
+  border-bottom-color: #8d9199;
+}
+
+.mesh-sar-node-marker--stale {
+  opacity: 0.5;
+}
+
+.mesh-sar-responder-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(54, 122, 196, 0.16);
+  border: 1px solid rgba(54, 122, 196, 0.28);
+}
+
+.mesh-sar-responder-marker__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #367ac4;
+  box-shadow: 0 0 0 5px rgba(54, 122, 196, 0.14);
+}
+
+.mesh-sar-survivor-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(198, 84, 57, 0.18);
+  border: 1px solid rgba(198, 84, 57, 0.2);
+}
+
+.mesh-sar-survivor-marker__core {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #c65439;
+  box-shadow: 0 0 0 0 rgba(198, 84, 57, 0.45);
+  animation: mesh-sar-pulse 1.8s ease-out infinite;
+}
+
+.mesh-sar-survivor-marker--resolved {
+  background: rgba(125, 131, 140, 0.16);
+  border-color: rgba(125, 131, 140, 0.24);
+}
+
+.mesh-sar-survivor-marker--resolved .mesh-sar-survivor-marker__core {
+  background: #80858d;
+  animation: none;
+}
+
+.mesh-sar-report-marker {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(91, 82, 77, 0.18);
+  border: 1px solid rgba(91, 82, 77, 0.2);
+}
+
+.mesh-sar-report-marker__core {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #5f5e5c;
+}
+
+.mesh-sar-report-marker--fire .mesh-sar-report-marker__core {
+  background: #c65439;
+}
+
+.mesh-sar-report-marker--flood .mesh-sar-report-marker__core {
+  background: #367ac4;
+}
+
+.mesh-sar-report-marker--earthquake .mesh-sar-report-marker__core {
+  background: #7f5ea9;
+}
+
+.mesh-sar-report-marker--medical .mesh-sar-report-marker__core {
+  background: #3f9366;
+}
+
+.mesh-sar-report-marker--road-accident .mesh-sar-report-marker__core {
+  background: #d89a34;
+}
+
+.mesh-sar-radius-ring {
+  animation: mesh-sar-ring-breathe 2.8s ease-in-out infinite;
+}
+
+.mesh-sar-radius-ring--resolved {
+  animation: none;
+}
+
+@keyframes mesh-sar-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(198, 84, 57, 0.42);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(198, 84, 57, 0);
+  }
+}
+
+@keyframes mesh-sar-ring-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
 }

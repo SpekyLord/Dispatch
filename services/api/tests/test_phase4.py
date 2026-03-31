@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from dispatch_api.app import create_app
@@ -607,3 +609,153 @@ class TestSurvivorSignalRoutes:
         assert len(survivor_updates) == 1
         assert survivor_updates[0][1]["resolved"] is True
         assert survivor_updates[0][1]["resolution_note"] == "Located and handed off to responders."
+
+class TestMeshTopologyIngest:
+    def test_ingest_topology_snapshot_without_packets(self, settings):
+        fake = FakeSupabaseClient()
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.post(
+                "/api/mesh/ingest",
+                json={
+                    "topologySnapshot": {
+                        "gatewayDeviceId": "gw-1",
+                        "capturedAt": "2026-03-31T02:30:00Z",
+                        "nodes": [
+                            {
+                                "nodeDeviceId": "gw-1",
+                                "role": "gateway",
+                                "lat": 14.601,
+                                "lng": 120.982,
+                                "peerCount": 5,
+                                "queueDepth": 1,
+                                "displayName": "Gateway Alpha",
+                            },
+                            {
+                                "nodeDeviceId": "relay-2",
+                                "role": "relay",
+                                "lat": 14.603,
+                                "lng": 120.985,
+                                "peerCount": 2,
+                                "queueDepth": 3,
+                                "operatorRole": "department",
+                                "departmentName": "MDRRMO Team 2",
+                            },
+                        ],
+                    }
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["topology_ingested_count"] == 2
+            assert data["processed_count"] == 0
+
+        topology_inserts = [
+            (table, row)
+            for table, row in fake._inserts
+            if table == "mesh_topology_nodes"
+        ]
+        assert len(topology_inserts) == 2
+        assert topology_inserts[0][1]["gateway_device_id"] == "gw-1"
+
+
+class TestMeshTopologyRoutes:
+    def test_topology_route_returns_active_nodes_and_responder_subset(self, settings):
+        fresh_gateway_seen = (datetime.now(tz=UTC) - timedelta(minutes=2)).isoformat()
+        fresh_responder_seen = (datetime.now(tz=UTC) - timedelta(minutes=1)).isoformat()
+        stale_seen = (datetime.now(tz=UTC) - timedelta(minutes=45)).isoformat()
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="muni-1", email="admin@test.com", role="municipality"),
+            db_rows={
+                "mesh_topology_nodes": [
+                    {
+                        "id": "node-1",
+                        "node_device_id": "gw-1",
+                        "node_role": "gateway",
+                        "node_location": {"lat": 14.6, "lng": 120.98},
+                        "peer_count": 5,
+                        "queue_depth": 1,
+                        "display_name": "Gateway Alpha",
+                        "operator_role": "municipality",
+                        "department_id": None,
+                        "department_name": "",
+                        "is_responder": False,
+                        "last_seen_at": fresh_gateway_seen,
+                        "last_sync_at": fresh_gateway_seen,
+                    },
+                    {
+                        "id": "node-2",
+                        "node_device_id": "relay-2",
+                        "node_role": "relay",
+                        "node_location": {"lat": 14.61, "lng": 120.99},
+                        "peer_count": 3,
+                        "queue_depth": 0,
+                        "display_name": "Responder Bravo",
+                        "operator_role": "department",
+                        "department_id": "dept-2",
+                        "department_name": "Fire Station 2",
+                        "is_responder": True,
+                        "last_seen_at": fresh_responder_seen,
+                        "last_sync_at": fresh_gateway_seen,
+                    },
+                    {
+                        "id": "node-3",
+                        "node_device_id": "old-node",
+                        "node_role": "origin",
+                        "node_location": {"lat": 14.55, "lng": 120.95},
+                        "peer_count": 1,
+                        "queue_depth": 0,
+                        "display_name": "Old snapshot",
+                        "operator_role": "citizen",
+                        "department_id": None,
+                        "department_name": "",
+                        "is_responder": False,
+                        "last_seen_at": stale_seen,
+                        "last_sync_at": stale_seen,
+                    },
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get("/api/mesh/topology", headers={"Authorization": "Bearer valid-token"})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 2
+            assert data["responder_count"] == 1
+            assert data["nodes"][0]["geometry"]["type"] == "Point"
+            assert data["nodes"][0]["coordinates"] == [120.98, 14.6]
+            assert data["responders"][0]["department_name"] == "Fire Station 2"
+
+    def test_survivor_signals_include_geojson_coordinates(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="dept-1", email="dept@test.com", role="department"),
+            db_rows={
+                "survivor_signals": [
+                    {
+                        "id": "sig-geo-1",
+                        "detection_method": "BLE_PASSIVE",
+                        "resolved": False,
+                        "node_location": {"lat": 14.7, "lng": 121.01},
+                        "estimated_distance_meters": 7.5,
+                        "confidence": 0.91,
+                        "last_seen_timestamp": "2026-03-31T02:25:00+00:00",
+                    }
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/survivor-signals",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["survivor_signals"][0]["coordinates"] == [121.01, 14.7]
+            assert data["survivor_signals"][0]["geometry"]["type"] == "Point"
+            assert data["survivor_signals"][0]["accuracy_radius_meters"] == 7.5
+
+
+
+

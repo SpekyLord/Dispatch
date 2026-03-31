@@ -46,7 +46,7 @@ const roleNavItems: Record<string, NavItem[]> = {
     { to: "/municipality/reports/escalated", label: "Escalations", icon: "crisis_alert" },
     { to: "/municipality/verification", label: "Verification", icon: "verified_user" },
     { to: "/municipality/departments", label: "Departments", icon: "domain" },
-    { to: "/municipality/mesh", label: "Mesh Status", icon: "cell_tower" },
+    { to: "/municipality/mesh", label: "Mesh & SAR", icon: "cell_tower" },
     { to: "/municipality/news-feed", label: "News Feed", icon: "campaign" },
     { to: "/notifications", label: "Notifications", icon: "notifications" },
     { to: "/profile", label: "Profile", icon: "person" },

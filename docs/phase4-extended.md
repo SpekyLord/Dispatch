@@ -209,17 +209,17 @@ see the disaster zone in real time.
 
 #### Flask API
 
-- [ ] Add `GET /api/mesh/topology` (municipality and department roles) returning
+- [x] Add `GET /api/mesh/topology` (municipality and department roles) returning
   active peer nodes with their last-known GPS coordinates, role (origin, relay,
   gateway), peer count, and last-seen timestamp. Data sourced from gateway sync
   uploads.
-- [ ] Extend `GET /api/mesh/survivor-signals` response to include GeoJSON-ready
+- [x] Extend `GET /api/mesh/survivor-signals` response to include GeoJSON-ready
   coordinates so the web map can render signal markers directly.
 
 #### Web App
 
-- [ ] Add a **Mesh & SAR** layer toggle on the municipality map view.
-- [ ] When enabled, render:
+- [x] Add a **Mesh & SAR** layer toggle on the municipality map view.
+- [x] When enabled, render:
   - **Mesh node markers** (triangles) color-coded by role: gateway (green),
     relay (yellow), origin/offline (grey). Node popup shows role, peer count,
     queue depth, and last sync.
@@ -230,26 +230,32 @@ see the disaster zone in real time.
   - **Responder markers** showing the last-known location of department devices
     active on the mesh (sourced from gateway sync peer data, municipality role
     only).
-- [ ] Survivor signal markers animate a distance-accuracy radius ring based on
+- [x] Survivor signal markers animate a distance-accuracy radius ring based on
   `estimatedDistanceMeters`.
-- [ ] Resolved signals fade to grey and remain on the map for 30 minutes for
+- [x] Resolved signals fade to grey and remain on the map for 30 minutes for
   audit purposes, then are hidden by default (toggle to show).
-- [ ] Add a live node count and active survivor signal count badge to the map
+- [x] Add a live node count and active survivor signal count badge to the map
   toolbar.
-- [ ] Realtime updates via Supabase Realtime subscription on `survivor_signals`
+- [x] Realtime updates via Supabase Realtime subscription on `survivor_signals`
   and a periodic poll on `GET /api/mesh/topology` (30-second interval).
 
 #### Tests
 
-- [ ] Unit tests for mesh topology API response shape.
-- [ ] Web component tests for mesh layer toggle, node marker rendering, and
+- [x] Unit tests for mesh topology API response shape.
+- [x] Web component tests for mesh layer toggle, node marker rendering, and
   survivor signal popup content.
 
 #### Docs
 
-- [ ] Document mesh topology data freshness (topology reflects gateway-uploaded
+- [x] Document mesh topology data freshness (topology reflects gateway-uploaded
   state, not live BLE discovery), and how operators should interpret stale node
   data.
+
+### Status Note - 4-EXT.3
+
+- Date: `2026-03-31`
+- Completed: added gateway-topology snapshot persistence plus `GET /api/mesh/topology`, extended survivor-signal responses with GeoJSON-ready coordinates, and replaced the municipality mesh status page with a feed-aligned Mesh & SAR dashboard that renders report, node, responder, and survivor overlays with resolve actions, count badges, resolved-signal fading, realtime survivor refresh, and 30-second topology polling.
+- Constraint: topology only reflects the latest gateway-uploaded snapshot. Nodes are treated as active for 30 minutes and flagged as stale after 5 minutes without a fresh gateway upload.
 
 ---
 
@@ -510,3 +516,5 @@ range.
   blackout via mesh relay and sync to the backend on gateway restore.
 - All extension work is additive and the canonical Phase 4 exit criteria remain
   satisfied.
+
+

@@ -10,6 +10,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 
 class MainActivity : FlutterActivity() {
+    private var sarPlatformBridge: SarPlatformBridge? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -18,6 +20,16 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "dispatch_mobile/compass_heading",
         ).setStreamHandler(CompassHeadingStreamHandler(sensorManager))
+
+        sarPlatformBridge = SarPlatformBridge(this, applicationContext).also {
+            it.register(flutterEngine)
+        }
+    }
+
+    override fun onDestroy() {
+        sarPlatformBridge?.dispose()
+        sarPlatformBridge = null
+        super.onDestroy()
     }
 }
 

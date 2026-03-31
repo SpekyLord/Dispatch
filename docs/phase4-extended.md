@@ -82,21 +82,21 @@ packet is treated as equal-priority to `DISTRESS`. It uses `maxHops = 15`.
   collect probe-request signal strengths. Do not connect to any network. Record
   `detectedDeviceIdentifier` as an anonymized partial MAC (last two octets
   zeroed). Wrap as `SURVIVOR_SIGNAL` with `detectionMethod = WIFI_PROBE`.
-- [ ] **BLE passive scanning:** Use `flutter_blue_plus` or equivalent to
-  continuously scan for any advertising BLE device (phones, wearables, earbuds)
-  without initiating a connection. Record RSSI and anonymized partial address.
-  Wrap as `SURVIVOR_SIGNAL` with `detectionMethod = BLE_PASSIVE`.
-- [ ] **SOS beacon reception:** If a device is running the app and broadcasting
+- [x] **BLE passive scanning:** Use platform BLE scan APIs to continuously scan
+  for any advertising BLE device (phones, wearables, earbuds) without
+  initiating a connection. Record RSSI and anonymized partial address. Wrap as
+  `SURVIVOR_SIGNAL` with `detectionMethod = BLE_PASSIVE`.
+- [x] **SOS beacon reception:** If a device is running the app and broadcasting
   its own SOS beacon (see 4-EXT.1 beacon broadcast below), detect it via BLE
   advertisement. Treat as highest-confidence signal. Wrap as `SURVIVOR_SIGNAL`
   with `detectionMethod = SOS_BEACON` and confidence = 1.0.
-- [ ] **Acoustic detection:** Use the device microphone in 5-second sample
+- [x] **Acoustic detection:** Use the device microphone in 5-second sample
   windows to run a lightweight on-device classifier. Classify samples as
   `tapping`, `voice`, `anomalous_sound`, or `none`. Trigger a
   `SURVIVOR_SIGNAL` packet only on positive classification. Classification must
   run entirely on-device - do not send raw audio over the mesh or to the
   backend.
-- [ ] **SOS beacon broadcast:** Any logged-in or anonymous user who triggers
+- [x] **SOS beacon broadcast:** Any logged-in or anonymous user who triggers
   the no-login SOS action (already in core Phase 4) also begins broadcasting a
   detectable BLE advertisement with a standardized service UUID so nearby SAR
   nodes can pick it up passively.
@@ -115,7 +115,7 @@ packet is treated as equal-priority to `DISTRESS`. It uses `maxHops = 15`.
 
 #### Tests
 
-- [ ] Unit tests for Wi-Fi probe parser, BLE scan RSSI extractor, and acoustic
+- [x] Unit tests for Wi-Fi probe parser, BLE scan RSSI extractor, and acoustic
   sample classifier mock.
 - [x] Unit tests for `SURVIVOR_SIGNAL` serialization, deduplication window, and
   packet priority ordering.
@@ -136,9 +136,9 @@ packet is treated as equal-priority to `DISTRESS`. It uses `maxHops = 15`.
 ### Status Note - 4-EXT.1
 
 - Date: `2026-03-31`
-- Completed: server persistence for `SURVIVOR_SIGNAL`, responder review/resolve API routes, mesh-priority relay + dedup, SAR Mode toggle, and the department-side mobile SAR feed are implemented and covered by API/mobile tests.
-- Remaining: live Wi-Fi probe sniffing, live BLE passive scan intake, microphone-backed acoustic sampling, and actual BLE SOS beacon broadcast/reception are still helper- or stub-level hooks rather than platform-integrated passive sensing subsystems.
-
+- Completed: server persistence for `SURVIVOR_SIGNAL`, responder review/resolve API routes, mesh-priority relay + dedup, SAR Mode toggle, the department-side mobile SAR feed, Android-native BLE passive scanning, SOS beacon advertising/reception, 5-second on-device acoustic window summaries, and parser/classifier mobile tests are implemented.
+- Remaining: live Wi-Fi probe sniffing is still open because standard mobile app sandboxes do not expose passive probe-request capture without privileged device access, and the manual dual-device SAR field test remains pending.
+- Constraint: passive sensing now ships through the Android host bridge. Unsupported devices or missing Nearby Devices / Microphone permissions fall back to a visible unavailable or permission-needed state in the SAR panel.
 
 ---
 
@@ -481,11 +481,11 @@ range.
 
 ## Verification Checklist For Phase 4 Extension
 
-- [ ] SAR Mode can be enabled and disabled from the mesh status panel without
+- [x] SAR Mode can be enabled and disabled from the mesh status panel without
   crashing or disrupting the existing mesh relay logic.
 - [ ] A passive BLE scan detects a nearby device running the app in SOS mode
   and generates a `SURVIVOR_SIGNAL` packet that reaches the gateway.
-- [ ] The acoustic classifier does not transmit raw audio and runs entirely
+- [x] The acoustic classifier does not transmit raw audio and runs entirely
   on-device.
 - [ ] The Survivor Compass points toward a pinned `SURVIVOR_SIGNAL` with correct
   bearing and switches to proximity pulse below 3 m.
@@ -516,5 +516,13 @@ range.
   blackout via mesh relay and sync to the backend on gateway restore.
 - All extension work is additive and the canonical Phase 4 exit criteria remain
   satisfied.
+
+
+
+
+
+
+
+
 
 

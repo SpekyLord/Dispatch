@@ -37,7 +37,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
   Future<void> _init() async {
     final transport = ref.read(meshTransportProvider);
     await transport.initialize();
-    ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+    await ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
     await _hydrateSignals(silent: true);
     if (mounted) {
       setState(() => _initialized = true);
@@ -81,7 +81,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
   Future<void> _handleRefresh() async {
     final transport = ref.read(meshTransportProvider);
     transport.pruneStalePeers();
-    ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+    await ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
     await _hydrateSignals();
     if (mounted) {
       setState(() {});
@@ -300,9 +300,11 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                       _openCompass(messageId);
                     },
                     onToggle: (value) {
-                      ref
-                          .read(sarModeControllerProvider.notifier)
-                          .setSarModeEnabled(value);
+                      unawaited(
+                        ref
+                            .read(sarModeControllerProvider.notifier)
+                            .setSarModeEnabled(value),
+                      );
                     },
                     sarState: sarState,
                     sosBeaconBroadcasting: transport.isSosBeaconBroadcasting,
@@ -632,6 +634,16 @@ class _SarModePanel extends StatelessWidget {
       ...sarState.subsystemActive,
       SarDetectionMethod.sosBeacon: sosBeaconBroadcasting,
     };
+    final subsystemSupported = sarState.subsystemSupported;
+    final subsystemNotes = sarState.subsystemNotes;
+    final liveInputs = <String>[
+      if (subsystemActive[SarDetectionMethod.blePassive] == true)
+        'BLE passive scan',
+      if (subsystemActive[SarDetectionMethod.acoustic] == true)
+        'microphone summary windows',
+      if (subsystemActive[SarDetectionMethod.sosBeacon] == true)
+        'SOS beacon advertising',
+    ];
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -687,36 +699,31 @@ class _SarModePanel extends StatelessWidget {
             ),
             subtitle: Text(
               canEnableSarMode
-                  ? 'Wi-Fi, BLE, acoustic classification, and SOS beacon inputs will feed the local SAR board.'
+                  ? 'BLE and acoustic sensing can run locally, while Wi-Fi probe sniffing stays unavailable on standard mobile app sandboxes.'
                   : 'Verification approval is required before SAR Mode can be enabled on this device.',
               style: const TextStyle(color: _mutedText),
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: subsystemActive.entries.map((entry) {
-              final label = switch (entry.key) {
-                SarDetectionMethod.wifiProbe => 'Wi-Fi probe',
-                SarDetectionMethod.blePassive => 'BLE passive',
-                SarDetectionMethod.acoustic => 'Acoustic',
-                SarDetectionMethod.sosBeacon => 'SOS beacon',
-              };
-              return Chip(
-                avatar: Icon(
-                  entry.value ? Icons.check_circle : Icons.pause_circle_outline,
-                  size: 16,
-                  color: entry.value
-                      ? const Color(0xFF397154)
-                      : Colors.grey.shade600,
-                ),
-                label: Text(label),
-              );
-            }).toList(),
-          ),
+          ...subsystemActive.entries.map((entry) {
+            final label = switch (entry.key) {
+              SarDetectionMethod.wifiProbe => 'Wi-Fi probe',
+              SarDetectionMethod.blePassive => 'BLE passive',
+              SarDetectionMethod.acoustic => 'Acoustic',
+              SarDetectionMethod.sosBeacon => 'SOS beacon',
+            };
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _SubsystemStatusCard(
+                label: label,
+                active: entry.value,
+                supported: subsystemSupported[entry.key] ?? false,
+                note: subsystemNotes[entry.key],
+              ),
+            );
+          }),
           if (sarState.isEnabled) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
@@ -724,9 +731,11 @@ class _SarModePanel extends StatelessWidget {
                 color: const Color(0xFFF7EADF),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Text(
-                'Identifiers are anonymized before storage, raw audio never leaves the device, and continuous sensing increases battery use during a sweep.',
-                style: TextStyle(color: _mutedText, height: 1.45),
+              child: Text(
+                liveInputs.isEmpty
+                    ? 'Passive sensing is armed, but this device still needs the required Nearby Devices or Microphone permission before live inputs can start. Identifiers stay anonymized and raw audio never leaves the device.'
+                    : '${liveInputs.join(', ')} ${liveInputs.length == 1 ? 'is' : 'are'} active. Identifiers are anonymized before storage, raw audio never leaves the device, and continuous sensing increases battery use during a sweep.',
+                style: const TextStyle(color: _mutedText, height: 1.45),
               ),
             ),
           ],
@@ -752,7 +761,7 @@ class _SarModePanel extends StatelessWidget {
               icon: Icons.radar,
               title: 'No survivor signals yet',
               body:
-                  'Nearby BLE, Wi-Fi probe, acoustic, and SOS beacon detections will appear here once received or synced from the server.',
+                  'Nearby BLE, acoustic, and SOS beacon detections will appear here once received or synced from the server.',
             )
           else
             ...activeSignals.map(
@@ -765,6 +774,113 @@ class _SarModePanel extends StatelessWidget {
                     : () => onOpenSignal(signal.messageId),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubsystemStatusCard extends StatelessWidget {
+  const _SubsystemStatusCard({
+    required this.label,
+    required this.active,
+    required this.supported,
+    this.note,
+  });
+
+  final String label;
+  final bool active;
+  final bool supported;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = !supported
+        ? const Color(0xFF8A7F79)
+        : active
+        ? const Color(0xFF397154)
+        : _coolAccent;
+    final status = !supported
+        ? 'Unavailable'
+        : active
+        ? 'Live now'
+        : 'Ready';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: active ? const Color(0xFFD4E6D8) : _warmBorder,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              !supported
+                  ? Icons.block
+                  : active
+                  ? Icons.radar
+                  : Icons.settings_input_component_outlined,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: _deepText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        status,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if ((note ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    note!,
+                    style: const TextStyle(color: _mutedText, height: 1.4),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/services/sar_platform_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum SarDetectionMethod { wifiProbe, blePassive, acoustic, sosBeacon }
@@ -47,6 +49,20 @@ AcousticPatternMatched _acousticPatternFromWire(String value) {
     _ => AcousticPatternMatched.none,
   };
 }
+
+const Map<SarDetectionMethod, bool> _defaultSubsystemActive = {
+  SarDetectionMethod.wifiProbe: false,
+  SarDetectionMethod.blePassive: false,
+  SarDetectionMethod.acoustic: false,
+  SarDetectionMethod.sosBeacon: false,
+};
+
+const Map<SarDetectionMethod, bool> _defaultSubsystemSupported = {
+  SarDetectionMethod.wifiProbe: false,
+  SarDetectionMethod.blePassive: false,
+  SarDetectionMethod.acoustic: false,
+  SarDetectionMethod.sosBeacon: false,
+};
 
 class SarNodeLocation {
   const SarNodeLocation({
@@ -285,18 +301,17 @@ class SarModeState {
   const SarModeState({
     this.isEnabled = false,
     this.activeSignals = const [],
-    this.subsystemActive = const {
-      SarDetectionMethod.wifiProbe: false,
-      SarDetectionMethod.blePassive: false,
-      SarDetectionMethod.acoustic: false,
-      SarDetectionMethod.sosBeacon: false,
-    },
+    this.subsystemActive = _defaultSubsystemActive,
+    this.subsystemSupported = _defaultSubsystemSupported,
+    this.subsystemNotes = const {},
     this.activeTargetMessageId,
   });
 
   final bool isEnabled;
   final List<SurvivorSignalEvent> activeSignals;
   final Map<SarDetectionMethod, bool> subsystemActive;
+  final Map<SarDetectionMethod, bool> subsystemSupported;
+  final Map<SarDetectionMethod, String> subsystemNotes;
   final String? activeTargetMessageId;
 
   SurvivorSignalEvent? get activeTarget {
@@ -320,6 +335,8 @@ class SarModeState {
     bool? isEnabled,
     List<SurvivorSignalEvent>? activeSignals,
     Map<SarDetectionMethod, bool>? subsystemActive,
+    Map<SarDetectionMethod, bool>? subsystemSupported,
+    Map<SarDetectionMethod, String>? subsystemNotes,
     String? activeTargetMessageId,
     bool clearActiveTarget = false,
   }) {
@@ -327,6 +344,8 @@ class SarModeState {
       isEnabled: isEnabled ?? this.isEnabled,
       activeSignals: activeSignals ?? this.activeSignals,
       subsystemActive: subsystemActive ?? this.subsystemActive,
+      subsystemSupported: subsystemSupported ?? this.subsystemSupported,
+      subsystemNotes: subsystemNotes ?? this.subsystemNotes,
       activeTargetMessageId: clearActiveTarget
           ? null
           : activeTargetMessageId ?? this.activeTargetMessageId,
@@ -337,31 +356,53 @@ class SarModeState {
 class SarModeController extends StateNotifier<SarModeState> {
   SarModeController({
     required MeshTransportService transport,
+    LocationService? locationService,
+    SarPlatformService? platform,
     AcousticSampleClassifier acousticClassifier =
         const AcousticSampleClassifier(),
   }) : _transport = transport,
+       _locationService = locationService ?? LocationService(),
+       _platform = platform ?? const NoopSarPlatformService(),
        _acousticClassifier = acousticClassifier,
        super(const SarModeState()) {
     _packetSubscription = _transport.packetStream.listen(_handlePacket);
+    _platformSubscription = _platform.events.listen(
+      (event) => unawaited(_handlePlatformEvent(event)),
+    );
+    unawaited(refreshSubsystemStatus());
   }
 
   final MeshTransportService _transport;
+  final LocationService _locationService;
+  final SarPlatformService _platform;
   final AcousticSampleClassifier _acousticClassifier;
   final Map<String, DateTime> _dedupWindow = {};
   late final StreamSubscription<MeshPacket> _packetSubscription;
+  late final StreamSubscription<SarPlatformEvent> _platformSubscription;
 
-  void setSarModeEnabled(bool enabled) {
+  Future<void> setSarModeEnabled(bool enabled) async {
     state = state.copyWith(
       isEnabled: enabled,
       subsystemActive: {
-        SarDetectionMethod.wifiProbe: enabled,
-        SarDetectionMethod.blePassive: enabled,
-        SarDetectionMethod.acoustic: enabled,
+        ...state.subsystemActive,
+        SarDetectionMethod.wifiProbe: false,
+        SarDetectionMethod.blePassive:
+            enabled &&
+            (state.subsystemSupported[SarDetectionMethod.blePassive] ?? false),
+        SarDetectionMethod.acoustic:
+            enabled &&
+            (state.subsystemSupported[SarDetectionMethod.acoustic] ?? false),
         SarDetectionMethod.sosBeacon: _transport.isSosBeaconBroadcasting,
       },
       activeTargetMessageId: enabled ? state.activeTargetMessageId : null,
       clearActiveTarget: !enabled,
     );
+
+    if (enabled) {
+      await _startPassiveSensing();
+    } else {
+      await _stopPassiveSensing();
+    }
   }
 
   void pinTarget(String messageId) {
@@ -530,10 +571,33 @@ class SarModeController extends StateNotifier<SarModeState> {
     );
   }
 
-  void refreshSubsystemStatus() {
+  Future<void> refreshSubsystemStatus() async {
+    final capabilities = await _platform.getCapabilities();
     state = state.copyWith(
+      subsystemSupported: {
+        SarDetectionMethod.wifiProbe: capabilities.wifiProbeSupported,
+        SarDetectionMethod.blePassive: capabilities.blePassiveSupported,
+        SarDetectionMethod.acoustic: capabilities.acousticSupported,
+        SarDetectionMethod.sosBeacon: capabilities.sosBeaconSupported,
+      },
+      subsystemNotes: {
+        if ((capabilities.wifiProbeNote ?? '').isNotEmpty)
+          SarDetectionMethod.wifiProbe: capabilities.wifiProbeNote!,
+        if ((capabilities.blePassiveNote ?? '').isNotEmpty)
+          SarDetectionMethod.blePassive: capabilities.blePassiveNote!,
+        if ((capabilities.acousticNote ?? '').isNotEmpty)
+          SarDetectionMethod.acoustic: capabilities.acousticNote!,
+        if ((capabilities.sosBeaconNote ?? '').isNotEmpty)
+          SarDetectionMethod.sosBeacon: capabilities.sosBeaconNote!,
+      },
       subsystemActive: {
-        ...state.subsystemActive,
+        SarDetectionMethod.wifiProbe: false,
+        SarDetectionMethod.blePassive:
+            state.isEnabled &&
+            state.subsystemActive[SarDetectionMethod.blePassive] == true,
+        SarDetectionMethod.acoustic:
+            state.isEnabled &&
+            state.subsystemActive[SarDetectionMethod.acoustic] == true,
         SarDetectionMethod.sosBeacon: _transport.isSosBeaconBroadcasting,
       },
     );
@@ -673,9 +737,124 @@ class SarModeController extends StateNotifier<SarModeState> {
     _upsertSignal(event);
   }
 
+  Future<void> _handlePlatformEvent(SarPlatformEvent event) async {
+    if (!state.isEnabled) {
+      return;
+    }
+
+    final nodeLocation = await _resolveNodeLocation();
+    switch (event.type) {
+      case SarPlatformEventType.wifiProbe:
+        final sample = event.wifiProbe;
+        if (sample == null) {
+          return;
+        }
+        registerWifiProbe(
+          rawDeviceIdentifier: sample.deviceIdentifier,
+          signalStrengthDbm: sample.signalStrengthDbm,
+          nodeLocation: nodeLocation,
+          observedAt: sample.observedAt,
+        );
+      case SarPlatformEventType.blePassive:
+        final sample = event.blePassive;
+        if (sample == null) {
+          return;
+        }
+        if (sample.isSosBeacon) {
+          registerSosBeacon(
+            beaconIdentifier: sample.deviceIdentifier,
+            signalStrengthDbm: sample.signalStrengthDbm,
+            nodeLocation: nodeLocation,
+            observedAt: sample.observedAt,
+          );
+          return;
+        }
+        registerBlePassiveScan(
+          rawDeviceIdentifier: sample.deviceIdentifier,
+          signalStrengthDbm: sample.signalStrengthDbm,
+          nodeLocation: nodeLocation,
+          observedAt: sample.observedAt,
+        );
+      case SarPlatformEventType.acoustic:
+        final sample = event.acoustic;
+        if (sample == null) {
+          return;
+        }
+        registerAcousticWindow(
+          sample: AcousticSampleWindow(
+            peakDb: sample.peakDb,
+            repeatedImpacts: sample.repeatedImpacts,
+            voiceBandPresent: sample.voiceBandPresent,
+            anomalyDetected: sample.anomalyDetected,
+          ),
+          nodeLocation: nodeLocation,
+          observedAt: sample.observedAt,
+        );
+    }
+  }
+
+  Future<void> _startPassiveSensing() async {
+    final capabilities = await _platform.getCapabilities();
+    final nextActive = {...state.subsystemActive};
+
+    nextActive[SarDetectionMethod.wifiProbe] = false;
+    nextActive[SarDetectionMethod.blePassive] =
+        capabilities.blePassiveSupported &&
+        await _platform.startBlePassiveScan();
+    nextActive[SarDetectionMethod.acoustic] =
+        capabilities.acousticSupported &&
+        await _platform.startAcousticSampling();
+    nextActive[SarDetectionMethod.sosBeacon] =
+        _transport.isSosBeaconBroadcasting;
+
+    state = state.copyWith(
+      subsystemSupported: {
+        SarDetectionMethod.wifiProbe: capabilities.wifiProbeSupported,
+        SarDetectionMethod.blePassive: capabilities.blePassiveSupported,
+        SarDetectionMethod.acoustic: capabilities.acousticSupported,
+        SarDetectionMethod.sosBeacon: capabilities.sosBeaconSupported,
+      },
+      subsystemNotes: {
+        if ((capabilities.wifiProbeNote ?? '').isNotEmpty)
+          SarDetectionMethod.wifiProbe: capabilities.wifiProbeNote!,
+        if ((capabilities.blePassiveNote ?? '').isNotEmpty)
+          SarDetectionMethod.blePassive: capabilities.blePassiveNote!,
+        if ((capabilities.acousticNote ?? '').isNotEmpty)
+          SarDetectionMethod.acoustic: capabilities.acousticNote!,
+        if ((capabilities.sosBeaconNote ?? '').isNotEmpty)
+          SarDetectionMethod.sosBeacon: capabilities.sosBeaconNote!,
+      },
+      subsystemActive: nextActive,
+    );
+  }
+
+  Future<void> _stopPassiveSensing() async {
+    await _platform.stopBlePassiveScan();
+    await _platform.stopAcousticSampling();
+    state = state.copyWith(
+      subsystemActive: {
+        ..._defaultSubsystemActive,
+        SarDetectionMethod.sosBeacon: _transport.isSosBeaconBroadcasting,
+      },
+    );
+  }
+
+  Future<SarNodeLocation> _resolveNodeLocation() async {
+    final location = await _locationService.getCurrentPosition();
+    if (location == null) {
+      return const SarNodeLocation(lat: 0, lng: 0, accuracyMeters: 0);
+    }
+    return SarNodeLocation(
+      lat: location.latitude,
+      lng: location.longitude,
+      accuracyMeters: location.accuracyMeters,
+    );
+  }
+
   @override
   void dispose() {
     _packetSubscription.cancel();
+    _platformSubscription.cancel();
     super.dispose();
   }
 

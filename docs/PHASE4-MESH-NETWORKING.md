@@ -144,24 +144,24 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 ### Permissions and operator scope
 
 - SAR Mode is exposed from the mobile mesh status panel and should only be enabled by verified department responders.
-- The toggle enables passive Wi-Fi probe parsing, BLE passive scan intake, acoustic classification intake, and SOS beacon visibility in the local SAR feed.
+- The toggle enables Android BLE passive scan intake, on-device acoustic classification intake, and SOS beacon visibility in the local SAR feed. The UI keeps Wi-Fi probe sniffing visible as an unavailable subsystem because standard mobile app sandboxes do not expose passive probe-request capture.
 - SAR Mode defaults to off so routine mesh usage does not silently enable passive sensing.
 
 ### Battery and privacy notes
 
-- Continuous passive scanning increases battery usage more than ordinary mesh relay because Wi-Fi, BLE, and acoustic checks stay warm while SAR Mode is active.
+- Continuous passive scanning increases battery usage more than ordinary mesh relay because BLE scanning, microphone summaries, and optional SOS advertising stay warm while SAR Mode is active.
 - Detected device identifiers are anonymized before persistence or relay. MAC-style identifiers keep the first four octets and zero the last two: `AA:BB:CC:DD:EE:FF` becomes `AA:BB:CC:DD:00:00`.
 - Raw audio is never sent over mesh and is never uploaded to the backend. Only the on-device acoustic classification result is serialized into the survivor-signal packet.
 
 ### Acoustic model constraints
 
 - Acoustic classification runs on 5-second windows and emits only `tapping`, `voice`, `anomalous_sound`, or `none`.
-- The current implementation is a lightweight heuristic classifier/mock so the pipeline can be tested without shipping a heavy model asset yet.
+- The current implementation uses Android-side 5-second audio summaries plus a lightweight heuristic classifier so the pipeline can run locally without shipping a heavy model asset yet.
 - A future model refresh should stay on-device, remain small enough for offline responders, and preserve the same output labels so packet consumers do not break.
 
 ### Survivor signal lifecycle
 
-1. A SAR subsystem detects a nearby signal and normalizes it into the canonical `SURVIVOR_SIGNAL` payload.
+1. A SAR subsystem detects a nearby signal and normalizes it into the canonical `SURVIVOR_SIGNAL` payload. On Android this is currently driven by native BLE scan events, native SOS advertising/reception, and native 5-second microphone summaries.
 2. The mobile client deduplicates repeated detections from the same anonymized source inside a 60-second window before queueing a new packet.
 3. The packet is enqueued at the same priority as `DISTRESS` and relayed through the existing mesh pipeline.
 4. A gateway uploads the packet through `POST /api/mesh/ingest`, which records the dedup trace in `mesh_messages` and persists the detection in `survivor_signals`.
@@ -183,5 +183,6 @@ Fields: `message_id`, `origin_device_id`, `latitude`, `longitude`, `description`
 - `GET /api/mesh/topology` returns only nodes seen within the last 30 minutes and flags them as stale after 5 minutes without a fresh gateway upload. Operators should treat stale nodes as last-known positions rather than live peer discovery.
 - Survivor-signal responses now include GeoJSON-ready `coordinates` and `geometry` fields so the web map can render signal markers directly.
 - The municipality Mesh & SAR page overlays disaster reports, mesh nodes, responder markers, and survivor signals on the same Leaflet map. Topology refreshes every 30 seconds while survivor signals refresh through Supabase Realtime.
+
 
 

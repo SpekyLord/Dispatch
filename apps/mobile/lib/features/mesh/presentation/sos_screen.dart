@@ -19,6 +19,8 @@ class _SosScreenState extends ConsumerState<SosScreen> {
   final _descCtrl = TextEditingController();
   bool _sent = false;
   bool _sending = false;
+  bool _beaconBroadcastActive = false;
+  String? _beaconStatusNote;
 
   @override
   void dispose() {
@@ -28,9 +30,10 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     super.dispose();
   }
 
-  void _sendDistress() {
+  Future<void> _sendDistress() async {
     setState(() => _sending = true);
     final transport = ref.read(meshTransportProvider);
+    final sarPlatform = ref.read(sarPlatformServiceProvider);
 
     final packet = MeshTransportService.createDistressPacket(
       deviceId: 'local-device',
@@ -40,12 +43,36 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     );
 
     transport.enqueuePacket(packet);
-    transport.startSosBeaconBroadcast(deviceId: 'local-device');
-    ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+
+    final capabilities = await sarPlatform.getCapabilities();
+    var beaconActive = false;
+    var beaconStatusNote = capabilities.sosBeaconNote;
+    if (capabilities.sosBeaconSupported) {
+      beaconActive = await sarPlatform.startSosBeaconBroadcast(
+        deviceId: 'local-device',
+      );
+    }
+
+    if (beaconActive) {
+      transport.startSosBeaconBroadcast(deviceId: 'local-device');
+    } else {
+      transport.stopSosBeaconBroadcast();
+    }
+
+    await ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _sent = true;
       _sending = false;
+      _beaconBroadcastActive = beaconActive;
+      _beaconStatusNote = beaconActive
+          ? 'Nearby SAR devices can now pick up this phone through the standardized SOS BLE beacon.'
+          : beaconStatusNote ??
+                'SOS beacon broadcasting is unavailable on this device right now, but your distress packet is still relayed across the mesh.';
     });
   }
 
@@ -64,6 +91,16 @@ class _SosScreenState extends ConsumerState<SosScreen> {
   }
 
   Widget _buildConfirmation(ThemeData theme) {
+    final chipText = _beaconBroadcastActive
+        ? 'Max relay: 15 hops | SOS beacon active'
+        : 'Max relay: 15 hops | SOS beacon unavailable';
+    final chipColor = _beaconBroadcastActive
+        ? Colors.cyan.shade50
+        : Colors.orange.shade50;
+    final chipTextColor = _beaconBroadcastActive
+        ? Colors.cyan.shade800
+        : Colors.orange.shade900;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -88,8 +125,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Your SOS signal is being relayed through nearby devices. '
-              'Help is on the way.',
+              'Your SOS signal is being relayed through nearby devices. Help is on the way.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
@@ -97,18 +133,38 @@ class _SosScreenState extends ConsumerState<SosScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.cyan.shade50,
+                color: chipColor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                'Max relay: 15 hops • SOS beacon active',
+                chipText,
                 style: TextStyle(
-                  color: Colors.cyan.shade800,
+                  color: chipTextColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
+            if ((_beaconStatusNote ?? '').isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  _beaconStatusNote!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 13,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
             OutlinedButton(
               onPressed: () => setState(() => _sent = false),
@@ -144,8 +200,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'No login required. Your distress signal will be relayed '
-                'through nearby devices via mesh networking.',
+                'No login required. Your distress signal will be relayed through nearby devices via mesh networking.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.red.shade700, fontSize: 13),
               ),

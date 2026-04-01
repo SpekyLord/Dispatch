@@ -55,8 +55,6 @@ class FeedService:
                 "content": content,
                 "category": category,
                 "location": location,
-                "profile_picture": department.get("profile_picture")
-                or department.get("profile_photo"),
             },
             use_service_role=True,
         )
@@ -179,6 +177,113 @@ class FeedService:
             assets=assets,
             comment_count=comment_count,
             liked_by_me=liked_by_me,
+        )
+
+    def delete_post(self, *, post_id: Any, author_id: str) -> None:
+        rows = self.client.db_query(
+            FEED_POSTS_TABLE,
+            params={"select": "*", "id": f"eq.{post_id}"},
+            use_service_role=True,
+        )
+        if not rows:
+            raise ApiError("Post not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND)
+
+        post = rows[0]
+        if str(post.get("uploader")) != str(author_id):
+            raise ApiError(
+                "You can only delete your own post.",
+                code="forbidden",
+                status_code=HTTPStatus.FORBIDDEN,
+            )
+
+        self.client.db_delete(
+            FEED_STORAGE_TABLE,
+            params={"id": f"eq.{post_id}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        self.client.db_delete(
+            FEED_COMMENTS_TABLE,
+            params={"post_id": f"eq.{post_id}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        self.client.db_delete(
+            FEED_REACTIONS_TABLE,
+            params={"post_id": f"eq.{post_id}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        deleted_rows = self.client.db_delete(
+            FEED_POSTS_TABLE,
+            params={"id": f"eq.{post_id}", "uploader": f"eq.{author_id}"},
+            use_service_role=True,
+        )
+        if not deleted_rows:
+            raise ApiError("Failed to delete post.", code="delete_failed")
+
+    def update_post(
+        self,
+        *,
+        post_id: Any,
+        author_id: str,
+        title: str,
+        content: str,
+        category: str,
+        location: str,
+    ) -> dict[str, Any]:
+        if not title:
+            raise ApiError("Title is required.", code="validation_error")
+        if not content:
+            raise ApiError("Content is required.", code="validation_error")
+        if not location:
+            raise ApiError("Location is required.", code="validation_error")
+        if category not in VALID_POST_CATEGORIES:
+            raise ApiError(
+                f"Category must be one of: {', '.join(sorted(VALID_POST_CATEGORIES))}.",
+                code="validation_error",
+            )
+
+        rows = self.client.db_query(
+            FEED_POSTS_TABLE,
+            params={"select": "*", "id": f"eq.{post_id}"},
+            use_service_role=True,
+        )
+        if not rows:
+            raise ApiError("Post not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND)
+
+        post = rows[0]
+        if str(post.get("uploader")) != str(author_id):
+            raise ApiError(
+                "You can only edit your own post.",
+                code="forbidden",
+                status_code=HTTPStatus.FORBIDDEN,
+            )
+
+        updated_rows = self.client.db_update(
+            FEED_POSTS_TABLE,
+            data={
+                "title": title,
+                "content": content,
+                "category": category,
+                "location": location,
+            },
+            params={"id": f"eq.{post_id}", "uploader": f"eq.{author_id}"},
+            use_service_role=True,
+        )
+        if not updated_rows:
+            raise ApiError("Failed to update post.", code="update_failed")
+
+        updated_post = updated_rows[0]
+        department = self._department_for_uploader(updated_post.get("uploader"))
+        assets = self._assets_for_post(updated_post.get("id"))
+        comment_count = len(self.list_comments(post_id=updated_post.get("id")))
+        return self._serialize_post(
+            post=updated_post,
+            department=department,
+            assets=assets,
+            comment_count=comment_count,
+            liked_by_me=False,
         )
 
     def list_posts(

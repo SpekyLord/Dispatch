@@ -66,6 +66,16 @@ class SupabaseClient:
             return {"error": response.json()}
         return response.json()
 
+    def refresh_session(self, *, refresh_token: str) -> dict[str, Any]:
+        response = self._http_client.post(
+            f"{self.settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
+            headers=self._anon_headers(),
+            json={"refresh_token": refresh_token},
+        )
+        if not response.is_success:
+            return {"error": response.json()}
+        return response.json()
+
     def sign_out(self, token: str) -> bool:
         response = self._http_client.post(
             f"{self.settings.supabase_url}/auth/v1/logout",

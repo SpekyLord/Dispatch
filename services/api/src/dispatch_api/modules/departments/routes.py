@@ -50,6 +50,12 @@ def get_public_department_profile(user_id: str):
     return jsonify({"department": department})
 
 
+@blueprint.get("/directory")
+def list_public_departments():
+    departments = _department_service().list_public_departments()
+    return jsonify({"departments": departments})
+
+
 @blueprint.put("/profile")
 @require_auth()
 @require_role("department")

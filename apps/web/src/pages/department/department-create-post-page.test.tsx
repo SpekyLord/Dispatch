@@ -80,7 +80,7 @@ describe("DepartmentCreatePostPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /publish/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/turn on location services and import your current location before publishing/i)).toBeInTheDocument();
+      expect(screen.getByText(/location is required/i)).toBeInTheDocument();
     });
     expect(apiUploadMock).not.toHaveBeenCalled();
   });

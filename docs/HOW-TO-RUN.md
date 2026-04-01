@@ -162,9 +162,8 @@ Before using any app, you need to apply the Supabase migration and run the seed 
 
 Quick version:
 
-1. Apply `supabase/migrations/20260328011000_phase0_foundation.sql` in the Supabase SQL Editor
-2. Apply `supabase/migrations/20260329020000_phase2_realtime_access.sql` in the Supabase SQL Editor
-3. Run the seed: `py -3.12 supabase/seed/bootstrap_seed.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in env)
+1. Apply `supabase/migrations/20260401000000_consolidated.sql` in the Supabase SQL Editor (idempotent — safe to re-run)
+2. Run the seed: `py -3.12 supabase/seed/bootstrap_seed.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in env)
 
 ---
 

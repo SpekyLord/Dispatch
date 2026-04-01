@@ -768,7 +768,7 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - [x] Add API tests for duplicate gateway ingest and acknowledgement behavior.
 - [x] Add API tests for distress-signal ingest and persistence.
 - [x] Add mobile tests for offline queueing, sync acknowledgement handling, and expired-offline-token announcement rejection.
-- [ ] Add manual device-to-device field-test steps covering no-internet report relay, announcement relay, and distress propagation.
+- [x] Add manual device-to-device field-test steps covering no-internet report relay, announcement relay, and distress propagation.
 
 #### Docs
 
@@ -808,6 +808,10 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Date: `2026-04-01`
 - Completed: stabilized the Phase 4 extension CI follow-up by updating SAR unit tests to inject fake location services now that enabling SAR mode immediately schedules location beacons, and reformatted the affected API files/tests so `ruff format --check` matches GitHub Actions again.
 - Verified: reran local API `ruff format --check` and the targeted mobile SAR regression suite after the fixes; the full validation pass is tracked in the active work log for this run.
+- Date: `2026-04-01` (field-test procedure)
+- Completed: created `docs/MESH-FIELD-TEST-PROCEDURE.md` with 8 manual device-to-device test procedures covering offline incident report relay, offline department announcement relay (with negative expired-token case), SOS distress signal propagation, server update injection into mesh, multi-path deduplication, hop limit enforcement, WiFi Direct handoff for large payloads, and mesh communications relay with thread recovery. Includes environment reset steps and a reporting template. Checked off the last unchecked Phase 4 Tests item.
+- Verified: all 103 API tests pass, all 18 Flutter mesh transport tests pass, `flutter analyze` clean, `ruff check` clean.
+- Carryover: physical multi-device execution of the field-test procedure requires Android/iOS hardware with BLE.
 
 ### Exit Criteria
 

@@ -1,8 +1,9 @@
-// Shared scaffold for role placeholder screens — AppBar + kicker label + body.
-
+import 'package:dispatch_mobile/core/i18n/app_strings.dart';
+import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class RoleShellScaffold extends StatelessWidget {
+class RoleShellScaffold extends ConsumerWidget {
   const RoleShellScaffold({
     required this.body,
     required this.kicker,
@@ -17,12 +18,15 @@ class RoleShellScaffold extends StatelessWidget {
   final VoidCallback onSignOut;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
         actions: [
-          TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+          const LocaleActionButton(),
+          TextButton(onPressed: onSignOut, child: Text(strings.signOut)),
         ],
       ),
       body: SafeArea(

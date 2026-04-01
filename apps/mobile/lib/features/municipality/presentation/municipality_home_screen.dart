@@ -1,5 +1,6 @@
 // Municipality home â€” placeholder shell. Verification is web-only in Phase 1.
 
+import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/shared/presentation/role_shell_scaffold.dart';
 import 'package:flutter/material.dart';
@@ -10,15 +11,17 @@ class MunicipalityHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+
     return RoleShellScaffold(
-      kicker: 'Municipality shell',
-      title: 'Oversight foundation',
+      kicker: strings.municipalityKicker,
+      title: strings.municipalityTitle,
       onSignOut: () => ref.read(sessionControllerProvider.notifier).signOut(),
-      body: const _PlaceholderList(
+      body: _PlaceholderList(
         items: [
-          'Department verification remains web-first in Phase 1.',
-          'Lightweight municipality placeholders can still live here on mobile.',
-          'Analytics and assessments become meaningful in later phases.',
+          strings.municipalityPlaceholderVerification,
+          strings.municipalityPlaceholderMobile,
+          strings.municipalityPlaceholderPhase3,
         ],
       ),
     );

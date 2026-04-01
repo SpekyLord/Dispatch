@@ -1,5 +1,10 @@
 import { AppRouter } from "@/app/router";
+import { LocaleProvider } from "@/lib/i18n/locale-context";
 
 export default function App() {
-  return <AppRouter />;
+  return (
+    <LocaleProvider>
+      <AppRouter />
+    </LocaleProvider>
+  );
 }

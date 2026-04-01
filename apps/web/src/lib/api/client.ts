@@ -70,10 +70,13 @@ async function refreshAccessToken(): Promise<string | null> {
         }
 
         const payload = (await response.json()) as RefreshResponse;
+        const nextRefreshToken =
+          payload.refresh_token ?? session.refreshToken ?? undefined;
+
         useSessionStore.getState().setSession({
           user: payload.user,
           accessToken: payload.access_token,
-          refreshToken: payload.refresh_token ?? session.refreshToken,
+          refreshToken: nextRefreshToken,
           department: payload.department ?? null,
         });
         return payload.access_token;

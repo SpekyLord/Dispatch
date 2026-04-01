@@ -118,6 +118,6 @@ describe("CitizenReportDetailPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Responders are now en route.")).toBeInTheDocument();
     });
-    expect(screen.getAllByText("responding").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Responding").length).toBeGreaterThan(0);
   });
 });

@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-context";
 
 type Analytics = {
   total_reports: number;
@@ -25,6 +26,7 @@ const statusMeta: Record<string, { color: string; icon: string }> = {
 };
 
 export function MunicipalityAnalyticsPage() {
+  const { t, getCategoryLabel, getStatusLabel } = useLocale();
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +46,7 @@ export function MunicipalityAnalyticsPage() {
 
   if (loading) {
     return (
-      <AppShell subtitle="Insights & metrics" title="Analytics">
+      <AppShell subtitle={t("analytics.subtitle")} title={t("analytics.title")}>
         <Card className="py-16 text-center text-on-surface-variant">
           <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
         </Card>
@@ -54,8 +56,8 @@ export function MunicipalityAnalyticsPage() {
 
   if (!data) {
     return (
-      <AppShell subtitle="Insights & metrics" title="Analytics">
-        <Card className="py-16 text-center text-on-surface-variant">Failed to load analytics.</Card>
+      <AppShell subtitle={t("analytics.subtitle")} title={t("analytics.title")}>
+        <Card className="py-16 text-center text-on-surface-variant">{t("analytics.failed")}</Card>
       </AppShell>
     );
   }
@@ -64,7 +66,7 @@ export function MunicipalityAnalyticsPage() {
   const maxCategoryCount = Math.max(...Object.values(data.by_category), 1);
 
   return (
-    <AppShell subtitle="Insights & metrics" title="Analytics">
+    <AppShell subtitle={t("analytics.subtitle")} title={t("analytics.title")}>
       <div className="space-y-8">
         {/* Top metric cards */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -74,7 +76,7 @@ export function MunicipalityAnalyticsPage() {
               <div className="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
                 <span className="material-symbols-outlined">summarize</span>
               </div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Total Reports</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{t("analytics.totalReports")}</p>
             </div>
             <p className="text-4xl font-headline italic text-on-surface">{data.total_reports}</p>
           </Card>
@@ -85,10 +87,10 @@ export function MunicipalityAnalyticsPage() {
               <div className="w-10 h-10 rounded-lg bg-tertiary-container flex items-center justify-center text-tertiary">
                 <span className="material-symbols-outlined">schedule</span>
               </div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Avg Response</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{t("analytics.avgResponse")}</p>
             </div>
             <p className="text-4xl font-headline italic text-on-surface">
-              {data.avg_response_time_hours != null ? `${data.avg_response_time_hours.toFixed(1)}h` : "N/A"}
+                {data.avg_response_time_hours != null ? `${data.avg_response_time_hours.toFixed(1)}h` : "N/A"}
             </p>
           </Card>
 
@@ -98,7 +100,7 @@ export function MunicipalityAnalyticsPage() {
               <div className="w-10 h-10 rounded-lg bg-[#ffdbd0] flex items-center justify-center text-[#89391e]">
                 <span className="material-symbols-outlined">warning</span>
               </div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Unattended</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{t("analytics.unattended")}</p>
             </div>
             <p className="text-4xl font-headline italic text-on-surface">{data.unattended_count}</p>
           </Card>
@@ -109,7 +111,7 @@ export function MunicipalityAnalyticsPage() {
               <div className="w-10 h-10 rounded-lg bg-[#d4edda] flex items-center justify-center text-[#155724]">
                 <span className="material-symbols-outlined">task_alt</span>
               </div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Resolved</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{t("analytics.resolved")}</p>
             </div>
             <p className="text-4xl font-headline italic text-on-surface">{data.by_status["resolved"] ?? 0}</p>
           </Card>
@@ -117,14 +119,14 @@ export function MunicipalityAnalyticsPage() {
 
         {/* Reports by status */}
         <Card>
-          <h3 className="font-headline text-xl mb-6">Reports by Status</h3>
+          <h3 className="font-headline text-xl mb-6">{t("analytics.reportsByStatus")}</h3>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(statusMeta).map(([status, meta]) => (
               <div key={status} className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[20px]" style={{ color: meta.color }}>{meta.icon}</span>
                 <div>
                   <p className="text-2xl font-headline italic text-on-surface">{data.by_status[status] ?? 0}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold capitalize">{status}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold capitalize">{getStatusLabel(status)}</p>
                 </div>
               </div>
             ))}
@@ -133,12 +135,12 @@ export function MunicipalityAnalyticsPage() {
 
         {/* Category breakdown — horizontal bars */}
         <Card>
-          <h3 className="font-headline text-xl mb-6">Category Breakdown</h3>
+          <h3 className="font-headline text-xl mb-6">{t("analytics.categoryBreakdown")}</h3>
           <div className="space-y-3">
             {Object.entries(data.by_category).map(([category, count]) => (
               <div key={category}>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="capitalize text-on-surface">{category.replace("_", " ")}</span>
+                  <span className="capitalize text-on-surface">{getCategoryLabel(category)}</span>
                   <span className="text-on-surface-variant font-medium">{count}</span>
                 </div>
                 {/* CSS percentage bar */}
@@ -151,24 +153,24 @@ export function MunicipalityAnalyticsPage() {
               </div>
             ))}
             {Object.keys(data.by_category).length === 0 && (
-              <p className="text-sm text-on-surface-variant italic">No category data yet.</p>
+              <p className="text-sm text-on-surface-variant italic">{t("analytics.noCategoryData")}</p>
             )}
           </div>
         </Card>
 
         {/* Department activity */}
         <Card>
-          <h3 className="font-headline text-xl mb-6">Department Activity</h3>
+          <h3 className="font-headline text-xl mb-6">{t("analytics.departmentActivity")}</h3>
           {data.department_activity.length === 0 ? (
-            <p className="text-sm text-on-surface-variant italic">No department activity recorded.</p>
+            <p className="text-sm text-on-surface-variant italic">{t("analytics.noDepartmentActivity")}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-outline-variant/15">
-                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Department</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Accepts</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Declines</th>
+                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">{t("analytics.department")}</th>
+                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">{t("analytics.accepts")}</th>
+                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">{t("analytics.declines")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +190,7 @@ export function MunicipalityAnalyticsPage() {
         <div className="flex justify-end">
           <Button variant="ghost" onClick={fetchAnalytics}>
             <span className="material-symbols-outlined text-[16px] mr-1">refresh</span>
-            Refresh Data
+            {t("analytics.refresh")}
           </Button>
         </div>
       </div>

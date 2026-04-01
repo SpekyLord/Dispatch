@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-context";
 
 type Report = {
   id: string;
@@ -40,6 +41,7 @@ const severityColors: Record<string, string> = {
 };
 
 export function MunicipalityReportsPage() {
+  const { t, getCategoryLabel, getSeverityLabel, getStatusLabel } = useLocale();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
@@ -70,52 +72,52 @@ export function MunicipalityReportsPage() {
   useEffect(() => { fetchReports(); }, [statusFilter, categoryFilter, escalationFilter, dateFrom, dateTo]);
 
   return (
-    <AppShell subtitle="System-wide incident overview" title="All Reports">
+    <AppShell subtitle={t("reports.subtitle")} title={t("reports.title")}>
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 mb-8">
-        <select className="aegis-input w-auto min-w-[140px]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="accepted">Accepted</option>
-          <option value="responding">Responding</option>
-          <option value="resolved">Resolved</option>
+        <select aria-label={t("detail.status")} className="aegis-input w-auto min-w-[140px]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">{t("reports.filter.allStatuses")}</option>
+          <option value="pending">{getStatusLabel("pending")}</option>
+          <option value="accepted">{getStatusLabel("accepted")}</option>
+          <option value="responding">{getStatusLabel("responding")}</option>
+          <option value="resolved">{getStatusLabel("resolved")}</option>
         </select>
-        <select className="aegis-input w-auto min-w-[140px]" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-          <option value="">All categories</option>
-          <option value="fire">Fire</option>
-          <option value="flood">Flood</option>
-          <option value="earthquake">Earthquake</option>
-          <option value="road_accident">Road Accident</option>
-          <option value="medical">Medical</option>
-          <option value="structural">Structural</option>
-          <option value="other">Other</option>
+        <select aria-label={t("detail.category")} className="aegis-input w-auto min-w-[140px]" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="">{t("reports.filter.allCategories")}</option>
+          <option value="fire">{getCategoryLabel("fire")}</option>
+          <option value="flood">{getCategoryLabel("flood")}</option>
+          <option value="earthquake">{getCategoryLabel("earthquake")}</option>
+          <option value="road_accident">{getCategoryLabel("road_accident")}</option>
+          <option value="medical">{getCategoryLabel("medical")}</option>
+          <option value="structural">{getCategoryLabel("structural")}</option>
+          <option value="other">{getCategoryLabel("other")}</option>
         </select>
-        <select className="aegis-input w-auto min-w-[140px]" value={escalationFilter} onChange={(e) => setEscalationFilter(e.target.value)}>
-          <option value="">All escalation</option>
-          <option value="true">Escalated</option>
-          <option value="false">Not escalated</option>
+        <select aria-label={t("detail.escalatedLabel")} className="aegis-input w-auto min-w-[140px]" value={escalationFilter} onChange={(e) => setEscalationFilter(e.target.value)}>
+          <option value="">{t("reports.filter.allEscalation")}</option>
+          <option value="true">{t("reports.filter.escalated")}</option>
+          <option value="false">{t("reports.filter.notEscalated")}</option>
         </select>
         {/* Date range inputs */}
-        <input type="date" className="aegis-input w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="From" title="From date" />
-        <input type="date" className="aegis-input w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="To" title="To date" />
+        <input type="date" className="aegis-input w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder={t("reports.filter.fromDate")} title={t("reports.filter.fromDate")} />
+        <input type="date" className="aegis-input w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder={t("reports.filter.toDate")} title={t("reports.filter.toDate")} />
         <Button variant="ghost" onClick={() => { fetchReports(); }}>
           <span className="material-symbols-outlined text-[16px] mr-1">refresh</span>
-          Refresh
+          {t("reports.refresh")}
         </Button>
         <span className="ml-auto text-xs text-on-surface-variant">
-          {reports.length} report{reports.length !== 1 ? "s" : ""}
+          {t("reports.count", { count: reports.length })}
         </span>
       </div>
 
       {loading ? (
         <Card className="py-16 text-center text-on-surface-variant">
           <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
-          Loading reports...
+          {t("reports.loading")}
         </Card>
       ) : reports.length === 0 ? (
         <Card className="py-16 text-center">
           <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">inbox</span>
-          <p className="text-on-surface-variant">No reports match the current filters.</p>
+          <p className="text-on-surface-variant">{t("reports.empty")}</p>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -140,16 +142,16 @@ export function MunicipalityReportsPage() {
                         <div className="flex items-center gap-2 shrink-0">
                           {r.is_mesh_origin && (
                             <span className="rounded-md bg-cyan-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-cyan-800">
-                              Mesh
+                              {t("reports.meshBadge")}
                             </span>
                           )}
                           {r.is_escalated && (
                             <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-red-800">
-                              Escalated
+                              {t("reports.escalatedBadge")}
                             </span>
                           )}
                           <span className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${style.bg} ${style.text}`}>
-                            {r.status}
+                            {getStatusLabel(r.status)}
                           </span>
                         </div>
                       </div>
@@ -157,10 +159,10 @@ export function MunicipalityReportsPage() {
                       {/* Meta: category, severity, timestamp */}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded bg-surface-container-highest px-2 py-0.5 font-medium capitalize text-on-surface-variant">
-                          {r.category.replace("_", " ")}
+                          {getCategoryLabel(r.category)}
                         </span>
                         <span className={`rounded px-2 py-0.5 font-medium capitalize ${sevStyle}`}>
-                          {r.severity}
+                          {getSeverityLabel(r.severity)}
                         </span>
                         <span className="ml-auto text-[10px] text-on-surface-variant">
                           {new Date(r.created_at).toLocaleString()}

@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-context";
 
 // Municipality overview dashboard — bento cards for key metrics and quick links.
 
 type Department = { id: string; name: string; type: string; verification_status: string };
 
 export function MunicipalityHomePage() {
+  const { t } = useLocale();
   const [pendingCount, setPendingCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,7 @@ export function MunicipalityHomePage() {
               <span className="material-symbols-outlined">analytics</span>
             </div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-              Analytics
+              {t("analytics.title")}
             </p>
           </div>
           <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">
@@ -89,7 +91,7 @@ export function MunicipalityHomePage() {
               <span className="material-symbols-outlined">summarize</span>
             </div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-              All Reports
+              {t("reports.title")}
             </p>
           </div>
           <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">
@@ -106,7 +108,7 @@ export function MunicipalityHomePage() {
               <span className="material-symbols-outlined">assessment</span>
             </div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-              Assessments
+              {t("assessments.title")}
             </p>
           </div>
           <p className="text-sm text-on-surface-variant leading-relaxed mt-2 mb-6">

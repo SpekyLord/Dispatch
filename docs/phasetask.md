@@ -608,13 +608,13 @@ Turn the operational MVP into a decision-support product with analytics, post-di
 - [x] Build the municipality analytics dashboard with charts for report volume, status mix, response times, and department activity.
 - [x] Build municipality assessment views that surface recent assessments and basic recovery context.
 - [x] Build a report timeline UI that shows every status transition in order.
-- [ ] Add English and Filipino translation resources for static UI labels.
+- [x] Add English and Filipino translation resources for static UI labels.
 - [x] Polish responsiveness across citizen, department, and municipality web experiences down to narrow mobile widths.
 
 #### Mobile App
 
 - [x] Build department mobile damage-assessment submission and assessment history screens.
-- [ ] Add English and Filipino translation resources for static mobile UI labels.
+- [x] Add English and Filipino translation resources for static mobile UI labels.
 - [x] Polish mobile layouts for report detail, feed, notification, and department-response screens.
 - [x] Keep municipality analytics web-first. Mobile municipality can remain limited to lightweight read-only status views if implemented.
 
@@ -628,14 +628,14 @@ Turn the operational MVP into a decision-support product with analytics, post-di
 - [x] Add API tests for analytics calculations and filter correctness.
 - [x] Add API tests for damage-assessment creation and retrieval.
 - [x] Add tests that confirm report timelines include all expected status transitions in order.
-- [ ] Add web tests for municipality analytics and report-overview filtering.
-- [ ] Add mobile tests for damage-assessment submission and bilingual label switching.
-- [ ] Add responsive smoke checks for major web views.
+- [x] Add web tests for municipality analytics and report-overview filtering.
+- [x] Add mobile tests for damage-assessment submission and bilingual label switching.
+- [x] Add responsive smoke checks for major web views.
 
 #### Docs
 
 - [x] Document how analytics metrics are defined so future work does not accidentally change KPI meanings.
-- [ ] Document bilingual label coverage expectations and what is intentionally not translated.
+- [x] Document bilingual label coverage expectations and what is intentionally not translated.
 - [x] Document the damage-assessment workflow and how it contributes to municipality review.
 
 ### Verification Checklist
@@ -644,7 +644,7 @@ Turn the operational MVP into a decision-support product with analytics, post-di
 - [x] Municipality analytics values match known fixture data for report counts and timing metrics.
 - [x] Departments can submit damage assessments and municipality users can view them.
 - [x] Report detail views show a complete timeline of status changes.
-- [ ] Static UI labels can switch between English and Filipino on supported screens.
+- [x] Static UI labels can switch between English and Filipino on supported screens.
 - [x] Web layouts remain usable on desktop, tablet, and phone widths.
 
 ### Notes / Update Log
@@ -654,6 +654,11 @@ Turn the operational MVP into a decision-support product with analytics, post-di
 - Deviations: Filipino/English bilingual UI labels deferred - English is the base language and Filipino translation resources can be layered on without API changes. Web/mobile tests for Phase 3 UI pages deferred to align with existing test coverage strategy. Assessment image upload uses URL-based payload rather than separate upload endpoint, consistent with Phase 2 post image handling.
 - Blockers: none for core Phase 3 functionality.
 - Carryover: Filipino UI label translation resources, web integration tests for analytics/reports pages, mobile widget tests for assessment screen.
+- Date: `2026-04-01` (verification completion)
+- Completed: added a lightweight in-repo EN/FIL locale layer on web and mobile without introducing a full localization framework; localized the supported Phase 3 static labels on municipality reports/analytics/assessments, department assessments, shared shell/navigation labels, and the citizen report timeline/detail surfaces; added new web RTL coverage for municipality reports, analytics, municipality assessments, and department assessments; added mobile widget coverage for department assessment submit/history plus locale switching and translated citizen timeline labels; added Playwright responsive smoke coverage for municipality reports, municipality analytics, department assessments, and citizen report detail; documented bilingual coverage boundaries plus the Phase 3/4 verification baseline in `docs/PHASE3-4-VERIFICATION.md`.
+- Deviations: locale preference remains in-memory only for this pass; user-generated and backend free-text content remains intentionally untranslated.
+- Blockers: none.
+- Carryover: none for core Phase 3.
 
 ### Exit Criteria
 
@@ -811,7 +816,12 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Date: `2026-04-01` (field-test procedure)
 - Completed: created `docs/MESH-FIELD-TEST-PROCEDURE.md` with 8 manual device-to-device test procedures covering offline incident report relay, offline department announcement relay (with negative expired-token case), SOS distress signal propagation, server update injection into mesh, multi-path deduplication, hop limit enforcement, WiFi Direct handoff for large payloads, and mesh communications relay with thread recovery. Includes environment reset steps and a reporting template. Checked off the last unchecked Phase 4 Tests item.
 - Verified: all 103 API tests pass, all 18 Flutter mesh transport tests pass, `flutter analyze` clean, `ruff check` clean.
-- Carryover: physical multi-device execution of the field-test procedure requires Android/iOS hardware with BLE.
+- Carryover: physical multi-device execution of the prepared field-test procedure is still pending by design and requires Android/iOS hardware with BLE; implementation and automated verification are complete, but the hardware run remains a separate operational exercise.
+- Date: `2026-04-01` (verification readiness)
+- Completed: reconciled the core Phase 4 status around automation versus physical execution; linked the field-test procedure from the run docs, added the consolidated `docs/PHASE3-4-VERIFICATION.md` readiness guide, documented the automated baseline (`test_phase4.py`, web build/test, and targeted Flutter mesh suites), added a hardware preflight checklist, and made the reporting template in `docs/MESH-FIELD-TEST-PROCEDURE.md` the canonical result log for physical execution.
+- Deviations: no new Phase 4 packet types, endpoints, or transport contracts were added in this pass.
+- Blockers: physical BLE field execution still requires devices and is not automatable in this workspace.
+- Carryover: physical hardware execution of the prepared field-test procedure remains pending; `4-EXT` carryover stays out of scope for this core completion pass.
 
 ### Exit Criteria
 

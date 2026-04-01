@@ -1,5 +1,5 @@
-// Damage assessment screen ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â form to submit + list of past assessments.
-
+import 'package:dispatch_mobile/core/i18n/app_strings.dart';
+import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,50 +62,58 @@ class _DepartmentAssessmentScreenState
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     setState(() {
       _submitting = true;
       _error = null;
     });
+
     try {
       final authService = ref.read(authServiceProvider);
-      // Build body imperatively ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no conditional map entries
       final area = _areaCtrl.text.trim();
       final casualties = int.tryParse(_casualtiesCtrl.text.trim()) ?? 0;
       final displaced = int.tryParse(_displacedCtrl.text.trim()) ?? 0;
-      final loc = _locationCtrl.text.trim();
-      final desc = _descriptionCtrl.text.trim();
+      final location = _locationCtrl.text.trim();
+      final description = _descriptionCtrl.text.trim();
 
       await authService.createAssessment(
         affectedArea: area,
         damageLevel: _damageLevel,
         estimatedCasualties: casualties,
         displacedPersons: displaced,
-        location: loc.isNotEmpty ? loc : null,
-        description: desc.isNotEmpty ? desc : null,
+        location: location.isNotEmpty ? location : null,
+        description: description.isNotEmpty ? description : null,
       );
 
-      // Reset form and refresh list
       _areaCtrl.clear();
       _casualtiesCtrl.text = '0';
       _displacedCtrl.text = '0';
       _locationCtrl.clear();
       _descriptionCtrl.clear();
+
       setState(() => _damageLevel = 'minor');
       await _fetchAssessments();
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Assessment submitted')));
+        final strings = ref.read(appStringsProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.assessmentSubmitted)),
+        );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
     }
   }
 
-  // Map damage level to badge color
   Color _damageLevelColor(String level) {
     return switch (level) {
       'minor' => Colors.green,
@@ -118,16 +126,20 @@ class _DepartmentAssessmentScreenState
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Damage Assessment')),
+      appBar: AppBar(
+        title: Text(strings.assessmentScreenTitle),
+        actions: const [LocaleActionButton()],
+      ),
       body: RefreshIndicator(
-        onRefresh: () => _fetchAssessments(),
+        onRefresh: _fetchAssessments,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // --- Submit form ---
             Text(
-              'New Assessment',
+              strings.newAssessment,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -152,68 +164,77 @@ class _DepartmentAssessmentScreenState
                 children: [
                   TextFormField(
                     controller: _areaCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Affected Area *',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.affectedArea,
+                      border: const OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (value) => (value == null || value.trim().isEmpty)
+                        ? strings.required
+                        : null,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Damage Level',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.damageLevel,
+                      border: const OutlineInputBorder(),
                     ),
                     initialValue: _damageLevel,
-                    onChanged: (v) {
-                      if (v != null) setState(() => _damageLevel = v);
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _damageLevel = value);
+                      }
                     },
-                    items: const [
-                      DropdownMenuItem(value: 'minor', child: Text('Minor')),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'minor',
+                        child: Text(strings.damageLevelLabel('minor')),
+                      ),
                       DropdownMenuItem(
                         value: 'moderate',
-                        child: Text('Moderate'),
+                        child: Text(strings.damageLevelLabel('moderate')),
                       ),
-                      DropdownMenuItem(value: 'severe', child: Text('Severe')),
+                      DropdownMenuItem(
+                        value: 'severe',
+                        child: Text(strings.damageLevelLabel('severe')),
+                      ),
                       DropdownMenuItem(
                         value: 'critical',
-                        child: Text('Critical'),
+                        child: Text(strings.damageLevelLabel('critical')),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _casualtiesCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Estimated Casualties',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.estimatedCasualties,
+                      border: const OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _displacedCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Displaced Persons',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.displacedPersons,
+                      border: const OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _locationCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Location',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.location,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _descriptionCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: strings.description,
+                      border: const OutlineInputBorder(),
                     ),
                     maxLines: 3,
                   ),
@@ -223,18 +244,18 @@ class _DepartmentAssessmentScreenState
                     child: FilledButton(
                       onPressed: _submitting ? null : _submit,
                       child: Text(
-                        _submitting ? 'Submitting...' : 'Submit Assessment',
+                        _submitting
+                            ? strings.submitting
+                            : strings.submitAssessment,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-
-            // --- Past assessments ---
             const SizedBox(height: 32),
             Text(
-              'Previous Assessments',
+              strings.previousAssessments,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -243,25 +264,28 @@ class _DepartmentAssessmentScreenState
             if (_loading)
               const Center(child: CircularProgressIndicator())
             else if (_assessments.isEmpty)
-              const Text(
-                'No assessments submitted yet.',
-                style: TextStyle(color: Colors.black45),
+              Text(
+                strings.noAssessmentsSubmittedYet,
+                style: const TextStyle(color: Colors.black45),
               )
             else
-              for (int i = 0; i < _assessments.length; i++)
-                _buildAssessmentCard(_assessments[i]),
+              for (final assessment in _assessments)
+                _buildAssessmentCard(assessment, strings),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAssessmentCard(Map<String, dynamic> a) {
-    final level = a['damage_level'] as String? ?? 'minor';
-    final area = a['affected_area'] as String? ?? '';
-    final casualties = a['estimated_casualties'] ?? 0;
-    final displaced = a['displaced_persons'] ?? 0;
-    final createdAt = a['created_at'] as String? ?? '';
+  Widget _buildAssessmentCard(
+    Map<String, dynamic> assessment,
+    AppStrings strings,
+  ) {
+    final level = assessment['damage_level'] as String? ?? 'minor';
+    final area = assessment['affected_area'] as String? ?? '';
+    final casualties = assessment['estimated_casualties'] ?? 0;
+    final displaced = assessment['displaced_persons'] ?? 0;
+    final createdAt = assessment['created_at'] as String? ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -291,7 +315,7 @@ class _DepartmentAssessmentScreenState
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    level.toUpperCase(),
+                    strings.damageLevelLabel(level).toUpperCase(),
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -303,10 +327,10 @@ class _DepartmentAssessmentScreenState
             ),
             const SizedBox(height: 6),
             Text(
-              'Casualties: $casualties  |  Displaced: $displaced',
+              strings.casualtiesAndDisplaced(casualties as int, displaced as int),
               style: const TextStyle(fontSize: 12, color: Colors.black54),
             ),
-            if (a['location'] != null) ...[
+            if (assessment['location'] != null) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -318,7 +342,7 @@ class _DepartmentAssessmentScreenState
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      a['location'] as String,
+                      assessment['location'] as String,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -328,10 +352,10 @@ class _DepartmentAssessmentScreenState
                 ],
               ),
             ],
-            if (a['description'] != null) ...[
+            if (assessment['description'] != null) ...[
               const SizedBox(height: 4),
               Text(
-                a['description'] as String,
+                assessment['description'] as String,
                 style: const TextStyle(fontSize: 12),
               ),
             ],

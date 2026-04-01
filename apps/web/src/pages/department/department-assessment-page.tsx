@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { apiRequest, apiUpload } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-context";
 
 type Assessment = {
   id: string;
@@ -27,6 +28,7 @@ const damageLevelStyles: Record<string, { bg: string; text: string }> = {
 };
 
 export function DepartmentAssessmentPage() {
+  const { t, getDamageLevelLabel } = useLocale();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -96,7 +98,7 @@ export function DepartmentAssessmentPage() {
       resetForm();
       fetchAssessments();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit assessment.");
+      setError(err instanceof Error ? err.message : t("departmentAssessments.error"));
     } finally {
       setSubmitting(false);
     }
@@ -111,76 +113,76 @@ export function DepartmentAssessmentPage() {
   }
 
   return (
-    <AppShell subtitle="Damage assessment reporting" title="Assessments">
+    <AppShell subtitle={t("departmentAssessments.subtitle")} title={t("departmentAssessments.title")}>
       {/* Submission form */}
       <Card className="mb-8">
-        <h2 className="font-headline text-2xl text-on-surface mb-6">Submit Assessment</h2>
+        <h2 className="font-headline text-2xl text-on-surface mb-6">{t("departmentAssessments.submitTitle")}</h2>
 
         {error && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">{error}</div>
         )}
         {success && (
           <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-            Assessment submitted successfully.
+            {t("departmentAssessments.success")}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="aegis-label">Affected Area</label>
-              <input type="text" required className="aegis-input w-full" value={affectedArea}
-                onChange={(e) => setAffectedArea(e.target.value)} placeholder="e.g. Barangay Centro" />
+              <label className="aegis-label">{t("departmentAssessments.affectedArea")}</label>
+              <input aria-label={t("departmentAssessments.affectedArea")} type="text" required className="aegis-input w-full" value={affectedArea}
+                onChange={(e) => setAffectedArea(e.target.value)} placeholder={t("departmentAssessments.placeholderArea")} />
             </div>
             <div>
-              <label className="aegis-label">Damage Level</label>
-              <select className="aegis-input w-full" value={damageLevel} onChange={(e) => setDamageLevel(e.target.value)}>
-                <option value="minor">Minor</option>
-                <option value="moderate">Moderate</option>
-                <option value="severe">Severe</option>
-                <option value="critical">Critical</option>
+              <label className="aegis-label">{t("departmentAssessments.damageLevel")}</label>
+              <select aria-label={t("departmentAssessments.damageLevel")} className="aegis-input w-full" value={damageLevel} onChange={(e) => setDamageLevel(e.target.value)}>
+                <option value="minor">{getDamageLevelLabel("minor")}</option>
+                <option value="moderate">{getDamageLevelLabel("moderate")}</option>
+                <option value="severe">{getDamageLevelLabel("severe")}</option>
+                <option value="critical">{getDamageLevelLabel("critical")}</option>
               </select>
             </div>
             <div>
-              <label className="aegis-label">Estimated Casualties</label>
-              <input type="number" min={0} className="aegis-input w-full" value={casualties}
+              <label className="aegis-label">{t("departmentAssessments.estimatedCasualties")}</label>
+              <input aria-label={t("departmentAssessments.estimatedCasualties")} type="number" min={0} className="aegis-input w-full" value={casualties}
                 onChange={(e) => setCasualties(Number(e.target.value))} />
             </div>
             <div>
-              <label className="aegis-label">Displaced Persons</label>
-              <input type="number" min={0} className="aegis-input w-full" value={displaced}
+              <label className="aegis-label">{t("departmentAssessments.displacedPersons")}</label>
+              <input aria-label={t("departmentAssessments.displacedPersons")} type="number" min={0} className="aegis-input w-full" value={displaced}
                 onChange={(e) => setDisplaced(Number(e.target.value))} />
             </div>
           </div>
 
           <div>
-            <label className="aegis-label">Location</label>
-            <input type="text" required className="aegis-input w-full" value={location}
-              onChange={(e) => setLocation(e.target.value)} placeholder="Address or coordinates" />
+            <label className="aegis-label">{t("departmentAssessments.location")}</label>
+            <input aria-label={t("departmentAssessments.location")} type="text" required className="aegis-input w-full" value={location}
+              onChange={(e) => setLocation(e.target.value)} placeholder={t("departmentAssessments.placeholderLocation")} />
           </div>
 
           <div>
-            <label className="aegis-label">Description</label>
-            <textarea className="aegis-input w-full min-h-[100px]" value={description}
-              onChange={(e) => setDescription(e.target.value)} placeholder="Describe the damage and conditions..." />
+            <label className="aegis-label">{t("departmentAssessments.description")}</label>
+            <textarea aria-label={t("departmentAssessments.description")} className="aegis-input w-full min-h-[100px]" value={description}
+              onChange={(e) => setDescription(e.target.value)} placeholder={t("departmentAssessments.placeholderDescription")} />
           </div>
 
           <div>
-            <label className="aegis-label">Images (max 3)</label>
+            <label className="aegis-label">{t("departmentAssessments.images")}</label>
             <input type="file" accept="image/*" multiple className="aegis-input w-full" onChange={handleImageChange} />
             {images.length > 0 && (
-              <p className="mt-1 text-xs text-on-surface-variant">{images.length} file{images.length !== 1 ? "s" : ""} selected</p>
+              <p className="mt-1 text-xs text-on-surface-variant">{t("departmentAssessments.imagesSelected", { count: images.length })}</p>
             )}
           </div>
 
           <Button type="submit" variant="secondary" disabled={submitting}>
-            {submitting ? "Submitting..." : "Submit Assessment"}
+            {submitting ? t("departmentAssessments.submitting") : t("departmentAssessments.submit")}
           </Button>
         </form>
       </Card>
 
       {/* Previous assessments list */}
-      <h2 className="font-headline text-2xl text-on-surface mb-4">Previous Assessments</h2>
+      <h2 className="font-headline text-2xl text-on-surface mb-4">{t("departmentAssessments.previousTitle")}</h2>
 
       {loading ? (
         <Card className="py-12 text-center text-on-surface-variant">
@@ -189,7 +191,7 @@ export function DepartmentAssessmentPage() {
       ) : assessments.length === 0 ? (
         <Card className="py-12 text-center">
           <span className="material-symbols-outlined text-4xl text-outline-variant mb-3 block">assessment</span>
-          <p className="text-on-surface-variant">No assessments submitted yet.</p>
+          <p className="text-on-surface-variant">{t("departmentAssessments.empty")}</p>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -203,15 +205,15 @@ export function DepartmentAssessmentPage() {
                     <p className="text-xs text-on-surface-variant mt-0.5">{a.location}</p>
                   </div>
                   <span className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${dmg.bg} ${dmg.text}`}>
-                    {a.damage_level}
+                    {getDamageLevelLabel(a.damage_level)}
                   </span>
                 </div>
                 {a.description && (
                   <p className="mt-2 text-sm text-on-surface-variant line-clamp-2">{a.description}</p>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-on-surface-variant">
-                  <span>{a.estimated_casualties} casualties</span>
-                  <span>{a.displaced_persons} displaced</span>
+                  <span>{t("assessments.casualties", { count: a.estimated_casualties })}</span>
+                  <span>{t("assessments.displaced", { count: a.displaced_persons })}</span>
                   <span className="ml-auto text-[10px]">{new Date(a.created_at).toLocaleString()}</span>
                 </div>
               </Card>

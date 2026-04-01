@@ -473,6 +473,9 @@ range.
 - Completed: added the `device_location_trail` persistence layer plus the `LOCATION_BEACON` payload type, 72-hour TTL cleanup helpers, authenticated `/api/mesh/trail` and `/api/mesh/last-seen` routes, automatic 30-second mobile beacons that tighten to 10 seconds during SOS, in-memory last-seen and trail hydration on mobile, breadcrumb overlays on the Survivor Compass minimap, last-seen cards in the mobile SAR feed, and warm-styled trail polylines plus a selectable trail sidebar on the municipality Mesh & SAR dashboard.
 - Verified: Phase 4 API trail coverage passes (`34 passed` in `services/api/tests/test_phase4.py`), the focused web Mesh & SAR map Vitest suite passes (`3 passed`), the web production build completes, `flutter analyze` passes, and the focused mobile trail/compass tests pass (`22 passed`).
 - Constraint: location trails intentionally store anonymized device fingerprints, remain municipality/department visible only, and are pruned after the configured retention window (default 72 hours). Early deletion should remove the matching `device_location_trail` rows and any downstream exported incident artifacts together when a privacy request is approved.
+- Date: `2026-04-01`
+- Completed: aligned the SAR regression tests with the shipped auto-beacon behavior by injecting fake location services into the transport layer used by the unit suite, which keeps the new location-beacon scheduling covered without relying on a live Flutter method-channel geolocator during CI.
+- Verified: the focused SAR mode/platform mobile tests now pass locally again, and the matching API format check is clean after reformatting the touched Python files.
 
 ---
 
@@ -532,4 +535,5 @@ range.
   blackout via mesh relay and sync to the backend on gateway restore.
 - All extension work is additive and the canonical Phase 4 exit criteria remain
   satisfied.
+
 

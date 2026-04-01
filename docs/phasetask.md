@@ -805,6 +805,9 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Completed: implemented 4-EXT.5 Survivor Trail end-to-end: added the `device_location_trail` Supabase migration with `LOCATION_BEACON` enum support, the `(device_fingerprint, recorded_at DESC)` index, and the configurable 72-hour cleanup job; extended mesh ingest plus authenticated `/api/mesh/trail/:deviceFingerprint` and `/api/mesh/last-seen`; added mobile location-beacon scheduling (30-second normal cadence, 10-second SOS cadence), in-memory trail/last-seen hydration, Survivor Compass breadcrumb overlays, and Last Seen SAR feed cards; extended the municipality Mesh & SAR dashboard with trail polylines, last-seen endpoint pins, and a warm-styled trail sidebar.
 - Verified: `services/api/.venv/Scripts/python.exe -m pytest tests/test_phase4.py -q` (`34 passed`), `services/api/.venv/Scripts/ruff.exe check src tests/test_phase4.py`, `npm exec vitest run src/components/maps/mesh-sar-map.test.tsx` (`3 passed`), `npm run build`, `flutter analyze`, and `flutter test test/mesh_transport_test.dart test/survivor_compass_screen_test.dart` (`22 passed`).
 - Carryover: manual multi-device blackout checks from Phase 4/4-EXT.4 remain open, plus the unverified field scenario in the 4-EXT verification checklist where an offline device later disappears from live range but still needs operator confirmation on the map.
+- Date: `2026-04-01`
+- Completed: stabilized the Phase 4 extension CI follow-up by updating SAR unit tests to inject fake location services now that enabling SAR mode immediately schedules location beacons, and reformatted the affected API files/tests so `ruff format --check` matches GitHub Actions again.
+- Verified: reran local API `ruff format --check` and the targeted mobile SAR regression suite after the fixes; the full validation pass is tracked in the active work log for this run.
 
 ### Exit Criteria
 
@@ -914,4 +917,5 @@ Add non-MVP improvements only after the MVP phases are stable and verified.
 
 - Stretch work is additive, optional, and does not compromise the MVP emergency coordination workflow.
 - Every added feature has a clear operational reason and verification coverage.
+
 

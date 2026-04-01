@@ -1,6 +1,15 @@
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _FakeLocationService extends LocationService {
+  @override
+  Future<LocationData?> getCurrentPosition() async => null;
+
+  @override
+  Stream<LocationData> watchPosition() => const Stream<LocationData>.empty();
+}
 
 void main() {
   group('SarModeController', () {
@@ -8,7 +17,8 @@ void main() {
     late SarModeController controller;
 
     setUp(() async {
-      transport = MeshTransportService();
+      // Enabling SAR mode now schedules location beacons immediately.
+      transport = MeshTransportService(locationService: _FakeLocationService());
       controller = SarModeController(transport: transport);
       await controller.setSarModeEnabled(true);
     });
@@ -150,7 +160,9 @@ void main() {
         expect(resolvePacket.payload['targetType'], 'SURVIVOR_SIGNAL');
         expect(resolvePacket.payload['survivorMessageId'], signal.messageId);
 
-        final peerTransport = MeshTransportService();
+        final peerTransport = MeshTransportService(
+          locationService: _FakeLocationService(),
+        );
         final peerController = SarModeController(transport: peerTransport);
         await peerController.setSarModeEnabled(true);
         addTearDown(() {

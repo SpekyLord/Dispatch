@@ -139,8 +139,6 @@ def _packet(
     }
 
 
-
-
 class TestMeshIngest:
     def test_ingest_incident_report(self, settings):
         fake = FakeSupabaseClient()
@@ -197,8 +195,6 @@ class TestMeshIngest:
             assert "hop limit" in data["results"][0]["error"]
 
 
-
-
 class TestMeshDedup:
     def test_duplicate_packet_rejected(self, settings):
         """Second ingest of same messageId returns duplicate status."""
@@ -223,8 +219,6 @@ class TestMeshDedup:
             )
             data = resp.get_json()
             assert data["processed_count"] == 2
-
-
 
 
 class TestMeshDistress:
@@ -282,8 +276,6 @@ class TestMeshDistress:
             data = resp.get_json()
             # distress should be first in results (prioritized)
             assert data["results"][0]["messageId"] == "sos-2"
-
-
 
 
 class TestMeshAnnouncement:
@@ -376,8 +368,6 @@ class TestMeshAnnouncement:
         assert post_inserts[0][1]["is_mesh_origin"] is True
 
 
-
-
 class TestMeshStatusUpdate:
     def test_status_update_applied(self, settings):
         fake = FakeSupabaseClient(
@@ -442,8 +432,6 @@ class TestMeshStatusUpdate:
             assert len(fake._updates) == 1  # only the mesh_messages update
 
 
-
-
 class TestMeshSyncUpdates:
     def test_sync_updates_returns_data(self, settings):
         fake = FakeSupabaseClient(
@@ -477,8 +465,6 @@ class TestMeshSyncUpdates:
         with app.test_client() as c:
             resp = c.get("/api/mesh/sync-updates?since=2026-03-30T00:00:00Z")
             assert resp.status_code == 200
-
-
 
 
 class TestSyncAcks:

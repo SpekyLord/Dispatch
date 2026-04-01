@@ -40,7 +40,10 @@ void main() {
     late SarModeController controller;
 
     setUp(() {
-      transport = MeshTransportService();
+      transport = MeshTransportService(
+        locationService: _FakeLocationService(),
+        automaticLocationBeaconing: false,
+      );
       platform = _FakeSarPlatformService();
       controller = SarModeController(
         transport: transport,

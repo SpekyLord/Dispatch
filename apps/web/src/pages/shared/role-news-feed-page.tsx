@@ -50,6 +50,12 @@ type CommentThreadItem = {
   comment: string;
 };
 
+type FollowDepartment = FeedDepartmentPreview & {
+  user_id: string;
+  profile_photo?: string | null;
+  post_count?: number | null;
+};
+
 const roleCopy: Record<NewsFeedRole, RoleCopy> = {
   citizen: {
     badge: "Citizen View",
@@ -91,47 +97,182 @@ const categoryStyles: Record<string, { accentClassName: string; icon: string }> 
   situational_report: { accentClassName: "bg-[#ece3f5] text-[#6e4c91]", icon: "summarize" },
 };
 
-const readinessTopics = [
-  {
-    category: "Hydrology",
-    title: "Flood Mitigation Strategies for Urban Basins",
-    meta: "1.2k responders active",
-  },
-  {
-    category: "Logistics",
-    title: "Supply Chain Resilience in Seismic Zones",
-    meta: "850 agencies coordinated",
-  },
-  {
-    category: "Psychology",
-    title: "Mental Fortitude in High-Stress Operations",
-    meta: "2.4k personnel enrolled",
-  },
-] as const;
+const readinessCategories = ["alert", "warning", "situational_report"] as const;
+const readinessCategorySet = new Set<string>(readinessCategories);
+const readinessCategoryLabels: Record<(typeof readinessCategories)[number], string> = {
+  alert: "Alert",
+  warning: "Warning",
+  situational_report: "Situational Report",
+};
 
 const footerLinks = ["Standard Ops", "Ethics Policy", "Command Chain"] as const;
 const warmPanelClassName = "border-[#efd8d0] bg-[#fff8f3]";
 const warmTabClassName = "border border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b]";
 const warmActionTabClassName =
   "border border-[#ecd8cf] bg-[#f7efe7] text-[#8a5a40] transition-colors hover:bg-[#f2e7de]";
+const popupPanelShadowClassName =
+  "shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]";
+const raisedFeedCardClassName =
+  "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
+const publishLaneEffectClassName =
+  "space-y-5 rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
+const publishedTabHighlightClassName =
+  "transition-all duration-200 ease-out hover:border-[#e7c7b8] hover:bg-[#fffaf6] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]";
+const heartOutlinePath =
+  "M17.5,1.917a6.4,6.4,0,0,0-5.5,3.3,6.4,6.4,0,0,0-5.5-3.3A6.8,6.8,0,0,0,0,8.967c0,4.547,4.786,9.513,8.8,12.88a4.974,4.974,0,0,0,6.4,0C19.214,18.48,24,13.514,24,8.967A6.8,6.8,0,0,0,17.5,1.917Zm-3.585,18.4a2.973,2.973,0,0,1-3.83,0C4.947,16.006,2,11.87,2,8.967a4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,11,8.967a1,1,0,0,0,2,0,4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,22,8.967C22,11.87,19.053,16.006,13.915,20.313Z";
+const heartFilledPath =
+  "M17.5,1.917a6.4,6.4,0,0,0-5.5,3.3,6.4,6.4,0,0,0-5.5-3.3A6.8,6.8,0,0,0,0,8.967c0,4.547,4.786,9.513,8.8,12.88a4.974,4.974,0,0,0,6.4,0C19.214,18.48,24,13.514,24,8.967A6.8,6.8,0,0,0,17.5,1.917Z";
+const bookmarkPath =
+  "M27 4v27a1 1 0 0 1-1.625.781L16 24.281l-9.375 7.5A1 1 0 0 1 5 31V4a4 4 0 0 1 4-4h14a4 4 0 0 1 4 4z";
+
+function summarizePostContent(content: string, maxLength = 72) {
+  const collapsed = content.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= maxLength) {
+    return collapsed;
+  }
+  return `${collapsed.slice(0, maxLength).trimEnd()}...`;
+}
+
+function formatDepartmentHandle(name?: string | null) {
+  if (!name) {
+    return "@department";
+  }
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return `@${normalized || "department"}`;
+}
+
+function getFollowAccent(type?: string | null) {
+  switch (type) {
+    case "fire":
+    case "disaster":
+      return "from-[#f7d1b5] to-[#f3b7a0]";
+    case "police":
+      return "from-[#d8c6ff] to-[#b39ddb]";
+    case "medical":
+    case "health":
+      return "from-[#ffd5dc] to-[#f3b2c0]";
+    default:
+      return "from-[#c4ead9] to-[#8ec5a6]";
+  }
+}
+
+function getFollowSymbol(type?: string | null) {
+  switch (type) {
+    case "fire":
+      return "local_fire_department";
+    case "police":
+      return "local_police";
+    case "medical":
+    case "health":
+      return "medical_services";
+    case "disaster":
+      return "shield_person";
+    default:
+      return "domain";
+  }
+}
+
+function buildReadinessMeta(post: FeedPost) {
+  const departmentName = post.department?.name ?? "Department update";
+  const timestamp = new Date(post.created_at).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (post.location?.trim()) {
+    return `${departmentName} • ${post.location}`;
+  }
+
+  return `${departmentName} • ${timestamp}`;
+}
+
+function AnimatedHeartIcon({ liked }: { liked: boolean }) {
+  return (
+    <span className="relative flex h-6 w-6 items-center justify-center">
+      <svg
+        aria-hidden="true"
+        className={liked ? "h-5 w-5 fill-current opacity-0" : "h-5 w-5 fill-current opacity-100"}
+        viewBox="0 0 24 24"
+      >
+        <path d={heartOutlinePath} />
+      </svg>
+      {liked ? (
+        <>
+          <svg
+            aria-hidden="true"
+            className="dispatch-heart-filled absolute h-5 w-5 fill-[#d97757]"
+            viewBox="0 0 24 24"
+          >
+            <path d={heartFilledPath} />
+          </svg>
+          <svg
+            aria-hidden="true"
+            className="dispatch-heart-burst pointer-events-none absolute -inset-4 h-14 w-14"
+            viewBox="0 0 100 100"
+          >
+            <polygon points="18,18 30,30 22,34 14,22" />
+            <polygon points="18,50 34,50 34,56 18,56" />
+            <polygon points="22,76 34,66 38,72 26,82" />
+            <polygon points="82,18 70,30 78,34 86,22" />
+            <polygon points="82,50 66,50 66,56 82,56" />
+            <polygon points="78,76 66,66 62,72 74,82" />
+          </svg>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function AnimatedBookmarkIcon({ bookmarked, animate }: { bookmarked: boolean; animate: boolean }) {
+  return (
+    <span className="relative flex h-6 w-6 items-center justify-center">
+      <svg
+        aria-hidden="true"
+        className={animate ? "dispatch-bookmark-active h-5 w-5 transition-colors duration-200" : "h-5 w-5 transition-colors duration-200"}
+        viewBox="0 0 32 32"
+      >
+        <path
+          d={bookmarkPath}
+          className={bookmarked ? "fill-[#d97757]" : "fill-[#6f625b]"}
+        />
+      </svg>
+      {animate ? (
+        <>
+          <span className="dispatch-bookmark-ring absolute rounded-full border border-[#d97757]" />
+          <span className="dispatch-bookmark-spark absolute" />
+        </>
+      ) : null}
+    </span>
+  );
+}
 
 export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const copy = roleCopy[role];
   const canPost = role === "department";
+  const departmentLayout = role === "department";
   const accessToken = useSessionStore((state) => state.accessToken);
   const currentUser = useSessionStore((state) => state.user);
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [followDepartments, setFollowDepartments] = useState<FollowDepartment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | number | null>(null);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [likedPostIds, setLikedPostIds] = useState<Array<string | number>>([]);
   const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Array<string | number>>([]);
+  const [bookmarkAnimatingPostIds, setBookmarkAnimatingPostIds] = useState<Array<string | number>>([]);
   const [reactingPostIds, setReactingPostIds] = useState<Array<string | number>>([]);
   const [comments, setComments] = useState<CommentThreadItem[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [deleteConfirmPost, setDeleteConfirmPost] = useState<FeedPost | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | number | null>(null);
+  const [menuOpenPostId, setMenuOpenPostId] = useState<string | number | null>(null);
+  const [editPost, setEditPost] = useState<FeedPost | null>(null);
 
   const fetchPosts = useCallback((showLoader = true) => {
     if (showLoader) {
@@ -153,11 +294,26 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       });
   }, []);
 
+  const fetchFollowDepartments = useCallback(() => {
+    return apiRequest<{ departments: FollowDepartment[] }>("/api/departments/directory")
+      .then((res) => {
+        setFollowDepartments(
+          (res.departments ?? [])
+            .filter((department) => department.user_id && department.user_id !== currentUser?.id)
+            .slice(0, 3),
+        );
+      })
+      .catch(() => {
+        setFollowDepartments([]);
+      });
+  }, [currentUser?.id]);
+
   useEffect(() => {
     queueMicrotask(() => {
       void fetchPosts();
+      void fetchFollowDepartments();
     });
-  }, [fetchPosts]);
+  }, [fetchFollowDepartments, fetchPosts]);
 
   useEffect(() => {
     const subscription = subscribeToTable(
@@ -173,6 +329,14 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const activeCommentPost = useMemo(
     () => posts.find((post) => post.id === activeCommentPostId) ?? null,
     [activeCommentPostId, posts],
+  );
+  const readinessPosts = useMemo(
+    () => posts.filter((post) => readinessCategorySet.has(post.category)).slice(0, 3),
+    [posts],
+  );
+  const readinessCount = useMemo(
+    () => posts.filter((post) => readinessCategorySet.has(post.category)).length,
+    [posts],
   );
 
   const fetchComments = useCallback((postId: string | number, showLoader = true) => {
@@ -194,7 +358,31 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       return;
     }
 
+    const currentPost = posts.find((post) => post.id === postId);
+    if (!currentPost) {
+      return;
+    }
+
+    const wasLiked = likedPostIds.includes(postId);
+    const previousReactionCount = currentPost.reaction ?? 0;
+    const optimisticReactionCount = Math.max(0, previousReactionCount + (wasLiked ? -1 : 1));
+
     setReactingPostIds((prev) => [...prev, postId]);
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              reaction: optimisticReactionCount,
+              liked_by_me: !wasLiked,
+            }
+          : post,
+      ),
+    );
+    setLikedPostIds((prev) =>
+      wasLiked ? prev.filter((id) => id !== postId) : [...prev, postId],
+    );
+
     try {
       const response = await apiRequest<{ post: FeedPost }>(`/api/feed/${postId}/reaction`, {
         method: "POST",
@@ -217,15 +405,42 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             : [...prev, postId]
           : prev.filter((id) => id !== postId),
       );
+    } catch {
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.id === postId
+            ? {
+                ...post,
+                reaction: previousReactionCount,
+                liked_by_me: wasLiked,
+              }
+            : post,
+        ),
+      );
+      setLikedPostIds((prev) =>
+        wasLiked ? (prev.includes(postId) ? prev : [...prev, postId]) : prev.filter((id) => id !== postId),
+      );
     } finally {
       setReactingPostIds((prev) => prev.filter((id) => id !== postId));
     }
   }
 
   function toggleBookmarked(postId: string | number) {
-    setBookmarkedPostIds((prev) =>
-      prev.includes(postId) ? prev.filter((id) => id !== postId) : [...prev, postId],
-    );
+    setBookmarkedPostIds((prev) => {
+      const isBookmarked = prev.includes(postId);
+      const next = isBookmarked ? prev.filter((id) => id !== postId) : [...prev, postId];
+
+      if (!isBookmarked) {
+        setBookmarkAnimatingPostIds((current) =>
+          current.includes(postId) ? current : [...current, postId],
+        );
+        window.setTimeout(() => {
+          setBookmarkAnimatingPostIds((current) => current.filter((id) => id !== postId));
+        }, 650);
+      }
+
+      return next;
+    });
   }
 
   async function handleSubmitComment() {
@@ -250,6 +465,30 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       setCommentError(error instanceof Error ? error.message : "Failed to publish comment.");
     } finally {
       setCommentSubmitting(false);
+    }
+  }
+
+  async function handleDeletePost() {
+    if (!deleteConfirmPost) {
+      return;
+    }
+
+    setDeleteError(null);
+    setDeletingPostId(deleteConfirmPost.id);
+    try {
+      await apiRequest<{ deleted: boolean }>(`/api/feed/${deleteConfirmPost.id}`, {
+        method: "DELETE",
+      });
+      if (activeCommentPostId === deleteConfirmPost.id) {
+        setActiveCommentPostId(null);
+      }
+      setDeleteConfirmPost(null);
+      setMenuOpenPostId(null);
+      await fetchPosts(false);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Failed to delete post.");
+    } finally {
+      setDeletingPostId(null);
     }
   }
 
@@ -282,8 +521,99 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   }, [accessToken, activeCommentPostId, fetchComments, fetchPosts]);
 
   return (
-    <AppShell subtitle={copy.subtitle} title="News Feed">
+    <>
+      <style>{`
+        @keyframes dispatch-heart-pop {
+          0% { transform: scale(0); }
+          25% { transform: scale(1.2); }
+          50% { transform: scale(1); filter: brightness(1.15); }
+          100% { transform: scale(1); }
+        }
+
+        @keyframes dispatch-heart-burst {
+          0% { transform: scale(0); opacity: 0; }
+          50% { opacity: 1; filter: brightness(1.12); }
+          100% { transform: scale(1.35); opacity: 0; }
+        }
+
+        .dispatch-heart-filled {
+          animation: dispatch-heart-pop 0.45s ease-out;
+          transform-origin: center;
+        }
+
+        .dispatch-heart-burst {
+          animation: dispatch-heart-burst 0.5s ease-out forwards;
+          fill: #d97757;
+          stroke: #d97757;
+          stroke-width: 2px;
+          transform-origin: center;
+        }
+
+        @keyframes dispatch-bookmark-pop {
+          50% { transform: scaleY(0.6); }
+          100% { transform: scaleY(1); }
+        }
+
+        @keyframes dispatch-bookmark-ring {
+          from {
+            width: 0;
+            height: 0;
+            opacity: 0;
+          }
+          90% {
+            width: 2.2rem;
+            height: 2.2rem;
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+
+        @keyframes dispatch-bookmark-spark {
+          from {
+            transform: scale(0);
+            opacity: 0;
+          }
+          40% {
+            opacity: 1;
+          }
+          to {
+            transform: scale(0.8);
+            opacity: 0;
+          }
+        }
+
+        .dispatch-bookmark-ring {
+          animation: dispatch-bookmark-ring 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          animation-delay: 0.3s;
+        }
+
+        .dispatch-bookmark-active {
+          animation: dispatch-bookmark-pop 0.3s forwards;
+          transform-origin: top;
+        }
+
+        .dispatch-bookmark-spark {
+          width: 0.625rem;
+          height: 0.625rem;
+          border-radius: 9999px;
+          box-shadow:
+            0 1.875rem 0 -4px #d97757,
+            1.875rem 0 0 -4px #d97757,
+            0 -1.875rem 0 -4px #d97757,
+            -1.875rem 0 0 -4px #d97757,
+            -1.375rem 1.375rem 0 -4px #d97757,
+            -1.375rem -1.375rem 0 -4px #d97757,
+            1.375rem -1.375rem 0 -4px #d97757,
+            1.375rem 1.375rem 0 -4px #d97757;
+          animation: dispatch-bookmark-spark 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          animation-delay: 0.3s;
+        }
+      `}</style>
+      <AppShell subtitle={copy.subtitle} title="News Feed">
       <div className="space-y-8">
+        {!departmentLayout && (
         <section className="overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-gradient-to-br from-[#a14b2f] via-[#8f4427] to-[#5f5e5c] p-6 text-white shadow-xl">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
@@ -310,8 +640,8 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                 <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
                   Active advisories
                 </p>
-                <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(posts.length).padStart(2, "0")}</p>
-                <p className="mt-1 text-xs text-white/70">Live posts from department feed</p>
+                <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(readinessCount).padStart(2, "0")}</p>
+                <p className="mt-1 text-xs text-white/70">Live alerts, warnings, and situational reports</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
@@ -323,9 +653,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             </div>
           </div>
         </section>
+        )}
 
-        <div className="grid gap-6 xl:grid-cols-12">
-          <div className="space-y-6 xl:col-span-8">
+        <div
+          className={departmentLayout
+            ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start xl:grid-cols-[minmax(0,1fr)_20rem]"
+            : "grid gap-6 xl:grid-cols-12"}
+        >
+          <div className={`min-w-0 space-y-6 ${departmentLayout ? "" : "xl:col-span-8"}`}>
+            {!departmentLayout && (
             <Card className={warmPanelClassName}>
               <div className="flex flex-col gap-4 md:flex-row md:items-start">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
@@ -395,8 +731,57 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   </div>
                 </div>
               </Card>
+            )}
 
-            <div className="space-y-5">
+            <div className={departmentLayout ? publishLaneEffectClassName : "space-y-5"}>
+              {departmentLayout && (
+                <Card className={`${warmPanelClassName} ${raisedFeedCardClassName}`}>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
+                      <span className="material-symbols-outlined">campaign</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                        Department composer
+                      </p>
+                      <div className="mt-4 rounded-[28px] border border-[#ecd8cf] bg-[#fff8f3] px-4 py-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
+                            <span className="material-symbols-outlined">edit_square</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsCreatePostOpen(true)}
+                            className="min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-base text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46] lg:text-lg"
+                          >
+                            Anything urgent to share?
+                          </button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="min-w-[96px] self-end lg:self-auto"
+                            onClick={() => setIsCreatePostOpen(true)}
+                          >
+                            Post
+                          </Button>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2 border-t border-[#ecd8cf] pt-4">
+                          {quickActions.map((action) => (
+                            <span
+                              key={action.label}
+                              className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${warmTabClassName}`}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">{action.icon}</span>
+                              {action.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
               {loading ? (
                 <Card className={`${warmPanelClassName} py-16 text-center text-on-surface-variant`}>
                   <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
@@ -414,9 +799,11 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                     icon: "article",
                   };
                   const publisherPath = `/departments/${post.uploader}`;
+                  const canDeletePost = currentUser?.role === "department" && String(currentUser.id) === String(post.uploader);
+                  const isMenuOpen = menuOpenPostId === post.id;
 
                   return (
-                    <Card key={post.id} className={`${warmPanelClassName} relative overflow-visible`}>
+                    <Card key={post.id} className={`${warmPanelClassName} ${raisedFeedCardClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
                       <article className="space-y-5">
                         <div className="flex items-start gap-3">
                           <DepartmentHoverPreview
@@ -462,13 +849,48 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                             <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
                               {post.category.replace("_", " ")}
                             </span>
-                            <Link
-                              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${warmActionTabClassName}`}
-                              to={`/feed/${post.id}`}
-                            >
-                              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-                              Open full announcement
-                            </Link>
+                            {canDeletePost && (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${warmActionTabClassName}`}
+                                  onClick={() => setMenuOpenPostId((current) => (current === post.id ? null : post.id))}
+                                  title="Post actions"
+                                >
+                                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
+                                </button>
+                                {isMenuOpen && (
+                                  <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#ecd8cf] bg-[#fff8f3] shadow-[0_12px_24px_rgba(56,56,49,0.12)]">
+                                    <button
+                                      type="button"
+                                      aria-label="Edit post"
+                                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
+                                      onClick={() => {
+                                        setMenuOpenPostId(null);
+                                        setDeleteError(null);
+                                        setEditPost(post);
+                                      }}
+                                    >
+                                      <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">edit</span>
+                                      Edit post
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-label="Delete post"
+                                      className="flex w-full items-center gap-3 border-t border-[#ecd8cf] px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
+                                      onClick={() => {
+                                        setMenuOpenPostId(null);
+                                        setDeleteError(null);
+                                        setDeleteConfirmPost(post);
+                                      }}
+                                    >
+                                      <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">delete</span>
+                                      Delete post
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -488,10 +910,17 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                           </p>
 
                           {post.photos && post.photos.length > 0 && (
-                            <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-3">
                               {post.photos.map((url, index) => (
-                                <div key={`${post.id}-photo-${index}`} className="overflow-hidden rounded-2xl border border-outline-variant/10">
-                                  <img src={url} alt={`${post.title} photo ${index + 1}`} className="h-48 w-full object-cover" />
+                                <div
+                                  key={`${post.id}-photo-${index}`}
+                                  className="overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4]"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`${post.title} photo ${index + 1}`}
+                                    className="h-[320px] w-full object-cover md:h-[420px]"
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -511,12 +940,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                 onClick={() => void handleReact(post.id)}
                                 disabled={reactingPostIds.includes(post.id)}
                               >
-                                <span
-                                  className="material-symbols-outlined"
-                                  style={{ fontVariationSettings: likedPostIds.includes(post.id) ? "\"FILL\" 1" : "\"FILL\" 0" }}
-                                >
-                                  favorite
-                                </span>
+                                <AnimatedHeartIcon liked={likedPostIds.includes(post.id)} />
                                 <span className="text-xs font-bold uppercase tracking-widest">
                                   {post.reaction ?? 0}
                                 </span>
@@ -538,12 +962,10 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                               onClick={() => toggleBookmarked(post.id)}
                               title="Bookmark announcement"
                             >
-                              <span
-                                className="material-symbols-outlined"
-                                style={{ fontVariationSettings: bookmarkedPostIds.includes(post.id) ? "\"FILL\" 1" : "\"FILL\" 0" }}
-                              >
-                                bookmark
-                              </span>
+                              <AnimatedBookmarkIcon
+                                bookmarked={bookmarkedPostIds.includes(post.id)}
+                                animate={bookmarkAnimatingPostIds.includes(post.id)}
+                              />
                             </button>
                           </div>
                         </div>
@@ -554,28 +976,136 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               )}
             </div>
           </div>
+          <div className={`min-w-0 ${departmentLayout ? "md:-mt-20" : "xl:col-span-4"}`}>
+            <div className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}>
+            {departmentLayout && (
+              <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
+                <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <span className="material-symbols-outlined text-white/75">search</span>
+                  <input
+                    aria-label="Temporary news search"
+                    className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-white/55"
+                    placeholder={copy.searchPlaceholder}
+                    readOnly
+                  />
+                </div>
+              </section>
+            )}
+            {departmentLayout && (
+              <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
+                      {copy.badge}
+                    </span>
+                    <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">ResilienceHub Temporary News Desk</h2>
+                    <p className="mt-3 text-sm leading-relaxed text-white/80">
+                      {copy.intro}
+                    </p>
+                  </div>
 
-          <div className="space-y-6 xl:col-span-4">
+                  <div className="grid gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                        Active advisories
+                      </p>
+                      <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(readinessCount).padStart(2, "0")}</p>
+                      <p className="mt-1 text-xs text-white/70">Live alerts, warnings, and situational reports</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                        Coordination mode
+                      </p>
+                      <p className="mt-2 font-headline text-2xl">Steady Watch</p>
+                      <p className="mt-1 text-xs text-white/70">Preparedness bulletin enabled</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
             <Card className={warmPanelClassName}>
               <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                 Active Readiness
               </p>
               <div className="mt-5 space-y-5">
-                {readinessTopics.map((topic) => (
-                  <div
-                    key={topic.title}
-                    className="group cursor-default rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4 transition-shadow hover:shadow-sm"
-                  >
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
-                      {topic.category}
+                {readinessPosts.length === 0 ? (
+                  <div className="rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                    <p className="text-sm leading-relaxed text-on-surface-variant">
+                      Published summaries for Alert, Warning, and Situational Report posts will appear here once departments publish them.
                     </p>
-                    <p className="mt-2 text-lg leading-tight text-on-surface transition-colors group-hover:text-[#a14b2f]">
-                      {topic.title}
-                    </p>
-                    <p className="mt-2 text-xs text-outline">{topic.meta}</p>
                   </div>
-                ))}
+                ) : (
+                  readinessPosts.map((post) => (
+                    <div
+                      key={post.id}
+                      className="group cursor-default rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4 transition-shadow hover:shadow-sm"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                        {readinessCategoryLabels[post.category as keyof typeof readinessCategoryLabels] ?? post.category.replace("_", " ")}
+                      </p>
+                      <p className="mt-2 text-lg leading-tight text-on-surface transition-colors group-hover:text-[#a14b2f]">
+                        {summarizePostContent(post.content)}
+                      </p>
+                      <p className="mt-2 text-xs text-outline">{buildReadinessMeta(post)}</p>
+                    </div>
+                  ))
+                )}
               </div>
+            </Card>
+
+            <Card className={warmPanelClassName}>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Who to follow
+              </p>
+              <div className="mt-5 space-y-4">
+                {followDepartments.length === 0 ? (
+                  <div className="rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                    <p className="text-sm leading-relaxed text-on-surface-variant">
+                      Department accounts will appear here once profiles are available in the directory.
+                    </p>
+                  </div>
+                ) : (
+                  followDepartments.map((department) => {
+                    const publisherPath = `/departments/${department.user_id}`;
+                    const profileImage = department.profile_picture || department.profile_photo;
+
+                    return (
+                      <Link
+                        key={department.id}
+                        className="flex items-center gap-3 rounded-2xl transition-colors hover:bg-[#fffaf6]"
+                        to={publisherPath}
+                      >
+                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${getFollowAccent(department.type)} text-[#5b3427] shadow-sm`}>
+                          {profileImage ? (
+                            <img
+                              alt={`${department.name} profile`}
+                              className="h-full w-full object-cover"
+                              src={profileImage}
+                            />
+                          ) : (
+                            <span className="material-symbols-outlined text-[22px]">{getFollowSymbol(department.type)}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold text-on-surface">{department.name}</p>
+                          <p className="truncate text-sm text-on-surface-variant">{formatDepartmentHandle(department.name)}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-[#d7c1b5] bg-white px-4 py-2 text-sm font-semibold text-[#5f4f46] transition-colors hover:bg-[#f8efe8]">
+                          Follow
+                        </span>
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
+              {followDepartments.length > 0 && (
+                <button
+                  type="button"
+                  className="mt-5 text-sm font-medium text-[#a14b2f] transition-colors hover:text-[#7b3822]"
+                >
+                  Show more
+                </button>
+              )}
             </Card>
 
             <Card className={warmPanelClassName}>
@@ -610,13 +1140,14 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                 Temporary News feed page added from the supplied HTML layout.
               </p>
             </Card>
+            </div>
           </div>
-        </div>
+      </div>
       </div>
 
       {activeCommentPost && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] shadow-[0_20px_40px_rgba(56,56,49,0.12)]">
+          <div className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
               {(() => {
                 const publisherPath = `/departments/${activeCommentPost.uploader}`;
                 return (
@@ -712,12 +1243,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                         onClick={() => void handleReact(activeCommentPost.id)}
                         disabled={reactingPostIds.includes(activeCommentPost.id)}
                       >
-                        <span
-                          className="material-symbols-outlined"
-                          style={{ fontVariationSettings: likedPostIds.includes(activeCommentPost.id) ? "\"FILL\" 1" : "\"FILL\" 0" }}
-                        >
-                          favorite
-                        </span>
+                        <AnimatedHeartIcon liked={likedPostIds.includes(activeCommentPost.id)} />
                         <span className="text-xs font-bold uppercase tracking-widest">
                           {activeCommentPost.reaction ?? 0}
                         </span>
@@ -729,8 +1255,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                         </span>
                       </button>
                     </div>
-                    <button className="text-on-surface-variant transition-colors hover:text-on-surface" type="button">
-                      <span className="material-symbols-outlined">bookmark</span>
+                    <button
+                      className="text-on-surface-variant transition-colors hover:text-on-surface"
+                      type="button"
+                      onClick={() => toggleBookmarked(activeCommentPost.id)}
+                    >
+                      <AnimatedBookmarkIcon
+                        bookmarked={bookmarkedPostIds.includes(activeCommentPost.id)}
+                        animate={bookmarkAnimatingPostIds.includes(activeCommentPost.id)}
+                      />
                     </button>
                   </div>
                 </div>
@@ -814,7 +1347,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
       {canPost && isCreatePostOpen && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] shadow-[0_20px_40px_rgba(56,56,49,0.12)]">
+          <div className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
             <div className="flex items-center gap-4 border-b border-[#ecd8cf] bg-[#fff8f3]/95 px-8 py-6 backdrop-blur-sm">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
                   <span className="material-symbols-outlined">edit_square</span>
@@ -858,6 +1391,90 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
           </div>
         </div>
       )}
-    </AppShell>
+
+      {deleteConfirmPost && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+          <div className={`w-full max-w-md rounded-[28px] border border-[#efd8d0] bg-[#fff8f3] p-6 ${popupPanelShadowClassName}`}>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+              Delete post
+            </p>
+            <h3 className="mt-3 text-2xl text-on-surface">Are you sure you want to delete this post?</h3>
+            <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+              This will remove the announcement, its comments, its reaction records, and the related feed data connected to it.
+            </p>
+            {deleteError && (
+              <div className="mt-4 rounded-2xl border border-[#d8b7aa] bg-[#fff1e9] px-4 py-3 text-sm text-[#89391e]">
+                {deleteError}
+              </div>
+            )}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className={`rounded-full px-5 py-3 text-sm font-semibold ${warmTabClassName}`}
+                onClick={() => {
+                  if (deletingPostId !== deleteConfirmPost.id) {
+                    setDeleteConfirmPost(null);
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={deletingPostId === deleteConfirmPost.id}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-[#a14b2f] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={() => void handleDeletePost()}
+                disabled={deletingPostId === deleteConfirmPost.id}
+              >
+                {deletingPostId === deleteConfirmPost.id ? "Deleting..." : "Delete post"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editPost && (
+        <div className="fixed inset-0 z-[74] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+          <div className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
+            <div className="flex items-center justify-between border-b border-[#ecd8cf] bg-[#fff8f3]/95 px-8 py-6 backdrop-blur-sm">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                  Edit post
+                </p>
+                <h3 className="mt-2 text-2xl text-on-surface">Update this announcement</h3>
+              </div>
+              <button
+                className={`rounded-full p-2 transition-colors hover:text-on-surface ${warmTabClassName}`}
+                type="button"
+                onClick={() => setEditPost(null)}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-8 py-6">
+              <DepartmentCreatePostForm
+                mode="edit"
+                postId={editPost.id}
+                initialValues={{
+                  title: editPost.title,
+                  content: editPost.content,
+                  category: editPost.category,
+                  location: editPost.location ?? "",
+                }}
+                submitLabel="Save changes"
+                onCancel={() => setEditPost(null)}
+                onSuccess={async () => {
+                  setEditPost(null);
+                  await fetchPosts(false);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      </AppShell>
+    </>
   );
 }

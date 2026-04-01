@@ -10,6 +10,11 @@ const messages = {
     "shell.language": "Language",
     "shell.english": "EN",
     "shell.filipino": "FIL",
+    "shell.signOutConfirmTitle": "Are you sure you want to sign out?",
+    "shell.signOutConfirmBody":
+      "You'll be signed out of Dispatch and returned to the home page.",
+    "shell.cancel": "Cancel",
+    "shell.signingOut": "Signing out...",
 
     "nav.myReports": "My Reports",
     "nav.newReport": "New Report",
@@ -132,6 +137,12 @@ const messages = {
     "shell.language": "Wika",
     "shell.english": "EN",
     "shell.filipino": "FIL",
+    "shell.signOutConfirmTitle":
+      "Sigurado ka bang gusto mong mag-sign out?",
+    "shell.signOutConfirmBody":
+      "Masa-sign out ka sa Dispatch at ibabalik sa home page.",
+    "shell.cancel": "Kanselahin",
+    "shell.signingOut": "Nagsa-sign out...",
 
     "nav.myReports": "Aking Ulat",
     "nav.newReport": "Bagong Ulat",

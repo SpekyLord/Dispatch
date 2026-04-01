@@ -225,6 +225,81 @@ def login():
     )
 
 
+@blueprint.post("/refresh")
+def refresh():
+    body = request.get_json(silent=True) or {}
+    refresh_token = (body.get("refresh_token") or "").strip()
+    if not refresh_token:
+        raise ApiError("Refresh token is required.", code="validation_error")
+
+    client = current_app.extensions["supabase_client"]
+    result = client.refresh_session(refresh_token=refresh_token)
+
+    if "error" in result:
+        raise ApiError(
+            "Session refresh failed.",
+            code="invalid_refresh_token",
+            status_code=HTTPStatus.UNAUTHORIZED,
+        )
+
+    access_token = result.get("access_token", "")
+    next_refresh_token = result.get("refresh_token", refresh_token)
+    user_payload = result.get("user", {})
+    user_id = user_payload.get("id", "")
+    user_email = user_payload.get("email", "")
+
+    role = user_payload.get("app_metadata", {}).get("role") or user_payload.get(
+        "user_metadata", {}
+    ).get("role")
+
+    profile = None
+    try:
+        rows = client.db_query(
+            "users",
+            params={"select": "*", "id": f"eq.{user_id}"},
+            use_service_role=True,
+        )
+        if rows:
+            profile = rows[0]
+            role = role or profile.get("role")
+    except Exception:
+        pass
+
+    department = None
+    if role == "department":
+        try:
+            dept_rows = client.db_query(
+                "departments",
+                params={"select": "*", "user_id": f"eq.{user_id}"},
+                use_service_role=True,
+            )
+            if dept_rows:
+                department = dept_rows[0]
+        except Exception:
+            pass
+
+    return jsonify(
+        {
+            "access_token": access_token,
+            "refresh_token": next_refresh_token,
+            "user": {
+                "id": user_id,
+                "email": user_email,
+                "role": role,
+                "full_name": (profile or {}).get("full_name"),
+                "phone": (profile or {}).get("phone"),
+                "avatar_url": (profile or {}).get("avatar_url"),
+            },
+            "department": department,
+            "offline_verification_token": _issue_offline_token(
+                user_id=user_id,
+                role=role,
+                department=department,
+            ),
+        }
+    )
+
+
 @blueprint.post("/logout")
 @require_auth()
 def logout():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -241,6 +242,32 @@ class SupabaseClient:
 
     def storage_public_url(self, *, bucket: str, object_path: str) -> str:
         return f"{self.settings.supabase_url}/storage/v1/object/public/{bucket}/{object_path}"
+
+    def storage_signed_url(
+        self, *, bucket: str, object_path: str, expires_in: int = 3600
+    ) -> str:
+        encoded_path = quote(object_path, safe="/")
+        response = self._http_client.post(
+            f"{self.settings.supabase_url}/storage/v1/object/sign/{bucket}/{encoded_path}",
+            headers=self._service_headers(),
+            json={"expiresIn": expires_in},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        signed_path = (
+            payload.get("signedURL")
+            or payload.get("signedUrl")
+            or payload.get("url")
+        )
+        if not signed_path:
+            raise ValueError("Signed storage URL was not returned by Supabase.")
+        if signed_path.startswith("http://") or signed_path.startswith("https://"):
+            return signed_path
+        if signed_path.startswith("/storage/"):
+            return f"{self.settings.supabase_url}{signed_path}"
+        if signed_path.startswith("/"):
+            return f"{self.settings.supabase_url}/storage/v1{signed_path}"
+        return f"{self.settings.supabase_url}/storage/v1/{signed_path.lstrip('/')}"
 
     # ── Helpers ────────────────────────────────────────────────
 

@@ -1,10 +1,12 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
+import { LocationMap } from "@/components/maps/location-map";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { useLocale } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { subscribeToTable } from "@/lib/realtime/supabase";
 import { cn } from "@/lib/utils";
 import { useAppShellTheme } from "./app-shell-theme";
 
@@ -12,6 +14,7 @@ type AppShellProps = {
   title: string;
   subtitle: string;
   children: ReactNode;
+  hidePageHeading?: boolean;
 };
 
 type NavItem = {
@@ -22,6 +25,567 @@ type NavItem = {
 
 const popupPanelShadowClassName =
   "shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]";
+
+type NotificationRecord = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  reference_id?: string | null;
+  reference_type?: string | null;
+  created_at: string;
+};
+
+type EmergencyReportPreview = {
+  id: string;
+  description: string;
+  category: string;
+  severity: string;
+  status: string;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  created_at: string;
+};
+
+function labelize(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .replace(/_/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function summarizeText(content?: string | null, maxLength = 112) {
+  const collapsed = content?.replace(/\s+/g, " ").trim() ?? "";
+  if (collapsed.length <= maxLength) {
+    return collapsed;
+  }
+  return `${collapsed.slice(0, maxLength).trimEnd()}...`;
+}
+
+function parseCoordinateLocation(location?: string | null) {
+  if (!location) {
+    return null;
+  }
+
+  const match = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function formatCoordinateFallback(location?: string | null) {
+  const parsed = parseCoordinateLocation(location);
+  if (!parsed) {
+    return location?.trim() ?? "";
+  }
+
+  return `${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}`;
+}
+
+function summarizeResolvedLocation(data: {
+  name?: string;
+  address?: Record<string, string | undefined>;
+}) {
+  const address = data.address ?? {};
+  const primary =
+    data.name ||
+    address.amenity ||
+    address.building ||
+    address.tourism ||
+    address.leisure ||
+    address.road ||
+    address.suburb ||
+    address.neighbourhood ||
+    address.village ||
+    address.town ||
+    address.city ||
+    address.municipality;
+  const locality =
+    address.city ||
+    address.town ||
+    address.municipality ||
+    address.village ||
+    address.county ||
+    address.state;
+  const country = address.country;
+
+  return [primary, locality, country].filter(Boolean).join(", ");
+}
+
+function formatElapsedTime(createdAt?: string | null, nowMs = Date.now()) {
+  if (!createdAt) {
+    return "00m 00s";
+  }
+
+  const parsed = new Date(createdAt).getTime();
+  if (!Number.isFinite(parsed)) {
+    return "00m 00s";
+  }
+
+  const diffMs = Math.max(0, nowMs - parsed);
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, "0")}h ${minutes.toString().padStart(2, "0")}m`;
+  }
+
+  return `${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
+function readShownEmergencyAlertIds(storageKey: string) {
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeShownEmergencyAlertIds(storageKey: string, ids: string[]) {
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(ids));
+  } catch {
+    // Ignore session storage failures and continue with in-memory behavior.
+  }
+}
+
+function DepartmentEmergencyAlert({
+  accessToken,
+  isDarkMode,
+  userId,
+}: {
+  accessToken: string | null;
+  isDarkMode: boolean;
+  userId: string;
+}) {
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [activeReport, setActiveReport] = useState<EmergencyReportPreview | null>(null);
+  const [activeNotificationId, setActiveNotificationId] = useState<string | null>(null);
+  const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const resolvingLocationsRef = useRef(new Set<string>());
+  const shownNotificationStorageKey = `dispatch:shown-emergency-alerts:${userId}`;
+  const shownNotificationIdsRef = useRef<string[] | null>(null);
+
+  if (shownNotificationIdsRef.current === null) {
+    shownNotificationIdsRef.current = readShownEmergencyAlertIds(shownNotificationStorageKey);
+  }
+
+  const rememberNotificationAsShown = useCallback((notificationId: string) => {
+    const currentShownIds = shownNotificationIdsRef.current ?? [];
+    if (currentShownIds.includes(notificationId)) {
+      return;
+    }
+
+    const nextShownIds = [...currentShownIds, notificationId];
+    shownNotificationIdsRef.current = nextShownIds;
+    writeShownEmergencyAlertIds(shownNotificationStorageKey, nextShownIds);
+  }, [shownNotificationStorageKey]);
+
+  const getEmergencyNotifications = useCallback((notificationList: NotificationRecord[]) => {
+    return notificationList
+      .filter(
+        (notification) =>
+          !notification.is_read &&
+          notification.type === "new_report" &&
+          notification.reference_type === "report" &&
+          notification.reference_id,
+      )
+      .sort((left, right) => {
+        const leftTime = new Date(left.created_at).getTime();
+        const rightTime = new Date(right.created_at).getTime();
+        return rightTime - leftTime;
+      });
+  }, []);
+
+  const pickNextEmergencyNotificationId = useCallback((
+    notificationList: NotificationRecord[],
+    currentNotificationId: string | null,
+  ) => {
+    const emergencyNotifications = getEmergencyNotifications(notificationList);
+
+    if (currentNotificationId && emergencyNotifications.some((notification) => notification.id === currentNotificationId)) {
+      return currentNotificationId;
+    }
+
+    const nextNotification = emergencyNotifications.find(
+      (notification) => !(shownNotificationIdsRef.current ?? []).includes(notification.id),
+    );
+
+    if (!nextNotification) {
+      return null;
+    }
+
+    rememberNotificationAsShown(nextNotification.id);
+    return nextNotification.id;
+  }, [getEmergencyNotifications, rememberNotificationAsShown]);
+
+  const activeNotification = useMemo(
+    () => notifications.find((notification) => notification.id === activeNotificationId) ?? null,
+    [activeNotificationId, notifications],
+  );
+
+  const coordinateSource = activeReport?.address && parseCoordinateLocation(activeReport.address)
+    ? activeReport.address.trim()
+    : activeReport?.latitude !== undefined &&
+        activeReport?.latitude !== null &&
+        activeReport?.longitude !== undefined &&
+        activeReport?.longitude !== null
+      ? `${activeReport.latitude}, ${activeReport.longitude}`
+      : null;
+
+  const locationLabel = activeReport?.address && !parseCoordinateLocation(activeReport.address)
+    ? activeReport.address
+    : coordinateSource
+      ? resolvedLocations[coordinateSource] ?? formatCoordinateFallback(coordinateSource)
+      : "Field location pending";
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/critical-report-alert.mp3");
+    audioRef.current.preload = "auto";
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeNotification) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [activeNotification]);
+
+  useEffect(() => {
+    const fetchNotifications = () =>
+      apiRequest<{ notifications: NotificationRecord[] }>("/api/notifications")
+        .then((response) => {
+          setNotifications(response.notifications);
+          setActiveNotificationId((currentNotificationId) =>
+            pickNextEmergencyNotificationId(response.notifications, currentNotificationId),
+          );
+        })
+        .catch(() => {
+          setNotifications([]);
+          setActiveNotificationId(null);
+        });
+
+    queueMicrotask(() => {
+      void fetchNotifications();
+    });
+
+    const subscription = subscribeToTable(
+      "notifications",
+      () => {
+        void fetchNotifications();
+      },
+      { accessToken },
+    );
+
+    const intervalId = window.setInterval(() => {
+      void fetchNotifications();
+    }, 4000);
+
+    return () => {
+      subscription.unsubscribe();
+      window.clearInterval(intervalId);
+    };
+  }, [accessToken, pickNextEmergencyNotificationId, userId]);
+
+  useEffect(() => {
+    if (!activeNotification?.reference_id) {
+      return;
+    }
+
+    void apiRequest<{ report: EmergencyReportPreview }>(`/api/reports/${activeNotification.reference_id}`)
+      .then((response) => {
+        setActiveReport(response.report);
+      })
+      .catch(() => {
+        setActiveReport(null);
+      });
+  }, [activeNotification?.reference_id]);
+
+  useEffect(() => {
+    if (!coordinateSource || resolvedLocations[coordinateSource] || resolvingLocationsRef.current.has(coordinateSource)) {
+      return;
+    }
+
+    const parsed = parseCoordinateLocation(coordinateSource);
+    if (!parsed) {
+      return;
+    }
+
+    resolvingLocationsRef.current.add(coordinateSource);
+
+    void fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${parsed.lat}&lon=${parsed.lng}&zoom=16&addressdetails=1`,
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Reverse geocoding failed.");
+        }
+
+        const data = (await response.json()) as {
+          name?: string;
+          display_name?: string;
+          address?: Record<string, string | undefined>;
+        };
+
+        const summary =
+          summarizeResolvedLocation(data) || data.display_name || formatCoordinateFallback(coordinateSource);
+
+        setResolvedLocations((current) => ({
+          ...current,
+          [coordinateSource]: summary,
+        }));
+      })
+      .catch(() => {
+        setResolvedLocations((current) => ({
+          ...current,
+          [coordinateSource]: formatCoordinateFallback(coordinateSource),
+        }));
+      })
+      .finally(() => {
+        resolvingLocationsRef.current.delete(coordinateSource);
+      });
+  }, [coordinateSource, resolvedLocations]);
+
+  useEffect(() => {
+    if (!activeNotification?.id) {
+      return;
+    }
+
+    const storageKey = "dispatch:last-played-emergency-alert";
+    if (window.sessionStorage.getItem(storageKey) === activeNotification.id) {
+      return;
+    }
+
+    window.sessionStorage.setItem(storageKey, activeNotification.id);
+
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      void audioRef.current.play().catch(() => undefined);
+    }
+  }, [activeNotification?.id]);
+
+  async function markNotificationRead(notificationId: string) {
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === notificationId ? { ...notification, is_read: true } : notification,
+      ),
+    );
+
+    try {
+      await apiRequest(`/api/notifications/${notificationId}/read`, { method: "PUT" });
+    } catch {
+      // Keep the optimistic update for this emergency handoff.
+    }
+  }
+
+  async function handleViewIncidentDetails() {
+    if (!activeNotification?.reference_id) {
+      return;
+    }
+
+    if (activeNotification.id) {
+      await markNotificationRead(activeNotification.id);
+    }
+
+    setActiveNotificationId((currentNotificationId) =>
+      pickNextEmergencyNotificationId(
+        notifications.map((notification) =>
+          notification.id === activeNotification.id ? { ...notification, is_read: true } : notification,
+        ),
+        currentNotificationId === activeNotification.id ? null : currentNotificationId,
+      ),
+    );
+    navigate(`/department/reports/${activeNotification.reference_id}`);
+  }
+
+  function dismissCurrentAlert() {
+    if (!activeNotification?.id) {
+      return;
+    }
+
+    setActiveNotificationId((currentNotificationId) =>
+      pickNextEmergencyNotificationId(
+        notifications,
+        currentNotificationId === activeNotification.id ? null : currentNotificationId,
+      ),
+    );
+  }
+
+  if (!activeNotification) {
+    return null;
+  }
+
+  const categoryLabel = labelize(activeReport?.category) || "Emergency";
+  const severityLabel = labelize(activeReport?.severity) || "High";
+  const headerToneClassName = isDarkMode
+    ? "border-[#613724] bg-[#9e4b2d] text-white"
+    : "border-[#d1845e] bg-[#b55a36] text-white";
+  const bodySurfaceClassName = isDarkMode
+    ? "border-[#3a342f] bg-[#23201d] text-[#f4eee8]"
+    : "border-[#efd8d0] bg-[#fff8f3] text-on-surface";
+  const insetCardClassName = isDarkMode
+    ? "border-[#433c36] bg-[#2a2623]"
+    : "border-[#ecd8cf] bg-[#f7efe7]";
+  const mutedTextClassName = isDarkMode ? "text-[#cdbeb1]" : "text-[#7b6b62]";
+  const elapsedLabel = formatElapsedTime(activeReport?.created_at ?? activeNotification.created_at, nowMs);
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
+      <div className={`w-full max-w-[520px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}>
+        <div className={`relative border-b px-6 py-5 ${headerToneClassName}`}>
+          <button
+            aria-label="Dismiss emergency alert"
+            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+            onClick={dismissCurrentAlert}
+            type="button"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+
+          <div className="flex items-start justify-between gap-6 pr-10">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white/80">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/14">
+                  <span className="material-symbols-outlined text-[15px]">local_fire_department</span>
+                </span>
+                System Priority: Alpha
+              </div>
+              <h3 className="mt-2 font-headline text-[2.35rem] uppercase italic leading-[0.88] sm:text-[2.7rem]">
+                Critical {categoryLabel} Alert
+              </h3>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">Elapsed Time</p>
+              <p className="mt-1 text-[2.2rem] leading-none sm:text-[2.35rem]">{elapsedLabel}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6 px-6 py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>Incident ID</p>
+              <p className="mt-1 font-headline text-[2rem] leading-none">
+                #{(activeReport?.id ?? activeNotification.reference_id ?? "pending").slice(0, 8)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>Severity</p>
+              <p className="mt-1 text-[1.4rem] font-semibold text-[#d97757]">• {severityLabel}</p>
+            </div>
+          </div>
+
+          <div className={`rounded-[24px] border px-5 py-5 ${insetCardClassName}`}>
+            <p className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>
+              <span className="material-symbols-outlined text-[16px] text-[#d97757]">location_on</span>
+              Primary Location
+            </p>
+            <p className="mt-2 font-headline text-[2.15rem] leading-[0.95]">{locationLabel}</p>
+            <p className={`mt-2 text-[15px] leading-6 ${mutedTextClassName}`}>
+              {summarizeText(activeReport?.description || activeNotification.message, 106) ||
+                "Emergency report forwarded from citizen intake. Open the full incident detail for response routing."}
+            </p>
+          </div>
+
+          <div className={`overflow-hidden rounded-[24px] border ${insetCardClassName}`}>
+            {activeReport?.latitude !== undefined &&
+            activeReport?.latitude !== null &&
+            activeReport?.longitude !== undefined &&
+            activeReport?.longitude !== null ? (
+              <div className="relative h-[220px] overflow-hidden">
+                <LocationMap
+                  latitude={activeReport.latitude}
+                  longitude={activeReport.longitude}
+                  mapClassName="h-full w-full"
+                  wrapperClassName="h-full w-full rounded-none border-0"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(17,17,17,0.03),rgba(17,17,17,0.32))]" />
+                <div className="absolute inset-x-0 bottom-4 flex justify-center">
+                  <span className="rounded-full border border-white/45 bg-[#fff7f0] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#b55a36] shadow-sm">
+                    Point Alpha
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-[220px] items-center justify-center bg-[linear-gradient(135deg,#efe4db,#dac4b8)]">
+                <div className="text-center">
+                  <span className="material-symbols-outlined text-4xl text-[#b55a36]">crisis_alert</span>
+                  <p className="mt-2 text-xs font-bold uppercase tracking-[0.22em] text-[#8a4c31]">
+                    Incident Visual Placeholder
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#b55a36] px-5 py-4 text-sm font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[#9d4c2c]"
+            onClick={() => void handleViewIncidentDetails()}
+            type="button"
+          >
+            View Full Incident Details
+            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </button>
+
+          <div
+            className={`flex flex-wrap items-center justify-between gap-3 border-t px-1 pt-1 text-[10px] font-bold uppercase tracking-[0.2em] ${
+              isDarkMode ? "border-white/10 text-white/45" : "border-[#ecd8cf] text-[#a79a92]"
+            }`}
+          >
+            <span>Authenticated operative access only</span>
+            <span>Hash: BXF-902-LK</span>
+            <span>Secured line: 09</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const roleNavItems: Record<string, NavItem[]> = {
   citizen: [
@@ -80,10 +644,11 @@ const roleSidebarTitle: Record<
   },
 };
 
-export function AppShell({ title, subtitle, children }: AppShellProps) {
+export function AppShell({ title, subtitle, children, hidePageHeading = false }: AppShellProps) {
   const navigate = useNavigate();
   const signOut = useSessionStore((state) => state.signOut);
   const user = useSessionStore((state) => state.user);
+  const accessToken = useSessionStore((state) => state.accessToken);
   const department = useSessionStore((state) => state.department);
   const { locale, setLocale, t } = useLocale();
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
@@ -379,17 +944,27 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
             </aside>
           )}
 
-          <section className="mb-10">
-            <p className={cn("mb-2 text-xs font-bold uppercase tracking-widest", isDarkMode ? "text-[#f2a27b]" : "text-[#D97757]")}>
-              {subtitle}
-            </p>
-            <h1 className={cn("font-headline text-4xl font-bold tracking-tight lg:text-5xl", isDarkMode ? "text-white" : "text-on-surface")}>
-              {title}
-            </h1>
-          </section>
+          {!hidePageHeading && (
+            <section className="mb-10">
+              <p className={cn("mb-2 text-xs font-bold uppercase tracking-widest", isDarkMode ? "text-[#f2a27b]" : "text-[#D97757]")}>
+                {subtitle}
+              </p>
+              <h1 className={cn("font-headline text-4xl font-bold tracking-tight lg:text-5xl", isDarkMode ? "text-white" : "text-on-surface")}>
+                {title}
+              </h1>
+            </section>
+          )}
           {children}
         </div>
       </main>
+
+      {user?.role === "department" ? (
+        <DepartmentEmergencyAlert
+          accessToken={accessToken}
+          isDarkMode={isDarkMode}
+          userId={user.id}
+        />
+      ) : null}
 
       {isSignOutConfirmOpen && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">

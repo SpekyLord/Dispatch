@@ -70,6 +70,7 @@ The web app starts at **http://localhost:5173**.
 corepack pnpm --filter @dispatch/web lint     # ESLint
 corepack pnpm --filter @dispatch/web test     # Vitest
 corepack pnpm --filter @dispatch/web build    # Production build
+corepack pnpm --filter @dispatch/web test:e2e # Playwright smoke/e2e
 ```
 
 ---
@@ -115,9 +116,47 @@ flutter analyze    # Dart analyzer
 flutter test       # Unit tests
 ```
 
+If this Windows host cannot enable Flutter plugin symlink support, use the targeted fallback mesh suite instead of blocking on a full plugin bootstrap:
+
+```bash
+cd apps/mobile
+flutter test --no-pub test/mesh_transport_test.dart test/survivor_compass_screen_test.dart test/offline_comms_screen_test.dart
+```
+
 ---
 
-## 6. Database Setup
+## 6. Phase 3-4 Verification Baseline
+
+The canonical Phase 3/4 verification package lives in [PHASE3-4-VERIFICATION.md](PHASE3-4-VERIFICATION.md).
+
+Quick baseline commands:
+
+```bash
+# API
+cd services/api
+uv run pytest tests/test_phase3.py tests/test_phase4.py
+
+# Web
+cd apps/web
+corepack pnpm test
+corepack pnpm build
+
+# Mobile
+cd apps/mobile
+flutter analyze
+flutter test
+```
+
+For responsive smoke coverage, run:
+
+```bash
+cd apps/web
+corepack pnpm test:e2e
+```
+
+---
+
+## 7. Database Setup
 
 Before using any app, you need to apply the Supabase migration and run the seed script. See [SUPABASE-SETUP.md](SUPABASE-SETUP.md) for the full walkthrough.
 
@@ -129,7 +168,23 @@ Quick version:
 
 ---
 
-## 7. CI/CD
+## 8. Phase 4 Hardware Readiness
+
+Physical Phase 4 mesh execution is still pending by design and requires hardware. The implementation and automation baseline are ready; the field run itself must follow [MESH-FIELD-TEST-PROCEDURE.md](MESH-FIELD-TEST-PROCEDURE.md).
+
+Minimum preflight:
+
+- 2+ BLE-capable phones or tablets, preferably 3 for relay-plus-gateway validation
+- 1 gateway device with backend connectivity
+- seeded citizen and approved department accounts
+- confirmed backend URL on the gateway device
+- local mesh reset before each manual run
+
+Use the reporting template inside `docs/MESH-FIELD-TEST-PROCEDURE.md` for the final pass/fail log.
+
+---
+
+## 9. CI/CD
 
 GitHub Actions CI runs automatically on pushes to `main`/`master` and all pull requests. It runs three parallel jobs:
 

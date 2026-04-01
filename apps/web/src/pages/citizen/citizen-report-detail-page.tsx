@@ -6,6 +6,7 @@ import { LocationMap } from "@/components/maps/location-map";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
+import { useLocale } from "@/lib/i18n/locale-context";
 import { subscribeToTable } from "@/lib/realtime/supabase";
 
 // Citizen report detail — bento layout with timeline, images, map sidebar.
@@ -59,6 +60,13 @@ const categoryIcons: Record<string, string> = {
 export function CitizenReportDetailPage() {
   const { reportId } = useParams<{ reportId: string }>();
   const accessToken = useSessionStore((state) => state.accessToken);
+  const {
+    t,
+    getCategoryLabel,
+    getResponseActionLabel,
+    getSeverityLabel,
+    getStatusLabel,
+  } = useLocale();
   const [report, setReport] = useState<Report | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -88,7 +96,7 @@ export function CitizenReportDetailPage() {
         setError(null);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load report.");
+        setError(err instanceof Error ? err.message : t("detail.error"));
       })
       .finally(() => {
         if (showLoader) {
@@ -134,7 +142,7 @@ export function CitizenReportDetailPage() {
 
   if (loading) {
     return (
-      <AppShell subtitle="Report details" title="Loading...">
+      <AppShell subtitle={t("detail.subtitle")} title={t("detail.loadingTitle")}>
         <Card className="py-16 text-center text-on-surface-variant">
           <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
         </Card>
@@ -144,8 +152,8 @@ export function CitizenReportDetailPage() {
 
   if (error || !report) {
     return (
-      <AppShell subtitle="Report details" title="Error">
-        <Card className="py-16 text-center text-error">{error ?? "Report not found."}</Card>
+      <AppShell subtitle={t("detail.subtitle")} title={t("detail.errorTitle")}>
+        <Card className="py-16 text-center text-error">{error ?? t("detail.notFound")}</Card>
       </AppShell>
     );
   }
@@ -153,12 +161,12 @@ export function CitizenReportDetailPage() {
   const style = statusStyles[report.status] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
 
   return (
-    <AppShell subtitle="Report details" title={`Report #${report.id.slice(0, 8)}`}>
+    <AppShell subtitle={t("detail.subtitle")} title={`Report #${report.id.slice(0, 8)}`}>
       {/* Back link */}
       <div className="mb-6">
         <Link to="/citizen" className="inline-flex items-center gap-1 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
           <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-          Back to reports
+          {t("detail.backToReports")}
         </Link>
       </div>
 
@@ -173,14 +181,14 @@ export function CitizenReportDetailPage() {
                   <span className="material-symbols-outlined">{categoryIcons[report.category] ?? "emergency"}</span>
                 </div>
                 <div>
-                  <h2 className="font-headline text-2xl text-on-surface">Incident Details</h2>
+                  <h2 className="font-headline text-2xl text-on-surface">{t("detail.incidentDetails")}</h2>
                   <p className="text-[10px] uppercase tracking-widest text-on-surface-variant mt-0.5">
-                    Submitted {new Date(report.created_at).toLocaleString()}
+                    {t("detail.submitted", { date: new Date(report.created_at).toLocaleString() })}
                   </p>
                 </div>
               </div>
               <span className={`rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest ${style.bg} ${style.text}`}>
-                {report.status}
+                {getStatusLabel(report.status)}
               </span>
             </div>
 
@@ -188,21 +196,21 @@ export function CitizenReportDetailPage() {
 
             <div className="mt-6 flex flex-wrap gap-2">
               <span className="rounded bg-surface-container-highest px-3 py-1 text-xs font-medium capitalize text-on-surface-variant">
-                {report.category.replace("_", " ")}
+                {getCategoryLabel(report.category)}
               </span>
               <span className="rounded bg-surface-container-highest px-3 py-1 text-xs capitalize text-on-surface-variant">
-                {report.severity}
+                {getSeverityLabel(report.severity)}
               </span>
               {report.is_mesh_origin && (
                 <span className="rounded bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-800">
                   <span className="material-symbols-outlined text-[12px] align-middle mr-1">cell_tower</span>
-                  Mesh Origin
+                  {t("detail.meshOrigin")}
                 </span>
               )}
               {report.is_escalated && (
                 <span className="rounded bg-error-container/30 px-3 py-1 text-xs font-semibold text-error">
                   <span className="material-symbols-outlined text-[12px] align-middle mr-1">warning</span>
-                  Escalated
+                  {t("detail.escalated")}
                 </span>
               )}
             </div>
@@ -218,10 +226,10 @@ export function CitizenReportDetailPage() {
           {/* Images */}
           {report.image_urls && report.image_urls.length > 0 && (
             <Card>
-              <h3 className="font-headline text-xl mb-4">Attached Evidence</h3>
+              <h3 className="font-headline text-xl mb-4">{t("detail.attachedEvidence")}</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {report.image_urls.map((url, i) => (
-                  <img key={i} src={url} alt={`Report image ${i + 1}`}
+                  <img key={i} src={url} alt={t("detail.reportImageAlt", { index: i + 1 })}
                     className="rounded-lg border border-outline-variant/10 object-cover aspect-square" />
                 ))}
               </div>
@@ -230,9 +238,9 @@ export function CitizenReportDetailPage() {
 
           {/* Unified timeline — status changes + department responses */}
           <Card>
-            <h3 className="font-headline text-xl mb-6">Report Timeline</h3>
+            <h3 className="font-headline text-xl mb-6">{t("detail.timeline")}</h3>
             {timeline.length === 0 && history.length === 0 ? (
-              <p className="text-sm text-on-surface-variant">No activity yet.</p>
+              <p className="text-sm text-on-surface-variant">{t("detail.noActivity")}</p>
             ) : (
               <div className="space-y-4">
                 {(timeline.length > 0 ? timeline : history.map((h) => ({
@@ -250,7 +258,7 @@ export function CitizenReportDetailPage() {
                         <div className="absolute -left-[7px] top-0 w-3 h-3 rounded-full bg-surface-container-highest border-2 border-outline-variant" />
                         <div>
                           <span className={`inline-block rounded-md px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${hs.bg} ${hs.text}`}>
-                            {historyStatus}
+                            {getStatusLabel(historyStatus)}
                           </span>
                           {entry.notes && <p className="mt-1 text-sm text-on-surface-variant">{entry.notes}</p>}
                           <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
@@ -273,12 +281,12 @@ export function CitizenReportDetailPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-on-surface">{entry.department_name}</span>
                           <span className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${actionColor}`}>
-                            {entry.action}
+                            {getResponseActionLabel(entry.action ?? "")}
                           </span>
                         </div>
                         {entry.notes && <p className="mt-1 text-sm text-on-surface-variant">{entry.notes}</p>}
                         {entry.decline_reason && (
-                          <p className="mt-1 text-sm text-red-700 italic">Reason: {entry.decline_reason}</p>
+                          <p className="mt-1 text-sm text-red-700 italic">{t("detail.reason", { reason: entry.decline_reason })}</p>
                         )}
                         <p className="mt-0.5 text-[10px] uppercase tracking-wider text-outline">
                           {new Date(entry.timestamp).toLocaleString()}
@@ -294,7 +302,7 @@ export function CitizenReportDetailPage() {
           {/* Department responses summary */}
           {deptResponses.length > 0 && (
             <Card>
-              <h3 className="font-headline text-xl mb-4">Department Responses</h3>
+              <h3 className="font-headline text-xl mb-4">{t("detail.departmentResponses")}</h3>
               <div className="space-y-3">
                 {deptResponses.map((r, i) => (
                   <div key={i} className="flex items-center justify-between rounded-lg bg-surface-container p-3">
@@ -302,7 +310,7 @@ export function CitizenReportDetailPage() {
                     <span className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${
                       r.action === "accepted" ? "bg-[#d4edda] text-[#155724]" : "bg-red-100 text-red-800"
                     }`}>
-                      {r.action}
+                      {getResponseActionLabel(r.action)}
                     </span>
                   </div>
                 ))}
@@ -321,32 +329,32 @@ export function CitizenReportDetailPage() {
           ) : (
             <Card className="flex flex-col items-center justify-center h-64 text-on-surface-variant">
               <span className="material-symbols-outlined text-3xl mb-2">map</span>
-              <p className="text-sm">No GPS coordinates available</p>
+              <p className="text-sm">{t("detail.noGps")}</p>
             </Card>
           )}
 
           {/* Quick stats */}
           <Card className="bg-surface-container">
-            <h3 className="font-headline text-lg mb-4">Report Summary</h3>
+            <h3 className="font-headline text-lg mb-4">{t("detail.summary")}</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Status</span>
-                <span className="font-semibold capitalize text-on-surface">{report.status}</span>
+                <span className="text-on-surface-variant">{t("detail.status")}</span>
+                <span className="font-semibold capitalize text-on-surface">{getStatusLabel(report.status)}</span>
               </div>
               <div className="h-px bg-outline-variant/15" />
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Category</span>
-                <span className="font-medium capitalize text-on-surface">{report.category.replace("_", " ")}</span>
+                <span className="text-on-surface-variant">{t("detail.category")}</span>
+                <span className="font-medium capitalize text-on-surface">{getCategoryLabel(report.category)}</span>
               </div>
               <div className="h-px bg-outline-variant/15" />
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Severity</span>
-                <span className="font-medium capitalize text-on-surface">{report.severity}</span>
+                <span className="text-on-surface-variant">{t("detail.severity")}</span>
+                <span className="font-medium capitalize text-on-surface">{getSeverityLabel(report.severity)}</span>
               </div>
               <div className="h-px bg-outline-variant/15" />
               <div className="flex justify-between">
-                <span className="text-on-surface-variant">Escalated</span>
-                <span className="font-medium text-on-surface">{report.is_escalated ? "Yes" : "No"}</span>
+                <span className="text-on-surface-variant">{t("detail.escalatedLabel")}</span>
+                <span className="font-medium text-on-surface">{report.is_escalated ? t("detail.yes") : t("detail.no")}</span>
               </div>
             </div>
           </Card>

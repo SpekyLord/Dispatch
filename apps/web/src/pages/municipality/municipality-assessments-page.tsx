@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 
 import { apiRequest } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-context";
 
 type Assessment = {
   id: string;
@@ -29,6 +30,7 @@ const damageLevelStyles: Record<string, { bg: string; text: string }> = {
 };
 
 export function MunicipalityAssessmentsPage() {
+  const { t, getDamageLevelLabel } = useLocale();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,16 +42,16 @@ export function MunicipalityAssessmentsPage() {
   }, []);
 
   return (
-    <AppShell subtitle="Damage assessment overview" title="Assessments">
+    <AppShell subtitle={t("assessments.subtitle")} title={t("assessments.title")}>
       {loading ? (
         <Card className="py-16 text-center text-on-surface-variant">
           <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
-          Loading assessments...
+          {t("assessments.loading")}
         </Card>
       ) : assessments.length === 0 ? (
         <Card className="py-16 text-center">
           <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">assessment</span>
-          <p className="text-on-surface-variant">No damage assessments submitted yet.</p>
+          <p className="text-on-surface-variant">{t("assessments.empty")}</p>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -67,13 +69,13 @@ export function MunicipalityAssessmentsPage() {
                       <h3 className="text-sm font-semibold text-on-surface">{a.affected_area}</h3>
                       {a.department_name && (
                         <p className="text-[10px] uppercase tracking-widest text-on-surface-variant mt-0.5">
-                          By {a.department_name}
+                          {t("assessments.byDepartment", { name: a.department_name })}
                         </p>
                       )}
                     </div>
                   </div>
                   <span className={`rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${dmg.bg} ${dmg.text}`}>
-                    {a.damage_level}
+                    {getDamageLevelLabel(a.damage_level)}
                   </span>
                 </div>
 
@@ -89,11 +91,11 @@ export function MunicipalityAssessmentsPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-[14px]">personal_injury</span>
-                    {a.estimated_casualties} casualties
+                    {t("assessments.casualties", { count: a.estimated_casualties })}
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-[14px]">group</span>
-                    {a.displaced_persons} displaced
+                    {t("assessments.displaced", { count: a.displaced_persons })}
                   </span>
                   <span className="ml-auto text-[10px]">
                     {new Date(a.created_at).toLocaleString()}
@@ -104,7 +106,7 @@ export function MunicipalityAssessmentsPage() {
                 {a.image_urls && a.image_urls.length > 0 && (
                   <div className="mt-3 flex gap-2">
                     {a.image_urls.map((url, i) => (
-                      <img key={i} src={url} alt={`Assessment ${i + 1}`}
+                      <img key={i} src={url} alt={t("assessments.imageAlt", { index: i + 1 })}
                         className="w-16 h-16 rounded-lg border border-outline-variant/10 object-cover" />
                     ))}
                   </div>

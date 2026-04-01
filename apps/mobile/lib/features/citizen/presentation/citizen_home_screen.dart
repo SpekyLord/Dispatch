@@ -2,6 +2,8 @@
 
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/i18n/app_strings.dart';
+import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
@@ -49,21 +51,23 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final transport = ref.watch(meshTransportProvider);
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Reports'),
+        title: Text(strings.myReports),
         actions: [
+          const LocaleActionButton(),
           IconButton(
             icon: Icon(Icons.sos, color: Colors.red.shade600),
-            tooltip: 'Emergency SOS',
+            tooltip: strings.emergencySos,
             onPressed: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const SosScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.cell_tower),
-            tooltip: 'Mesh Network',
+            tooltip: strings.meshNetwork,
             onPressed: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const MeshStatusScreen())),
@@ -73,7 +77,7 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.forum_outlined),
-                tooltip: 'Offline Comms',
+                tooltip: strings.offlineComms,
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
                 ),
@@ -88,14 +92,14 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.newspaper),
-            tooltip: 'Feed',
+            tooltip: strings.feed,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
-            tooltip: 'Notifications',
+            tooltip: strings.notifications,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             ),
@@ -109,7 +113,7 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           TextButton(
             onPressed: () =>
                 ref.read(sessionControllerProvider.notifier).signOut(),
-            child: const Text('Sign out'),
+            child: Text(strings.signOut),
           ),
         ],
       ),
@@ -121,12 +125,12 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           if (result == true) _fetchReports();
         },
         icon: const Icon(Icons.add),
-        label: const Text('New Report'),
+        label: Text(strings.newReport),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _reports.isEmpty
-          ? const Center(child: Text('No reports yet. Tap + to submit one.'))
+          ? Center(child: Text(strings.noReportsYet))
           : RefreshIndicator(
               onRefresh: _fetchReports,
               child: ListView.builder(
@@ -136,6 +140,7 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
                   final report = _reports[index];
                   return _ReportCard(
                     report: report,
+                    strings: strings,
                     onTap: () async {
                       await Navigator.of(context).push(
                         MaterialPageRoute(
@@ -155,9 +160,14 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
 }
 
 class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.report, required this.onTap});
+  const _ReportCard({
+    required this.report,
+    required this.strings,
+    required this.onTap,
+  });
 
   final Map<String, dynamic> report;
+  final AppStrings strings;
   final VoidCallback onTap;
 
   Color _statusColor(String status) {
@@ -173,7 +183,7 @@ class _ReportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = report['status'] as String? ?? 'pending';
-    final category = (report['category'] as String? ?? '').replaceAll('_', ' ');
+    final category = strings.categoryLabel(report['category'] as String? ?? '');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -199,7 +209,7 @@ class _ReportCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                status,
+                strings.statusLabel(status),
                 style: TextStyle(
                   fontSize: 11,
                   color: _statusColor(status),

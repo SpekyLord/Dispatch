@@ -1,16 +1,15 @@
-// Department home ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â shows pending/rejected/approved view based on verification status.
-// Rejected view has inline edit + resubmit form (API auto-moves back to pending).
-
+import 'package:dispatch_mobile/core/i18n/app_strings.dart';
+import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
-import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_assessment_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
-import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
+import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -37,47 +36,58 @@ class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
       final dept = await authService.getDepartmentProfile();
       ref.read(sessionControllerProvider.notifier).updateDepartment(dept);
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+
+    if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
     final dept = session.department;
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Department'),
+        title: Text(strings.departmentTitle),
         actions: [
+          const LocaleActionButton(),
           TextButton(
             onPressed: () =>
                 ref.read(sessionControllerProvider.notifier).signOut(),
-            child: const Text('Sign out'),
+            child: Text(strings.signOut),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : dept == null
-          ? const Center(child: Text('No department profile found.'))
-          : _buildBody(context, dept),
+              ? Center(child: Text(strings.noDepartmentProfileFound))
+              : _buildBody(context, dept, strings),
     );
   }
 
-  Widget _buildBody(BuildContext context, DepartmentInfo dept) {
+  Widget _buildBody(
+    BuildContext context,
+    DepartmentInfo dept,
+    AppStrings strings,
+  ) {
     if (dept.verificationStatus == 'pending') {
-      return _PendingView(dept: dept);
+      return _PendingView(dept: dept, strings: strings);
     }
     if (dept.verificationStatus == 'rejected') {
-      return _RejectedView(dept: dept);
+      return _RejectedView(dept: dept, strings: strings);
     }
-    return _ApprovedView(dept: dept);
+    return _ApprovedView(dept: dept, strings: strings);
   }
 }
 
 class _PendingView extends StatelessWidget {
-  const _PendingView({required this.dept});
+  const _PendingView({required this.dept, required this.strings});
+
   final DepartmentInfo dept;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
@@ -102,21 +112,21 @@ class _PendingView extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Awaiting Verification',
+              strings.awaitingVerification,
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
-              'Your registration for ${dept.name} is pending municipality approval.',
+              strings.pendingDepartmentMessage(dept.name),
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
             ),
             const SizedBox(height: 20),
-            _DeptDetails(dept: dept),
+            _DeptDetails(dept: dept, strings: strings),
           ],
         ),
       ),
@@ -125,8 +135,10 @@ class _PendingView extends StatelessWidget {
 }
 
 class _RejectedView extends ConsumerStatefulWidget {
-  const _RejectedView({required this.dept});
+  const _RejectedView({required this.dept, required this.strings});
+
   final DepartmentInfo dept;
+  final AppStrings strings;
 
   @override
   ConsumerState<_RejectedView> createState() => _RejectedViewState();
@@ -193,6 +205,8 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = widget.strings;
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -207,7 +221,7 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Registration Rejected',
+          strings.registrationRejected,
           style: Theme.of(
             context,
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
@@ -222,7 +236,7 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
               border: Border.all(color: Colors.red.shade200),
             ),
             child: Text(
-              'Reason: ${widget.dept.rejectionReason}',
+              strings.rejectionReason(widget.dept.rejectionReason!),
               style: TextStyle(color: Colors.red.shade700),
             ),
           ),
@@ -230,13 +244,13 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
         const SizedBox(height: 20),
         if (!_editing) ...[
           Text(
-            'You can update your details and resubmit for verification.',
-            style: TextStyle(color: Colors.black54),
+            strings.resubmitPrompt,
+            style: const TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => setState(() => _editing = true),
-            child: const Text('Edit & Resubmit'),
+            child: Text(strings.editAndResubmit),
           ),
         ] else ...[
           if (_error != null)
@@ -254,33 +268,33 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
             ),
           TextField(
             controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Organization name',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: strings.organizationName,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _contactCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Contact number',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: strings.contactNumber,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _addressCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Address',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: strings.address,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _areaCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Area of responsibility',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: strings.areaOfResponsibility,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 16),
@@ -289,13 +303,15 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
               Expanded(
                 child: FilledButton(
                   onPressed: _loading ? null : _resubmit,
-                  child: Text(_loading ? 'Submitting...' : 'Resubmit'),
+                  child: Text(
+                    _loading ? strings.submitting : strings.resubmit,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               OutlinedButton(
                 onPressed: () => setState(() => _editing = false),
-                child: const Text('Cancel'),
+                child: Text(strings.cancel),
               ),
             ],
           ),
@@ -306,8 +322,10 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
 }
 
 class _ApprovedView extends ConsumerWidget {
-  const _ApprovedView({required this.dept});
+  const _ApprovedView({required this.dept, required this.strings});
+
   final DepartmentInfo dept;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -323,7 +341,7 @@ class _ApprovedView extends ConsumerWidget {
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            'Verified',
+            strings.verified,
             style: TextStyle(
               color: Colors.green.shade800,
               fontWeight: FontWeight.w600,
@@ -339,14 +357,13 @@ class _ApprovedView extends ConsumerWidget {
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        _DeptDetails(dept: dept),
+        _DeptDetails(dept: dept, strings: strings),
         const SizedBox(height: 24),
-        // Quick action cards for Phase 2 features
         Card(
           child: ListTile(
             leading: const Icon(Icons.assignment),
-            title: const Text('Incident Board'),
-            subtitle: const Text('View and respond to reports'),
+            title: Text(strings.incidentBoard),
+            subtitle: Text(strings.incidentBoardSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -359,8 +376,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.campaign),
-            title: const Text('Create Post'),
-            subtitle: const Text('Publish an announcement'),
+            title: Text(strings.createPost),
+            subtitle: Text(strings.createPostSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -373,8 +390,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.assessment),
-            title: const Text('Damage Assessment'),
-            subtitle: const Text('Submit field assessments'),
+            title: Text(strings.damageAssessment),
+            subtitle: Text(strings.damageAssessmentSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -387,8 +404,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.newspaper),
-            title: const Text('Community Feed'),
-            subtitle: const Text('Browse public announcements'),
+            title: Text(strings.communityFeed),
+            subtitle: Text(strings.communityFeedSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
@@ -399,8 +416,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.notifications),
-            title: const Text('Notifications'),
-            subtitle: const Text('Check alerts and updates'),
+            title: Text(strings.notifications),
+            subtitle: Text(strings.notificationsSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
@@ -411,15 +428,18 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.forum_outlined),
-            title: const Text('Offline Comms'),
+            title: Text(strings.offlineComms),
             subtitle: Text(
               transport.unreadMeshMessageCount > 0
-                  ? '${transport.unreadMeshMessageCount} unread mesh messages'
-                  : 'Broadcasts, department chatter, and mesh posts',
+                  ? strings.unreadMeshMessages(transport.unreadMeshMessageCount)
+                  : strings.meshPostsSubtitle,
             ),
             trailing: transport.unreadMeshMessageCount > 0
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.brown.shade600,
                       borderRadius: BorderRadius.circular(999),
@@ -443,10 +463,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: Icon(Icons.cell_tower, color: Colors.cyan.shade700),
-            title: const Text('Mesh & SAR'),
-            subtitle: const Text(
-              'Offline relay, sync status, and survivor feed',
-            ),
+            title: Text(strings.meshSar),
+            subtitle: Text(strings.meshSarSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(
               context,
@@ -457,8 +475,8 @@ class _ApprovedView extends ConsumerWidget {
         Card(
           child: ListTile(
             leading: Icon(Icons.sos, color: Colors.red.shade700),
-            title: const Text('Emergency SOS'),
-            subtitle: const Text('Send distress signal (no login)'),
+            title: Text(strings.emergencySos),
+            subtitle: Text(strings.emergencySosSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(
               context,
@@ -471,8 +489,10 @@ class _ApprovedView extends ConsumerWidget {
 }
 
 class _DeptDetails extends StatelessWidget {
-  const _DeptDetails({required this.dept});
+  const _DeptDetails({required this.dept, required this.strings});
+
   final DepartmentInfo dept;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
@@ -485,12 +505,12 @@ class _DeptDetails extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _DetailRow('Type', dept.type),
+          _DetailRow(strings.type, dept.type),
           if (dept.contactNumber != null)
-            _DetailRow('Contact', dept.contactNumber!),
-          if (dept.address != null) _DetailRow('Address', dept.address!),
+            _DetailRow(strings.contact, dept.contactNumber!),
+          if (dept.address != null) _DetailRow(strings.address, dept.address!),
           if (dept.areaOfResponsibility != null)
-            _DetailRow('Area', dept.areaOfResponsibility!),
+            _DetailRow(strings.area, dept.areaOfResponsibility!),
         ],
       ),
     );
@@ -499,6 +519,7 @@ class _DeptDetails extends StatelessWidget {
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow(this.label, this.value);
+
   final String label;
   final String value;
 

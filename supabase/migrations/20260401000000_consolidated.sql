@@ -87,7 +87,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 4. Helper functions
+-- 4. Helper functions (table-independent)
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
 returns trigger
@@ -97,29 +97,6 @@ begin
   new.updated_at = timezone('utc', now());
   return new;
 end;
-$$;
-
-create or replace function public.current_app_role()
-returns public.user_role
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select role
-  from public.users
-  where id = auth.uid()
-  limit 1;
-$$;
-
-create or replace function public.is_municipality()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(public.current_app_role() = 'municipality'::public.user_role, false);
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -235,6 +212,32 @@ create table if not exists public.damage_assessments (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+-- ---------------------------------------------------------------------------
+-- 5b. Helper functions (require users table)
+-- ---------------------------------------------------------------------------
+create or replace function public.current_app_role()
+returns public.user_role
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role
+  from public.users
+  where id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.is_municipality()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(public.current_app_role() = 'municipality'::public.user_role, false);
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Department helper functions
@@ -1075,7 +1078,7 @@ begin
 end;
 $$;
 
-do $$
+do $cron_block$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
     begin
@@ -1090,7 +1093,7 @@ begin
     );
   end if;
 exception when undefined_function then null;
-end $$;
+end $cron_block$;
 
 -- ---------------------------------------------------------------------------
 -- 18. Data backfill (safe to re-run – idempotent update)

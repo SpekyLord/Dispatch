@@ -197,10 +197,10 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
       )}
 
       {/* ── Main Content ── */}
-      <main className="pt-24 min-h-screen">
-        <div className={cn("mx-auto p-8", user ? "max-w-[1500px] lg:pl-[21rem]" : "max-w-[1200px]")}>
+      <main className="min-h-screen pt-20">
+        <div className={cn("mx-auto px-8 pb-8 pt-3", user ? "max-w-[1500px] lg:pl-[21rem]" : "max-w-[1200px]")}>
           {user && (
-            <aside className="hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-32 lg:flex lg:h-[calc(100vh-10rem)] lg:w-[18rem] lg:flex-col lg:border-r lg:border-outline-variant/15 lg:bg-surface lg:px-6 lg:pb-8 lg:pt-6">
+            <aside className="hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-24 lg:flex lg:h-[calc(100vh-8rem)] lg:w-[18rem] lg:flex-col lg:border-r lg:border-outline-variant/15 lg:bg-surface lg:px-6 lg:pb-8 lg:pt-6">
               <div className="mb-8 px-4">
                 <h2 className="font-headline text-3xl italic text-on-surface">Dispatch</h2>
                 <p className="mt-1 text-xs font-medium uppercase tracking-widest text-on-surface-variant">

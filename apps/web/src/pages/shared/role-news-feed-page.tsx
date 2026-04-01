@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { AttachmentList } from "@/components/feed/attachment-list";
 import {
@@ -55,6 +55,12 @@ type FollowDepartment = FeedDepartmentPreview & {
   profile_photo?: string | null;
   post_count?: number | null;
 };
+
+type ActiveImageViewer = {
+  title: string;
+  photos: string[];
+  index: number;
+} | null;
 
 const roleCopy: Record<NewsFeedRole, RoleCopy> = {
   citizen: {
@@ -273,6 +279,9 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const [deletingPostId, setDeletingPostId] = useState<string | number | null>(null);
   const [menuOpenPostId, setMenuOpenPostId] = useState<string | number | null>(null);
   const [editPost, setEditPost] = useState<FeedPost | null>(null);
+  const [commentModalOrigin, setCommentModalOrigin] = useState({ x: 0, y: 0 });
+  const [postPhotoIndices, setPostPhotoIndices] = useState<Record<string, number>>({});
+  const [activeImageViewer, setActiveImageViewer] = useState<ActiveImageViewer>(null);
 
   const fetchPosts = useCallback((showLoader = true) => {
     if (showLoader) {
@@ -423,6 +432,105 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     } finally {
       setReactingPostIds((prev) => prev.filter((id) => id !== postId));
     }
+  }
+
+  function openCommentModal(postId: string | number, button?: HTMLElement | null) {
+    if (button) {
+      const rect = button.getBoundingClientRect();
+      setCommentModalOrigin({
+        x: rect.left + rect.width / 2 - window.innerWidth / 2,
+        y: rect.top + rect.height / 2 - window.innerHeight / 2,
+      });
+    } else {
+      setCommentModalOrigin({ x: 0, y: 0 });
+    }
+    setActiveCommentPostId(postId);
+  }
+
+  function handlePostCardActivate(
+    event: {
+      currentTarget: EventTarget & HTMLElement;
+      target: EventTarget | null;
+      key?: string;
+      preventDefault: () => void;
+    },
+    postId: string | number,
+  ) {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest("button, a, input, textarea, select, label")) {
+      return;
+    }
+
+    if ("key" in event && event.key && event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    if ("key" in event && event.key) {
+      event.preventDefault();
+    }
+
+    openCommentModal(postId, event.currentTarget);
+  }
+
+  function getPhotoIndex(postId: string | number, photoCount: number) {
+    if (photoCount <= 0) {
+      return 0;
+    }
+    const storedIndex = postPhotoIndices[String(postId)] ?? 0;
+    return Math.min(storedIndex, photoCount - 1);
+  }
+
+  function shiftPostPhoto(
+    postId: string | number,
+    photoCount: number,
+    direction: "next" | "prev",
+  ) {
+    if (photoCount <= 1) {
+      return;
+    }
+
+    setPostPhotoIndices((prev) => {
+      const current = prev[String(postId)] ?? 0;
+      const next =
+        direction === "next"
+          ? (current + 1) % photoCount
+          : (current - 1 + photoCount) % photoCount;
+      return {
+        ...prev,
+        [String(postId)]: next,
+      };
+    });
+  }
+
+  function openImageViewer(
+    photos: string[],
+    index: number,
+    title: string,
+    event?: { stopPropagation?: () => void; preventDefault?: () => void },
+  ) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setActiveImageViewer({
+      title,
+      photos,
+      index,
+    });
+  }
+
+  function shiftImageViewer(direction: "next" | "prev") {
+    setActiveImageViewer((current) => {
+      if (!current || current.photos.length <= 1) {
+        return current;
+      }
+      const nextIndex =
+        direction === "next"
+          ? (current.index + 1) % current.photos.length
+          : (current.index - 1 + current.photos.length) % current.photos.length;
+      return {
+        ...current,
+        index: nextIndex,
+      };
+    });
   }
 
   function toggleBookmarked(postId: string | number) {
@@ -609,6 +717,38 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             1.375rem 1.375rem 0 -4px #d97757;
           animation: dispatch-bookmark-spark 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
           animation-delay: 0.3s;
+        }
+
+        @keyframes dispatch-comment-overlay-in {
+          0% {
+            opacity: 0;
+            backdrop-filter: blur(0px);
+          }
+          100% {
+            opacity: 1;
+            backdrop-filter: blur(12px);
+          }
+        }
+
+        @keyframes dispatch-comment-modal-pop {
+          0% {
+            opacity: 0;
+            transform: translate3d(var(--dispatch-comment-from-x, 0px), var(--dispatch-comment-from-y, 0px), 0) scale(0.14);
+          }
+          100% {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+        }
+
+        .dispatch-comment-overlay {
+          animation: dispatch-comment-overlay-in 0.24s ease-out both;
+        }
+
+        .dispatch-comment-modal {
+          animation: dispatch-comment-modal-pop 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+          transform-origin: center center;
+          will-change: transform, opacity;
         }
       `}</style>
       <AppShell subtitle={copy.subtitle} title="News Feed">
@@ -804,7 +944,13 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
                   return (
                     <Card key={post.id} className={`${warmPanelClassName} ${raisedFeedCardClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
-                      <article className="space-y-5">
+                      <article
+                        className="cursor-pointer space-y-5"
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => handlePostCardActivate(event, post.id)}
+                        onKeyDown={(event) => handlePostCardActivate(event, post.id)}
+                      >
                         <div className="flex items-start gap-3">
                           <DepartmentHoverPreview
                             className="shrink-0"
@@ -911,18 +1057,72 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
                           {post.photos && post.photos.length > 0 && (
                             <div className="space-y-3">
-                              {post.photos.map((url, index) => (
-                                <div
-                                  key={`${post.id}-photo-${index}`}
-                                  className="overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4]"
+                              <div className="relative overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4]">
+                                <button
+                                  type="button"
+                                  className="block w-full"
+                                  onClick={(event) =>
+                                    openImageViewer(
+                                      post.photos ?? [],
+                                      getPhotoIndex(post.id, post.photos?.length ?? 0),
+                                      post.title,
+                                      event,
+                                    )}
                                 >
                                   <img
-                                    src={url}
-                                    alt={`${post.title} photo ${index + 1}`}
+                                    src={post.photos[getPhotoIndex(post.id, post.photos.length)]}
+                                    alt={`${post.title} photo ${getPhotoIndex(post.id, post.photos.length) + 1}`}
                                     className="h-[320px] w-full object-cover md:h-[420px]"
                                   />
-                                </div>
-                              ))}
+                                </button>
+                                {post.photos.length > 1 && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        shiftPostPhoto(post.id, post.photos?.length ?? 0, "prev");
+                                      }}
+                                      aria-label="Previous image"
+                                    >
+                                      <span className="material-symbols-outlined">chevron_left</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        shiftPostPhoto(post.id, post.photos?.length ?? 0, "next");
+                                      }}
+                                      aria-label="Next image"
+                                    >
+                                      <span className="material-symbols-outlined">chevron_right</span>
+                                    </button>
+                                    <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
+                                      {post.photos.map((_, index) => (
+                                        <button
+                                          key={`${post.id}-photo-dot-${index}`}
+                                          type="button"
+                                          className={`h-2.5 w-2.5 rounded-full transition-all ${
+                                            index === getPhotoIndex(post.id, post.photos.length)
+                                              ? "bg-white"
+                                              : "bg-white/45 hover:bg-white/70"
+                                          }`}
+                                          aria-label={`View image ${index + 1}`}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            setPostPhotoIndices((prev) => ({
+                                              ...prev,
+                                              [String(post.id)]: index,
+                                            }));
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           )}
 
@@ -948,7 +1148,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                               <button
                                 className="flex items-center gap-2 text-on-surface transition-colors hover:text-[#a14b2f]"
                                 type="button"
-                                onClick={() => setActiveCommentPostId(post.id)}
+                                onClick={(event) => openCommentModal(post.id, event.currentTarget)}
                               >
                                 <span className="material-symbols-outlined">chat_bubble</span>
                                 <span className="text-xs font-bold uppercase tracking-widest">
@@ -1145,9 +1345,65 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       </div>
       </div>
 
+      {activeImageViewer && (
+        <div className="fixed inset-0 z-[72] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md md:p-8">
+          <button
+            type="button"
+            className="absolute left-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Close image viewer"
+            onClick={() => setActiveImageViewer(null)}
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+
+          {activeImageViewer.photos.length > 1 && (
+            <button
+              type="button"
+              className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="Previous image"
+              onClick={() => shiftImageViewer("prev")}
+            >
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+          )}
+
+          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col items-center justify-center gap-4">
+            <img
+              src={activeImageViewer.photos[activeImageViewer.index]}
+              alt={`${activeImageViewer.title} image ${activeImageViewer.index + 1}`}
+              className="max-h-[78vh] w-auto max-w-full rounded-[28px] object-contain shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
+            />
+            {activeImageViewer.photos.length > 1 && (
+              <div className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
+                {activeImageViewer.index + 1} / {activeImageViewer.photos.length}
+              </div>
+            )}
+          </div>
+
+          {activeImageViewer.photos.length > 1 && (
+            <button
+              type="button"
+              className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="Next image"
+              onClick={() => shiftImageViewer("next")}
+            >
+              <span className="material-symbols-outlined">arrow_forward</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {activeCommentPost && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
+        <div className="dispatch-comment-overlay fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+          <div
+            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}
+            style={
+              {
+                "--dispatch-comment-from-x": `${commentModalOrigin.x}px`,
+                "--dispatch-comment-from-y": `${commentModalOrigin.y}px`,
+              } as CSSProperties
+            }
+          >
               {(() => {
                 const publisherPath = `/departments/${activeCommentPost.uploader}`;
                 return (
@@ -1226,12 +1482,64 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   </p>
 
                   {activeCommentPost.photos && activeCommentPost.photos.length > 0 && (
-                    <div className="overflow-hidden rounded border border-outline-variant/10">
-                      <img
-                        src={activeCommentPost.photos[0]}
-                        alt={activeCommentPost.title}
-                        className="block h-auto w-full"
-                      />
+                    <div className="relative overflow-hidden rounded-[24px] border border-outline-variant/10 bg-[#f3ebe4]">
+                      <button
+                        type="button"
+                        className="block w-full"
+                        onClick={(event) =>
+                          openImageViewer(
+                            activeCommentPost.photos ?? [],
+                            getPhotoIndex(activeCommentPost.id, activeCommentPost.photos?.length ?? 0),
+                            activeCommentPost.title,
+                            event,
+                          )}
+                      >
+                        <img
+                          src={activeCommentPost.photos[getPhotoIndex(activeCommentPost.id, activeCommentPost.photos.length)]}
+                          alt={activeCommentPost.title}
+                          className="block h-auto w-full"
+                        />
+                      </button>
+                      {activeCommentPost.photos.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                            onClick={() => shiftPostPhoto(activeCommentPost.id, activeCommentPost.photos?.length ?? 0, "prev")}
+                            aria-label="Previous image"
+                          >
+                            <span className="material-symbols-outlined">chevron_left</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                            onClick={() => shiftPostPhoto(activeCommentPost.id, activeCommentPost.photos?.length ?? 0, "next")}
+                            aria-label="Next image"
+                          >
+                            <span className="material-symbols-outlined">chevron_right</span>
+                          </button>
+                          <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
+                            {activeCommentPost.photos.map((_, index) => (
+                              <button
+                                key={`detail-photo-dot-${index}`}
+                                type="button"
+                                className={`h-2.5 w-2.5 rounded-full transition-all ${
+                                  index === getPhotoIndex(activeCommentPost.id, activeCommentPost.photos.length)
+                                    ? "bg-white"
+                                    : "bg-white/45 hover:bg-white/70"
+                                }`}
+                                aria-label={`View image ${index + 1}`}
+                                onClick={() =>
+                                  setPostPhotoIndices((prev) => ({
+                                    ...prev,
+                                    [String(activeCommentPost.id)]: index,
+                                  }))
+                                }
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 

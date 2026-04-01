@@ -8,8 +8,10 @@ import {
 } from "@/components/feed/department-hover-preview";
 import { DepartmentCreatePostForm } from "@/components/feed/department-create-post-form";
 import { AppShell } from "@/components/layout/app-shell";
+import { useAppShellTheme } from "@/components/layout/app-shell-theme";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
@@ -112,17 +114,17 @@ const readinessCategoryLabels: Record<(typeof readinessCategories)[number], stri
 };
 
 const footerLinks = ["Standard Ops", "Ethics Policy", "Command Chain"] as const;
-const warmPanelClassName = "border-[#efd8d0] bg-[#fff8f3]";
-const warmTabClassName = "border border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b]";
-const warmActionTabClassName =
-  "border border-[#ecd8cf] bg-[#f7efe7] text-[#8a5a40] transition-colors hover:bg-[#f2e7de]";
-const popupPanelShadowClassName =
+const baseWarmPanelClassName = "dispatch-news-feed-surface border-[#efd8d0] bg-[#fff8f3]";
+const baseWarmTabClassName = "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b]";
+const baseWarmActionTabClassName =
+  "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#8a5a40] transition-colors hover:bg-[#f2e7de]";
+const basePopupPanelShadowClassName =
   "shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]";
-const raisedFeedCardClassName =
+const baseRaisedFeedCardClassName =
   "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
-const publishLaneEffectClassName =
-  "space-y-5 rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
-const publishedTabHighlightClassName =
+const basePublishLaneEffectClassName =
+  "dispatch-news-feed-publish-lane space-y-5 overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
+const basePublishedTabHighlightClassName =
   "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6]";
 const heartOutlinePath =
   "M17.5,1.917a6.4,6.4,0,0,0-5.5,3.3,6.4,6.4,0,0,0-5.5-3.3A6.8,6.8,0,0,0,0,8.967c0,4.547,4.786,9.513,8.8,12.88a4.974,4.974,0,0,0,6.4,0C19.214,18.48,24,13.514,24,8.967A6.8,6.8,0,0,0,17.5,1.917Zm-3.585,18.4a2.973,2.973,0,0,1-3.83,0C4.947,16.006,2,11.87,2,8.967a4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,11,8.967a1,1,0,0,0,2,0,4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,22,8.967C22,11.87,19.053,16.006,13.915,20.313Z";
@@ -336,6 +338,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const copy = roleCopy[role];
   const canPost = role === "department";
   const departmentLayout = role === "department";
+  const { isDarkMode } = useAppShellTheme();
   const accessToken = useSessionStore((state) => state.accessToken);
   const currentUser = useSessionStore((state) => state.user);
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -358,10 +361,47 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const [menuOpenPostId, setMenuOpenPostId] = useState<string | number | null>(null);
   const [editPost, setEditPost] = useState<FeedPost | null>(null);
   const [commentModalOrigin, setCommentModalOrigin] = useState({ x: 0, y: 0 });
+  const [createModalOrigin, setCreateModalOrigin] = useState({ x: 0, y: 0 });
   const [postPhotoIndices, setPostPhotoIndices] = useState<Record<string, number>>({});
   const [activeImageViewer, setActiveImageViewer] = useState<ActiveImageViewer>(null);
   const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
   const resolvingLocationsRef = useRef(new Set<string>());
+  const warmPanelClassName = isDarkMode
+    ? "border-[#34302b] bg-[#23211f]"
+    : baseWarmPanelClassName;
+  const warmTabClassName = isDarkMode
+    ? "border border-[#3b3732] bg-[#2a2724] text-[#d7c4b7]"
+    : baseWarmTabClassName;
+  const warmActionTabClassName = isDarkMode
+    ? "border border-[#3b3732] bg-[#2a2724] text-[#d59b7c] transition-colors hover:bg-[#332f2b]"
+    : baseWarmActionTabClassName;
+  const popupPanelShadowClassName = isDarkMode
+    ? "shadow-[rgba(0,0,0,0.55)_0px_16px_40px,rgba(255,255,255,0.04)_0px_1px_0px_inset]"
+    : basePopupPanelShadowClassName;
+  const raisedFeedCardClassName = isDarkMode
+    ? "shadow-[14px_14px_28px_rgba(0,0,0,0.34),-10px_-10px_22px_rgba(255,255,255,0.02)]"
+    : baseRaisedFeedCardClassName;
+  const publishLaneEffectClassName = isDarkMode
+    ? "space-y-5 overflow-x-clip rounded-[34px] bg-[#1d1b1a] p-3 shadow-[rgba(255,255,255,0.04)_0px_1px_0px_inset,rgba(0,0,0,0.48)_0px_24px_48px_-18px_inset] md:mr-2 xl:mr-4"
+    : basePublishLaneEffectClassName;
+  const publishedTabHighlightClassName = isDarkMode
+    ? "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#4a433d] hover:bg-[#292624]"
+    : basePublishedTabHighlightClassName;
+  const composerInnerPanelClassName = isDarkMode
+    ? "dispatch-news-feed-composer-inner rounded-[28px] border border-[#3b3732] bg-[#262321] px-4 py-4"
+    : "dispatch-news-feed-composer-inner rounded-[28px] border border-[#ecd8cf] bg-[#fff8f3] px-4 py-4";
+  const composerPromptClassName = isDarkMode
+    ? "dispatch-news-feed-composer-prompt min-h-[56px] flex-1 rounded-full border border-[#3b3732] bg-[#2a2724] px-5 text-left text-base text-[#d7c4b7] transition-colors hover:bg-[#332f2b] hover:text-[#f4eee8] lg:text-lg"
+    : "dispatch-news-feed-composer-prompt min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-base text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46] lg:text-lg";
+  const popupSurfaceClassName = isDarkMode
+    ? "border border-[#34302b] bg-[#23211f]"
+    : "border border-[#efd8d0] bg-[#fff8f3]";
+  const popupHeaderClassName = isDarkMode
+    ? "border-b border-[#3b3732] bg-[#23211f]/95"
+    : "border-b border-[#ecd8cf] bg-[#fff8f3]/95";
+  const menuSurfaceClassName = isDarkMode
+    ? "absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#3b3732] bg-[#23211f] shadow-[0_16px_30px_rgba(0,0,0,0.34)]"
+    : "absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#ecd8cf] bg-[#fff8f3] shadow-[0_12px_24px_rgba(56,56,49,0.12)]";
 
   const fetchPosts = useCallback((showLoader = true) => {
     if (showLoader) {
@@ -587,6 +627,20 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     setActiveCommentPostId(postId);
   }
 
+  function openCreatePostModal(button?: HTMLElement | null) {
+    if (button) {
+      const rect = button.getBoundingClientRect();
+      setCreateModalOrigin({
+        x: rect.left + rect.width / 2 - window.innerWidth / 2,
+        y: rect.top + rect.height / 2 - window.innerHeight / 2,
+      });
+    } else {
+      setCreateModalOrigin({ x: 0, y: 0 });
+    }
+
+    setIsCreatePostOpen(true);
+  }
+
   function handlePostCardActivate(
     event: {
       currentTarget: EventTarget & HTMLElement;
@@ -597,7 +651,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     postId: string | number,
   ) {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("button, a, input, textarea, select, label")) {
+    if (target?.closest("button, a, input, textarea, select, label, details, summary")) {
       return;
     }
 
@@ -892,7 +946,44 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
         }
       `}</style>
       <AppShell subtitle={copy.subtitle} title="News Feed">
-      <div className="space-y-8">
+      <div className={isDarkMode ? "dispatch-news-feed-page dispatch-news-feed-dark space-y-8" : "dispatch-news-feed-page space-y-8"}>
+        <style>{`
+          .dispatch-shell-dark .dispatch-news-feed-page .text-on-surface { color: #f4eee8 !important; }
+          .dispatch-shell-dark .dispatch-news-feed-page .text-on-surface-variant { color: #c6b8ac !important; }
+          .dispatch-shell-dark .dispatch-news-feed-page .text-outline,
+          .dispatch-shell-dark .dispatch-news-feed-page .text-outline-variant { color: #9d8d80 !important; }
+          .dispatch-shell-dark .dispatch-news-feed-page .border-outline-variant\\/10 { border-color: rgba(255,255,255,0.08) !important; }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-publish-lane {
+            background: #1d1b1a !important;
+            box-shadow:
+              rgba(255,255,255,0.04) 0px 1px 0px inset,
+              rgba(0,0,0,0.48) 0px 24px 48px -18px inset !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-surface,
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-card {
+            background: #23211f !important;
+            border-color: #34302b !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-card {
+            box-shadow:
+              14px 14px 28px rgba(0,0,0,0.34),
+              -10px -10px 22px rgba(255,255,255,0.02) !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-card:hover {
+            background: #292624 !important;
+            border-color: #4a433d !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-composer-inner {
+            background: #262321 !important;
+            border-color: #3b3732 !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-composer-prompt,
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-pill {
+            background: #2a2724 !important;
+            border-color: #3b3732 !important;
+            color: #d7c4b7 !important;
+          }
+        `}</style>
         {!departmentLayout && (
         <section className="overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-gradient-to-br from-[#a14b2f] via-[#8f4427] to-[#5f5e5c] p-6 text-white shadow-xl">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
@@ -954,15 +1045,17 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
                     {canPost ? (
                       <>
-                        <div className="mt-4 rounded-[28px] border border-[#ecd8cf] bg-[#fff8f3] px-4 py-4">
+                        <div className={`mt-4 ${composerInnerPanelClassName}`}>
                           <div className="flex flex-col gap-4 md:flex-row md:items-center">
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
                               <span className="material-symbols-outlined">edit_square</span>
                             </div>
                             <button
                               type="button"
-                              onClick={() => setIsCreatePostOpen(true)}
-                              className="min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-lg text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46]"
+                              onClick={(event) => openCreatePostModal(event.currentTarget)}
+                              className={isDarkMode
+                                ? "min-h-[56px] flex-1 rounded-full border border-[#3b3732] bg-[#2a2724] px-5 text-left text-lg text-[#d7c4b7] transition-colors hover:bg-[#332f2b] hover:text-[#f4eee8]"
+                                : "min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-lg text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46]"}
                             >
                               Anything urgent to share?
                             </button>
@@ -970,7 +1063,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                               type="button"
                               variant="secondary"
                               className="min-w-[96px] self-end md:self-auto"
-                              onClick={() => setIsCreatePostOpen(true)}
+                              onClick={(event) => openCreatePostModal(event.currentTarget)}
                             >
                               Post
                             </Button>
@@ -995,7 +1088,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
                           {copy.accessBody}
                         </p>
-                        <div className="mt-4 rounded-2xl border border-[#ecd8cf] bg-white px-4 py-4">
+                        <div className={`mt-4 rounded-2xl px-4 py-4 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-white"}`}>
                         <div className="flex items-start gap-3">
                           <span className="material-symbols-outlined text-[#a14b2f]">lock</span>
                           <div>
@@ -1015,7 +1108,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
             <div className={departmentLayout ? publishLaneEffectClassName : "space-y-5"}>
               {departmentLayout && (
-                <Card className={`${warmPanelClassName} ${raisedFeedCardClassName}`}>
+                <Card className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName}`}>
                   <div className="flex flex-col gap-4 md:flex-row md:items-start">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
                       <span className="material-symbols-outlined">campaign</span>
@@ -1024,15 +1117,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                       <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
                         Department composer
                       </p>
-                      <div className="mt-4 rounded-[28px] border border-[#ecd8cf] bg-[#fff8f3] px-4 py-4">
+                      <div className={`mt-4 ${composerInnerPanelClassName}`}>
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
                             <span className="material-symbols-outlined">edit_square</span>
                           </div>
                           <button
                             type="button"
-                            onClick={() => setIsCreatePostOpen(true)}
-                            className="min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-base text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46] lg:text-lg"
+                            onClick={(event) => openCreatePostModal(event.currentTarget)}
+                            className={composerPromptClassName}
                           >
                             Anything urgent to share?
                           </button>
@@ -1040,7 +1133,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                             type="button"
                             variant="secondary"
                             className="min-w-[96px] self-end lg:self-auto"
-                            onClick={() => setIsCreatePostOpen(true)}
+                            onClick={(event) => openCreatePostModal(event.currentTarget)}
                           >
                             Post
                           </Button>
@@ -1064,7 +1157,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               )}
               {loading ? (
                 <Card className={`${warmPanelClassName} py-16 text-center text-on-surface-variant`}>
-                  <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
+                  <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
                   Loading news feed...
                 </Card>
               ) : posts.length === 0 ? (
@@ -1086,7 +1179,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                     : null;
 
                   return (
-                    <Card key={post.id} className={`${warmPanelClassName} ${raisedFeedCardClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
+                    <Card key={post.id} className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
                       <article
                         className="cursor-pointer space-y-5"
                         role="button"
@@ -1128,20 +1221,21 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                 <p className="text-sm font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
                                   {post.department?.name ?? "Department Update"}
                                 </p>
-                                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
-                                  <span>{new Date(post.created_at).toLocaleString()}</span>
-                                  {locationLabel ? (
-                                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 normal-case tracking-normal ${warmTabClassName}`}>
-                                      <span className="material-symbols-outlined text-[14px]">location_on</span>
-                                      <span className="truncate max-w-[260px]">{locationLabel}</span>
-                                    </span>
-                                  ) : null}
-                                </div>
+                                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
+                                  {new Date(post.created_at).toLocaleString()}
+                                </p>
                               </Link>
                             </DepartmentHoverPreview>
                           </div>
                           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
+                            {locationLabel ? (
+                              <span className={`inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}>
+                                <span className="material-symbols-outlined text-[14px]">location_on</span>
+                                <span className="truncate normal-case tracking-normal">{locationLabel}</span>
+                              </span>
+                            ) : null}
+                            <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
+                              <span className="material-symbols-outlined text-[14px]">{categoryStyle.icon}</span>
                               {post.category.replace("_", " ")}
                             </span>
                             {canDeletePost && (
@@ -1158,7 +1252,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                   <span className="material-symbols-outlined text-[18px]">more_horiz</span>
                                 </button>
                                 {isMenuOpen && (
-                                  <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#ecd8cf] bg-[#fff8f3] shadow-[0_12px_24px_rgba(56,56,49,0.12)]">
+                                  <div className={menuSurfaceClassName}>
                                     <button
                                       type="button"
                                       aria-label="Edit post"
@@ -1302,7 +1396,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                           )}
 
                           {post.attachments && post.attachments.length > 0 && (
-                            <div className="rounded-2xl border border-[#ecd8cf] bg-[#fff8f3] px-4 py-1">
+                            <div
+                              className={`rounded-2xl px-4 py-1 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-[#fff8f3]"}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                              onKeyDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                            >
                               <AttachmentList attachments={post.attachments} />
                             </div>
                           )}
@@ -1364,11 +1466,11 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             <div className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}>
             {departmentLayout && (
               <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
-                <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
                   <span className="material-symbols-outlined text-white/75">search</span>
                   <input
                     aria-label="Temporary news search"
-                    className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-white/55"
+                    className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-center placeholder:text-white/55"
                     placeholder={copy.searchPlaceholder}
                     readOnly
                   />
@@ -1377,8 +1479,8 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             )}
             {departmentLayout && (
               <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
-                <div className="flex flex-col gap-4">
-                  <div>
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <div className="mx-auto max-w-[17rem]">
                     <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
                       {copy.badge}
                     </span>
@@ -1388,15 +1490,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                     </p>
                   </div>
 
-                  <div className="grid gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                  <div className="grid w-full max-w-[17rem] gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
                         Active advisories
                       </p>
                       <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(readinessCount).padStart(2, "0")}</p>
                       <p className="mt-1 text-xs text-white/70">Live alerts, warnings, and situational reports</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
                         Coordination mode
                       </p>
@@ -1413,7 +1515,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               </p>
               <div className="mt-5 space-y-5">
                 {readinessPosts.length === 0 ? (
-                  <div className="rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                  <div className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}>
                     <p className="text-sm leading-relaxed text-on-surface-variant">
                       Published summaries for Alert, Warning, and Situational Report posts will appear here once departments publish them.
                     </p>
@@ -1422,7 +1524,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   readinessPosts.map((post) => (
                     <div
                       key={post.id}
-                      className="group cursor-default rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4 transition-shadow hover:shadow-sm"
+                      className={`group cursor-default rounded-2xl p-4 transition-shadow hover:shadow-sm ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}
                     >
                       <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
                         {readinessCategoryLabels[post.category as keyof typeof readinessCategoryLabels] ?? post.category.replace("_", " ")}
@@ -1443,7 +1545,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               </p>
               <div className="mt-5 space-y-4">
                 {followDepartments.length === 0 ? (
-                  <div className="rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                  <div className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}>
                     <p className="text-sm leading-relaxed text-on-surface-variant">
                       Department accounts will appear here once profiles are available in the directory.
                     </p>
@@ -1474,7 +1576,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                           <p className="truncate text-base font-semibold text-on-surface">{department.name}</p>
                           <p className="truncate text-sm text-on-surface-variant">{formatDepartmentHandle(department.name)}</p>
                         </div>
-                        <span className="shrink-0 rounded-full border border-[#d7c1b5] bg-white px-4 py-2 text-sm font-semibold text-[#5f4f46] transition-colors hover:bg-[#f8efe8]">
+                        <span className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724] text-[#f0e2d6] hover:bg-[#332f2b]" : "border border-[#d7c1b5] bg-white text-[#5f4f46] hover:bg-[#f8efe8]"}`}>
                           Follow
                         </span>
                       </Link>
@@ -1580,7 +1682,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       {activeCommentPost && (
         <div className="dispatch-comment-overlay fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
           <div
-            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}
+            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
             style={
               {
                 "--dispatch-comment-from-x": `${commentModalOrigin.x}px`,
@@ -1591,7 +1693,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               {(() => {
                 const publisherPath = `/departments/${activeCommentPost.uploader}`;
                 return (
-              <div className="flex items-center gap-4 border-b border-[#ecd8cf] bg-[#fff8f3]/95 px-8 py-6 backdrop-blur-sm">
+              <div className={`flex items-center gap-4 px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
                 <DepartmentHoverPreview
                   className="shrink-0"
                   department={activeCommentPost.department}
@@ -1629,18 +1731,21 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                     <p className="text-base font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
                       {activeCommentPost.department?.name ?? "Department Update"}
                     </p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
-                      <span>{new Date(activeCommentPost.created_at).toLocaleString()}</span>
-                      {activeCommentLocationLabel ? (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 normal-case tracking-normal ${warmTabClassName}`}>
-                          <span className="material-symbols-outlined text-[14px]">location_on</span>
-                          <span className="max-w-[260px] truncate">{activeCommentLocationLabel}</span>
-                        </span>
-                      ) : null}
-                    </div>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
+                      {new Date(activeCommentPost.created_at).toLocaleString()}
+                    </p>
                   </Link>
                 </DepartmentHoverPreview>
-                <span className={`ml-auto rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
+                {activeCommentLocationLabel ? (
+                  <span className={`ml-auto inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}>
+                    <span className="material-symbols-outlined text-[14px]">location_on</span>
+                    <span className="truncate normal-case tracking-normal">{activeCommentLocationLabel}</span>
+                  </span>
+                ) : null}
+                <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
+                  <span className="material-symbols-outlined text-[14px]">
+                    {(categoryStyles[activeCommentPost.category] ?? { icon: "article" }).icon}
+                  </span>
                   {activeCommentPost.category.replace("_", " ")}
                 </span>
                 <button
@@ -1785,7 +1890,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
               </article>
 
-              <section className="bg-[#f7efe7] px-8 py-10">
+              <section className={`px-8 py-10 ${isDarkMode ? "bg-[#1f1d1b]" : "bg-[#f7efe7]"}`}>
                 <h4 className="mb-8 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
                   Response Thread
                 </h4>
@@ -1861,9 +1966,17 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       )}
 
       {canPost && isCreatePostOpen && (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
-            <div className="flex items-center gap-4 border-b border-[#ecd8cf] bg-[#fff8f3]/95 px-8 py-6 backdrop-blur-sm">
+        <div className="dispatch-comment-overlay fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+          <div
+            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
+            style={
+              {
+                "--dispatch-comment-from-x": `${createModalOrigin.x}px`,
+                "--dispatch-comment-from-y": `${createModalOrigin.y}px`,
+              } as CSSProperties
+            }
+          >
+            <div className={`flex items-center gap-4 px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
                   <span className="material-symbols-outlined">edit_square</span>
                 </div>
@@ -1909,7 +2022,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
       {deleteConfirmPost && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`w-full max-w-md rounded-[28px] border border-[#efd8d0] bg-[#fff8f3] p-6 ${popupPanelShadowClassName}`}>
+          <div className={`w-full max-w-md rounded-[28px] p-6 ${popupSurfaceClassName} ${popupPanelShadowClassName}`}>
             <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
               Delete post
             </p>
@@ -1951,8 +2064,8 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
       {editPost && (
         <div className="fixed inset-0 z-[74] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#efd8d0] bg-[#fff8f3] ${popupPanelShadowClassName}`}>
-            <div className="flex items-center justify-between border-b border-[#ecd8cf] bg-[#fff8f3]/95 px-8 py-6 backdrop-blur-sm">
+          <div className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}>
+            <div className={`flex items-center justify-between px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
                   Edit post

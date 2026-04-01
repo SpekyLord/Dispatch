@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest, apiUpload } from "@/lib/api/client";
 import { useLocale } from "@/lib/i18n/locale-context";
 
@@ -186,7 +187,7 @@ export function DepartmentAssessmentPage() {
 
       {loading ? (
         <Card className="py-12 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined text-3xl animate-pulse">hourglass_empty</span>
+          <LoadingDots sizeClassName="h-4 w-4" />
         </Card>
       ) : assessments.length === 0 ? (
         <Card className="py-12 text-center">

@@ -6,6 +6,7 @@ import { useParams, Link } from "react-router-dom";
 import type { FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { AttachmentList } from "@/components/feed/attachment-list";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
@@ -84,7 +85,7 @@ export function FeedDetailPage() {
     return (
       <AppShell subtitle="Announcement" title="Loading...">
         <Card className="py-16 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
+          <LoadingDots sizeClassName="h-5 w-5" />
         </Card>
       </AppShell>
     );

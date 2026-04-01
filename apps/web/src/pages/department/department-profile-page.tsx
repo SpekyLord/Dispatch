@@ -1,22 +1,17 @@
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import {
+  ProfileInteractivePostStack,
+  type ProfileInteractiveDepartment,
+  type ProfileInteractivePost,
+} from "@/components/feed/profile-interactive-post-stack";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest, apiUpload } from "@/lib/api/client";
 import { useSessionStore, type DepartmentInfo } from "@/lib/auth/session-store";
-
-type DepartmentProfilePost = {
-  id: string | number;
-  title: string;
-  content: string;
-  category: string;
-  created_at: string;
-  reaction?: number | null;
-  comment_count?: number | null;
-  photos?: string[];
-};
 
 type DepartmentProfileFormState = {
   name: string;
@@ -28,6 +23,17 @@ type DepartmentProfileFormState = {
 };
 
 const profileTabs = ["Activity", "Announcements", "Bookmarks", "Archive"] as const;
+const profileLaneEffectClassName =
+  "dispatch-profile-publish-lane space-y-5 overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]";
+const profileSurfaceClassName = "dispatch-profile-surface border-[#e2d1c7] bg-[#fff8f3]";
+const profileRaisedCardClassName =
+  "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
+const profileCardHoverClassName =
+  "dispatch-profile-card transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6]";
+const profilePillClassName =
+  "dispatch-profile-pill border border-[#e2d1c7] bg-[#f7efe7] text-[#6f625b]";
+const profileActionSurfaceClassName =
+  "dispatch-profile-action-surface border border-[#dbc6b9] bg-[#f7efe7] text-on-surface transition-colors hover:bg-[#f3e7de]";
 const departmentTypeOptions = [
   { value: "fire", label: "Fire (BFP)" },
   { value: "police", label: "Police (PNP)" },
@@ -55,6 +61,14 @@ const headerPlaceholderImage =
     </svg>
   `);
 
+function summarizeProfilePostContent(content: string, maxLength = 92) {
+  const collapsed = content.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= maxLength) {
+    return collapsed;
+  }
+  return `${collapsed.slice(0, maxLength).trimEnd()}...`;
+}
+
 function formatDepartmentType(value?: string | null) {
   if (!value) return "Department";
   return value
@@ -79,7 +93,7 @@ export function DepartmentProfilePage() {
   const sessionDepartment = useSessionStore((state) => state.department);
   const setDepartment = useSessionStore((state) => state.setDepartment);
   const [department, setDepartmentState] = useState<DepartmentInfo | null>(sessionDepartment);
-  const [posts, setPosts] = useState<DepartmentProfilePost[]>([]);
+  const [posts, setPosts] = useState<ProfileInteractivePost[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -105,7 +119,7 @@ export function DepartmentProfilePage() {
     async (currentUserId: string) => {
       const [departmentResponse, postsResponse] = await Promise.all([
         apiRequest<{ department: DepartmentInfo }>("/api/departments/profile"),
-        apiRequest<{ posts: DepartmentProfilePost[] }>(`/api/feed?uploader=${currentUserId}`),
+        apiRequest<{ posts: ProfileInteractivePost[] }>(`/api/feed?uploader=${currentUserId}`),
       ]);
       setDepartmentState(departmentResponse.department);
       setDepartment(departmentResponse.department);
@@ -137,6 +151,17 @@ export function DepartmentProfilePage() {
   const profileDescription = department?.description?.trim()
     ? department.description
     : "This department profile is ready for customization. Add your organization overview, public safety focus, and operating details here.";
+  const profileRailPosts = posts.slice(0, 2);
+  const interactiveDepartment: ProfileInteractiveDepartment | null = department
+    ? {
+        id: department.id ?? user?.id ?? "department",
+        name: department.name ?? displayName,
+        type: department.type,
+        profile_picture: department.profile_picture,
+        profile_photo: department.profile_photo,
+        verification_status: department.verification_status,
+      }
+    : null;
 
   const draftProfilePhoto = removeProfilePhoto
     ? undefined
@@ -284,9 +309,7 @@ export function DepartmentProfilePage() {
     return (
       <AppShell subtitle="Department profile" title="Profile">
         <Card className="py-16 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined mb-4 block animate-pulse text-4xl">
-            hourglass_empty
-          </span>
+          <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
           Loading profile...
         </Card>
       </AppShell>
@@ -305,16 +328,75 @@ export function DepartmentProfilePage() {
 
   return (
     <AppShell subtitle="Department profile" title="Profile">
-      <div className="space-y-8">
-        <section className="overflow-hidden rounded-[28px] border border-[#e2d1c7] bg-[#fff8f3] text-on-surface shadow-sm">
+      <div className="dispatch-profile-page">
+        <style>{`
+          .dispatch-shell-dark .dispatch-profile-page .text-on-surface { color: #f4eee8 !important; }
+          .dispatch-shell-dark .dispatch-profile-page .text-on-surface-variant { color: #c6b8ac !important; }
+          .dispatch-shell-dark .dispatch-profile-page .text-outline,
+          .dispatch-shell-dark .dispatch-profile-page .text-outline-variant { color: #9d8d80 !important; }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-publish-lane {
+            background: #1d1b1a !important;
+            box-shadow:
+              rgba(255,255,255,0.04) 0px 1px 0px inset,
+              rgba(0,0,0,0.48) 0px 24px 48px -18px inset !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-surface {
+            background: #23211f !important;
+            border-color: #34302b !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-card {
+            box-shadow:
+              14px 14px 28px rgba(0,0,0,0.34),
+              -10px -10px 22px rgba(255,255,255,0.02) !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-card:hover {
+            background: #292624 !important;
+            border-color: #4a433d !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-pill,
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-tab-trigger,
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-action-surface {
+            background: #2a2724 !important;
+            border-color: #3b3732 !important;
+            color: #d7c4b7 !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-tab-trigger[data-active="true"] {
+            background: #4a3025 !important;
+            border-color: #9d654c !important;
+            color: #fff4ec !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-divider {
+            border-color: rgba(255,255,255,0.08) !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-avatar-shell {
+            border-color: #23211f !important;
+            background: #2a2724 !important;
+            color: #d59b7c !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-header-overlay {
+            background: linear-gradient(180deg, rgba(10,10,10,0.08), rgba(0,0,0,0.38)) !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-readiness-card {
+            background: #2a2724 !important;
+            border-color: #3b3732 !important;
+          }
+          .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-form-input {
+            background: #23211f !important;
+            border-color: #3b3732 !important;
+            color: #f4eee8 !important;
+          }
+        `}</style>
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className={`min-w-0 ${profileLaneEffectClassName}`}>
+        <section className={`overflow-hidden rounded-[28px] border text-on-surface ${profileSurfaceClassName} ${profileRaisedCardClassName} ${profileCardHoverClassName}`}>
           <div className="relative h-56 overflow-hidden md:h-64">
             <img alt="Department profile header" className="h-full w-full object-cover" src={headerPhoto} />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,252,247,0.06),rgba(56,56,49,0.18))]" />
+            <div className="dispatch-profile-header-overlay absolute inset-0 bg-[linear-gradient(180deg,rgba(255,252,247,0.06),rgba(56,56,49,0.18))]" />
           </div>
 
           <div className="relative px-5 pb-6 pt-5 md:px-8">
             <div className="relative flex flex-col gap-5 md:flex-row md:items-start">
-              <div className="absolute right-0 top-[-84px] h-28 w-28 overflow-hidden rounded-full border-4 border-[#fff8f3] bg-[#f2e7de] text-[#8f4427] shadow-lg md:h-36 md:w-36">
+              <div className="dispatch-profile-avatar-shell absolute right-0 top-[-84px] h-28 w-28 overflow-hidden rounded-full border-4 border-[#fff8f3] bg-[#f2e7de] text-[#8f4427] shadow-lg md:h-36 md:w-36">
                 {profilePhoto ? (
                   <img alt={`${displayName} profile`} className="h-full w-full object-cover" src={profilePhoto} />
                 ) : (
@@ -324,7 +406,8 @@ export function DepartmentProfilePage() {
                 )}
               </div>
 
-              <div className="max-w-3xl pr-24 md:pr-44">
+              <div className="w-full">
+                <div className="pr-8 md:pr-36">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-headline text-3xl text-on-surface md:text-4xl">{displayName}</h2>
                   {department.verification_status === "approved" && (
@@ -337,29 +420,30 @@ export function DepartmentProfilePage() {
                   )}
                 </div>
                 <p className="mt-1 text-lg text-[#a14b2f]">@{handle}</p>
-                <p className="mt-4 max-w-3xl text-[1.05rem] leading-relaxed text-on-surface-variant">
+                </div>
+                <p className="mt-4 w-full text-[1.05rem] leading-relaxed text-on-surface-variant [text-align:justify]">
                   {profileDescription}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-sm text-[#6f625b]">
+                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
                     <span className="material-symbols-outlined text-[16px]">badge</span>
                     {formatDepartmentType(department.type)}
                   </span>
                   {department.contact_number && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-sm text-[#6f625b]">
+                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
                       <span className="material-symbols-outlined text-[16px]">call</span>
                       {department.contact_number}
                     </span>
                   )}
                   {department.area_of_responsibility && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-sm text-[#6f625b]">
+                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
                       <span className="material-symbols-outlined text-[16px]">location_on</span>
                       {department.area_of_responsibility}
                     </span>
                   )}
                   {department.address && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-sm text-[#6f625b]">
+                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
                       <span className="material-symbols-outlined text-[16px]">home_pin</span>
                       {department.address}
                     </span>
@@ -368,13 +452,13 @@ export function DepartmentProfilePage() {
 
                 <p className="mt-5 text-lg text-on-surface-variant">
                   <span className="font-semibold text-on-surface">{postCount}</span> published post{postCount === 1 ? "" : "s"}
-                  <span className="mx-2 text-outline">â€¢</span>
+                  <span className="mx-2 text-outline">|</span>
                   <span className="font-semibold capitalize text-on-surface">{department.verification_status}</span> status
                 </p>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_52px]">
                   <Button
-                    className="rounded-xl px-6 py-4 text-base font-semibold normal-case tracking-normal"
+                    className={`rounded-xl px-6 py-4 text-base font-semibold normal-case tracking-normal ${profileActionSurfaceClassName}`}
                     onClick={openEditProfile}
                     type="button"
                     variant="secondary"
@@ -383,14 +467,14 @@ export function DepartmentProfilePage() {
                   </Button>
                   <Link to="/department/news-feed">
                     <button
-                      className="w-full rounded-xl border border-[#dbc6b9] bg-[#f7efe7] px-6 py-4 text-base font-semibold text-on-surface transition-colors hover:bg-[#f3e7de]"
+                      className={`w-full rounded-xl px-6 py-4 text-base font-semibold ${profileActionSurfaceClassName}`}
                       type="button"
                     >
                       Open News Feed
                     </button>
                   </Link>
                   <Link
-                    className="flex items-center justify-center rounded-xl border border-[#dbc6b9] bg-[#f7efe7] text-on-surface transition-colors hover:bg-[#f3e7de]"
+                    className={`flex items-center justify-center rounded-xl ${profileActionSurfaceClassName}`}
                     to="/department"
                   >
                     <span className="material-symbols-outlined">more_horiz</span>
@@ -399,16 +483,17 @@ export function DepartmentProfilePage() {
               </div>
             </div>
 
-            <nav className="mt-6 overflow-x-auto border-b border-outline-variant/15">
-              <div className="flex min-w-max gap-12">
+            <nav className="mt-6 overflow-x-auto">
+              <div className="flex min-w-max gap-3 pb-1">
                 {profileTabs.map((tab, index) => (
                   <button
                     key={tab}
-                    className={`border-b-2 px-1 pb-4 text-sm font-semibold transition-colors ${
+                    className={`dispatch-profile-tab-trigger inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
                       index === 0
-                        ? "border-[#a14b2f] text-on-surface"
-                        : "border-transparent text-on-surface-variant hover:text-on-surface"
+                        ? "border-[#a14b2f] bg-[#a14b2f] text-white"
+                        : profilePillClassName
                     }`}
+                    data-active={index === 0 ? "true" : "false"}
                     type="button"
                   >
                     {tab === "Archive" ? `Reads (${postCount})` : tab}
@@ -419,86 +504,94 @@ export function DepartmentProfilePage() {
           </div>
         </section>
 
-        <div className="space-y-5">
-          {posts.length === 0 ? (
-            <Card className="border-[#e2d1c7] bg-[#fff8f3] py-14 text-center text-on-surface-variant">
-              <span className="material-symbols-outlined mb-4 block text-4xl text-outline">
-                campaign
-              </span>
-              No published announcements yet.
-            </Card>
-          ) : (
-            posts.map((post) => (
-              <Card key={post.id} className="border-[#e2d1c7] bg-[#fff8f3]">
-                <article className="space-y-4">
-                  <div className="flex gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f2e7de] text-[#8f4427]">
-                      <span className="material-symbols-outlined">campaign</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-on-surface">{department.name}</span>
-                        <span className="text-sm text-on-surface-variant">
-                          {new Date(post.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+        {interactiveDepartment ? (
+          <ProfileInteractivePostStack
+            cardClassName={`${profileSurfaceClassName} ${profileRaisedCardClassName}`}
+            department={interactiveDepartment}
+            emptyMessage="No published announcements yet."
+            hoverClassName={profileCardHoverClassName}
+            posts={posts}
+          />
+        ) : null}
+        </div>
+
+        <div className="min-w-0 md:-mt-20">
+          <div className="space-y-6 md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
+              <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <span className="material-symbols-outlined text-white/75">search</span>
+                <input
+                  aria-label="Temporary profile search"
+                  className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-center placeholder:text-white/55"
+                  placeholder="Search response protocols and field updates..."
+                  readOnly
+                />
+              </div>
+            </section>
+
+            <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="mx-auto max-w-[17rem]">
+                  <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
+                    Department View
+                  </span>
+                  <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">ResilienceHub Temporary News Desk</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-white/80">
+                    Keep the same News Feed utility rail while the profile block stays in the center column.
+                  </p>
+                </div>
+
+                <div className="grid w-full max-w-[17rem] gap-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Published posts</p>
+                    <p className="mt-2 font-headline text-4xl">{String(postCount).padStart(2, "0")}</p>
+                    <p className="mt-1 text-xs text-white/70">Profile activity and public announcements</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Verification</p>
+                    <p className="mt-2 font-headline text-2xl capitalize">{department.verification_status}</p>
+                    <p className="mt-1 text-xs text-white/70">Department profile overview</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <Card className={profileSurfaceClassName}>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                Active Readiness
+              </p>
+              <div className="mt-5 space-y-5">
+                {profileRailPosts.length === 0 ? (
+                  <div className="dispatch-profile-readiness-card rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                    <p className="text-sm leading-relaxed text-on-surface-variant">
+                      Published profile activity will appear here once your department has public posts.
+                    </p>
+                  </div>
+                ) : (
+                  profileRailPosts.map((post) => (
+                    <div key={post.id} className="dispatch-profile-readiness-card rounded-2xl border border-[#ecd8cf] bg-[#f7efe7] p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
                         {post.category.replace("_", " ")}
                       </p>
+                      <p className="mt-2 text-lg leading-tight text-on-surface">
+                        {summarizeProfilePostContent(post.content)}
+                      </p>
+                      <p className="mt-2 text-xs text-outline">{displayName}</p>
                     </div>
-                  </div>
-
-                  <div className="pl-0 md:pl-14">
-                    <Link to={`/feed/${post.id}`}>
-                      <h3 className="font-headline text-3xl leading-tight text-on-surface transition-colors hover:text-[#a14b2f]">
-                        {post.title}
-                      </h3>
-                    </Link>
-                    <p className="mt-3 max-w-3xl whitespace-pre-wrap text-base leading-relaxed text-on-surface-variant">
-                      {post.content}
-                    </p>
-
-                    {post.photos && post.photos.length > 0 && (
-                      <div className="mt-5 overflow-hidden rounded-xl border border-[#e2d1c7] bg-[#f7efe7]">
-                        <img
-                          alt={post.title}
-                          className="h-64 w-full object-cover"
-                          src={post.photos[0]}
-                        />
-                      </div>
-                    )}
-
-                    <div className="mt-5 flex items-center gap-6 text-on-surface-variant">
-                      <button className="flex items-center gap-2 transition-colors hover:text-[#a14b2f]" type="button">
-                        <span className="material-symbols-outlined">chat_bubble</span>
-                        <span className="text-xs font-bold">{post.comment_count ?? 0}</span>
-                      </button>
-                      <button className="flex items-center gap-2 transition-colors hover:text-[#a14b2f]" type="button">
-                        <span className="material-symbols-outlined">favorite</span>
-                        <span className="text-xs font-bold">{post.reaction ?? 0}</span>
-                      </button>
-                      <Link
-                        className="ml-auto flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#a14b2f] transition-colors hover:text-[#89391e]"
-                        to={`/feed/${post.id}`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-                        Open post
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              </Card>
-            ))
-          )}
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
         </div>
 
         {isEditProfileOpen && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-md md:p-8">
-            <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-[#e2d1c7] bg-[#fff8f3] text-on-surface shadow-[0_24px_60px_rgba(56,56,49,0.18)]">
-              <div className="flex items-center gap-4 border-b border-[#e2d1c7] bg-[#fff8f3]/95 px-5 py-4 backdrop-blur-sm md:px-6">
+            <div className={`dispatch-profile-surface relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border text-on-surface shadow-[0_24px_60px_rgba(56,56,49,0.18)] ${profileSurfaceClassName}`}>
+              <div className="dispatch-profile-divider flex items-center gap-4 border-b border-[#e2d1c7] bg-[#fff8f3]/95 px-5 py-4 backdrop-blur-sm md:px-6">
                 <button
                   aria-label="Close edit profile modal"
-                  className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-[#f3e7de] hover:text-on-surface"
+                  className={`dispatch-profile-pill rounded-full p-2 text-on-surface-variant transition-colors hover:bg-[#f3e7de] hover:text-on-surface ${profilePillClassName}`}
                   onClick={() => setIsEditProfileOpen(false)}
                   type="button"
                 >
@@ -516,7 +609,7 @@ export function DepartmentProfilePage() {
               </div>
 
               <div className="min-h-0 overflow-y-auto px-5 pb-8 pt-5 md:px-6">
-                <div className="relative overflow-hidden rounded-[24px] border border-[#e2d1c7] bg-[#f7efe7]">
+                <div className={`relative overflow-hidden rounded-[24px] border bg-[#f7efe7] ${profilePillClassName}`}>
                   <div className="relative h-52 overflow-hidden bg-[#efe3da]">
                     <img
                       alt="Department header preview"
@@ -526,14 +619,14 @@ export function DepartmentProfilePage() {
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,252,247,0.06),rgba(56,56,49,0.18))]" />
                     <div className="absolute left-1/2 top-6 flex -translate-x-1/2 items-center gap-3">
                       <button
-                        className="rounded-full border border-[#e2d1c7] bg-[#fff8f3]/90 p-3 text-[#a14b2f] transition-colors hover:bg-[#f3e7de]"
+                        className={`dispatch-profile-pill rounded-full p-3 text-[#a14b2f] transition-colors hover:bg-[#f3e7de] ${profilePillClassName}`}
                         onClick={() => headerPhotoInputRef.current?.click()}
                         type="button"
                       >
                         <span className="material-symbols-outlined">imagesmode</span>
                       </button>
                       <button
-                        className="rounded-full border border-[#e2d1c7] bg-[#fff8f3]/90 p-3 text-[#a14b2f] transition-colors hover:bg-[#f3e7de]"
+                        className={`dispatch-profile-pill rounded-full p-3 text-[#a14b2f] transition-colors hover:bg-[#f3e7de] ${profilePillClassName}`}
                         onClick={clearHeaderPhoto}
                         type="button"
                       >
@@ -545,7 +638,7 @@ export function DepartmentProfilePage() {
                   <div className="relative px-4 pb-4 md:px-5">
                     <div className="-mt-12 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                       <div className="flex flex-col gap-4 md:flex-row md:items-end">
-                        <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[#fff8f3] bg-[#f2e7de] text-[#8f4427] shadow-lg">
+                        <div className="dispatch-profile-avatar-shell flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[#fff8f3] bg-[#f2e7de] text-[#8f4427] shadow-lg">
                           {draftProfilePhoto ? (
                             <img
                               alt="Department profile preview"
@@ -559,14 +652,14 @@ export function DepartmentProfilePage() {
                           )}
                         </div>
 
-                        <div className="rounded-2xl border border-[#e2d1c7] bg-[#fff8f3] px-4 py-4 text-on-surface-variant md:min-w-[340px]">
+                        <div className={`rounded-2xl border px-4 py-4 text-on-surface-variant md:min-w-[340px] ${profileSurfaceClassName}`}>
                           <p className="text-lg font-semibold text-on-surface">Edit your department page</p>
                           <p className="mt-1 text-sm text-on-surface-variant">
                             Update your public identity, description, and header visuals in one place.
                           </p>
                           <div className="mt-4 flex flex-wrap gap-2">
                             <button
-                              className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-xs font-semibold text-[#a14b2f] transition-colors hover:bg-[#f3e7de]"
+                              className={`dispatch-profile-pill inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-[#a14b2f] transition-colors hover:bg-[#f3e7de] ${profilePillClassName}`}
                               onClick={() => profilePhotoInputRef.current?.click()}
                               type="button"
                             >
@@ -574,7 +667,7 @@ export function DepartmentProfilePage() {
                               Choose profile image
                             </button>
                             <button
-                              className="inline-flex items-center gap-2 rounded-full border border-[#e2d1c7] bg-[#f7efe7] px-3 py-2 text-xs font-semibold text-[#a14b2f] transition-colors hover:bg-[#f3e7de]"
+                              className={`dispatch-profile-pill inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-[#a14b2f] transition-colors hover:bg-[#f3e7de] ${profilePillClassName}`}
                               onClick={clearProfilePhoto}
                               type="button"
                             >
@@ -616,7 +709,7 @@ export function DepartmentProfilePage() {
                     </label>
                     <input
                       id="department-profile-name"
-                      className="w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
+                      className="dispatch-profile-form-input w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
                       onChange={(event) => updateProfileDraft("name", event.target.value)}
                       placeholder="Department name"
                       type="text"
@@ -630,7 +723,7 @@ export function DepartmentProfilePage() {
                     </label>
                     <textarea
                       id="department-profile-description"
-                      className="min-h-[140px] w-full resize-none rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
+                      className="dispatch-profile-form-input min-h-[140px] w-full resize-none rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
                       onChange={(event) => updateProfileDraft("description", event.target.value)}
                       placeholder="Department description"
                       value={profileDraft.description}
@@ -644,7 +737,7 @@ export function DepartmentProfilePage() {
                       </label>
                       <input
                         id="department-profile-area"
-                        className="w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
+                        className="dispatch-profile-form-input w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
                         onChange={(event) => updateProfileDraft("area_of_responsibility", event.target.value)}
                         placeholder="Coverage area"
                         type="text"
@@ -657,7 +750,7 @@ export function DepartmentProfilePage() {
                       </label>
                       <select
                         id="department-profile-type"
-                        className="w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors focus:border-[#a14b2f]"
+                        className="dispatch-profile-form-input w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors focus:border-[#a14b2f]"
                         onChange={(event) => updateProfileDraft("type", event.target.value)}
                         value={profileDraft.type}
                       >
@@ -676,7 +769,7 @@ export function DepartmentProfilePage() {
                     </label>
                     <input
                       id="department-profile-address"
-                      className="w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
+                      className="dispatch-profile-form-input w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
                       onChange={(event) => updateProfileDraft("address", event.target.value)}
                       placeholder="Office or station address"
                       type="text"
@@ -690,7 +783,7 @@ export function DepartmentProfilePage() {
                     </label>
                     <input
                       id="department-profile-contact"
-                      className="w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
+                      className="dispatch-profile-form-input w-full rounded-xl border border-[#e2d1c7] bg-white px-4 py-4 text-base text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-[#a14b2f]"
                       onChange={(event) => updateProfileDraft("contact_number", event.target.value)}
                       placeholder="Hotline or office contact"
                       type="text"
@@ -698,7 +791,7 @@ export function DepartmentProfilePage() {
                     />
                   </div>
 
-                  <div className="rounded-xl border border-[#e2d1c7] bg-[#f7efe7] px-4 py-4 text-sm text-on-surface-variant">
+                  <div className={`rounded-xl border px-4 py-4 text-sm text-on-surface-variant ${profilePillClassName}`}>
                     Profile and header images are now selected from your device. JPEG and PNG files up to 5 MB are supported.
                   </div>
                 </div>
@@ -706,6 +799,7 @@ export function DepartmentProfilePage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </AppShell>
   );

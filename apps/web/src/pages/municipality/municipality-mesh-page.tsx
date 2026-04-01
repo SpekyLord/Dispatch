@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
@@ -450,7 +451,7 @@ export function MunicipalityMeshPage() {
 
         {loading ? (
           <Card className={`${warmPanelClassName} py-16 text-center text-on-surface-variant`}>
-            <span className="material-symbols-outlined mb-4 block animate-pulse text-4xl">hourglass_empty</span>
+            <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
             Loading mesh dashboard...
           </Card>
         ) : (

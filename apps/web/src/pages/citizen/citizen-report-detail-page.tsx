@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { LocationMap } from "@/components/maps/location-map";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { useLocale } from "@/lib/i18n/locale-context";
@@ -144,7 +145,7 @@ export function CitizenReportDetailPage() {
     return (
       <AppShell subtitle={t("detail.subtitle")} title={t("detail.loadingTitle")}>
         <Card className="py-16 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined text-4xl animate-pulse">hourglass_empty</span>
+          <LoadingDots sizeClassName="h-5 w-5" />
         </Card>
       </AppShell>
     );

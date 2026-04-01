@@ -6,6 +6,7 @@ import { useSessionStore } from "@/lib/auth/session-store";
 import { useLocale } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
+import { useAppShellTheme } from "./app-shell-theme";
 
 type AppShellProps = {
   title: string;
@@ -26,7 +27,6 @@ const roleNavItems: Record<string, NavItem[]> = {
   citizen: [
     { to: "/citizen", labelKey: "nav.myReports", icon: "description" },
     { to: "/citizen/report/new", labelKey: "nav.newReport", icon: "add_circle" },
-    { to: "/feed", labelKey: "nav.feed", icon: "newspaper" },
     { to: "/citizen/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
     { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
     { to: "/profile", labelKey: "nav.profile", icon: "person" },
@@ -35,7 +35,6 @@ const roleNavItems: Record<string, NavItem[]> = {
     { to: "/department", labelKey: "nav.dashboard", icon: "dashboard" },
     { to: "/department/reports", labelKey: "nav.incidentBoard", icon: "assignment" },
     { to: "/department/assessments", labelKey: "nav.assessments", icon: "assessment" },
-    { to: "/feed", labelKey: "nav.feed", icon: "newspaper" },
     { to: "/department/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
     { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
     { to: "/department/profile", labelKey: "nav.profile", icon: "person" },
@@ -89,6 +88,7 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
   const { locale, setLocale, t } = useLocale();
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const { isDarkMode, setIsDarkMode } = useAppShellTheme();
 
   const navItems = user
     ? (roleNavItems[user.role] ?? []).map((item) => ({
@@ -160,7 +160,7 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
+      <div className={cn("dispatch-shell min-h-screen", isDarkMode ? "dispatch-shell-dark bg-[#181817]" : "bg-surface")}>
       <header className="fixed left-0 right-0 top-0 z-50 flex w-full items-center justify-between bg-gradient-to-r from-[#d98d63] via-[#bf6e49] to-[#a86446] px-8 py-4">
         <div className="flex items-center">
           <Link className="text-2xl font-headline italic text-white" to="/">
@@ -169,6 +169,41 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          <div
+            aria-label="Theme mode"
+            className="hidden items-center gap-1 rounded-full border border-white/20 bg-white/90 px-1 py-1 shadow-sm sm:flex"
+            role="group"
+          >
+            <button
+              aria-pressed={!isDarkMode}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest transition-colors",
+                !isDarkMode
+                  ? "bg-[#D97757] text-white"
+                  : "text-on-surface-variant hover:bg-surface-container-high",
+              )}
+              onClick={() => setIsDarkMode(false)}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[14px]">light_mode</span>
+              Light
+            </button>
+            <button
+              aria-pressed={isDarkMode}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest transition-colors",
+                isDarkMode
+                  ? "bg-[#D97757] text-white"
+                  : "text-on-surface-variant hover:bg-surface-container-high",
+              )}
+              onClick={() => setIsDarkMode(true)}
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[14px]">dark_mode</span>
+              Dark
+            </button>
+          </div>
+
           <div
             aria-label={t("shell.language")}
             className="hidden items-center gap-1 rounded-full border border-white/20 bg-white/90 px-1 py-1 shadow-sm sm:flex"
@@ -232,12 +267,19 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
       <main className="min-h-screen pt-20">
         <div className={cn("mx-auto px-8 pb-8 pt-3", user ? "max-w-[1500px] lg:pl-[21rem]" : "max-w-[1200px]")}>
           {user && (
-            <aside className="hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-24 lg:flex lg:h-[calc(100vh-8rem)] lg:w-[18rem] lg:flex-col lg:border-r lg:border-outline-variant/15 lg:bg-surface lg:px-6 lg:pb-8 lg:pt-6">
+            <aside
+              className={cn(
+                "hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-24 lg:flex lg:h-[calc(100vh-8rem)] lg:w-[18rem] lg:flex-col lg:px-6 lg:pb-8 lg:pt-6",
+                isDarkMode
+                  ? "lg:border-r lg:border-white/10 lg:bg-[#181817]"
+                  : "lg:border-r lg:border-outline-variant/15 lg:bg-surface",
+              )}
+            >
               <div className="mb-8 px-4">
-                <h2 className="font-headline text-3xl italic text-on-surface">
+                <h2 className={cn("font-headline text-3xl italic", isDarkMode ? "text-white" : "text-on-surface")}>
                   {sidebarMeta.title}
                 </h2>
-                <p className="mt-1 text-xs font-medium uppercase tracking-widest text-on-surface-variant">
+                <p className={cn("mt-1 text-xs font-medium uppercase tracking-widest", isDarkMode ? "text-white/60" : "text-on-surface-variant")}>
                   {sidebarMeta.subtitle}
                 </p>
               </div>
@@ -250,8 +292,12 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
                       cn(
                         "flex items-center gap-4 rounded-xl px-4 py-3.5 text-lg font-medium transition-all duration-200",
                         isActive
-                          ? "bg-surface-container-lowest text-[#D97757] shadow-sm"
-                          : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
+                          ? isDarkMode
+                            ? "bg-white/10 text-[#f2a27b] shadow-sm"
+                            : "bg-surface-container-lowest text-[#D97757] shadow-sm"
+                          : isDarkMode
+                            ? "text-white/72 hover:bg-white/6 hover:text-white"
+                            : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
                       )
                     }
                     end={
@@ -269,14 +315,18 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
                 ))}
               </nav>
 
-              <div className="mt-auto border-t border-outline-variant/10 pt-5">
+              <div className={cn("mt-auto pt-5", isDarkMode ? "border-t border-white/10" : "border-t border-outline-variant/10")}>
                 <NavLink
                   className={({ isActive }) =>
                     cn(
                       "flex w-full items-center gap-4 rounded-2xl px-4 py-3 transition-all duration-200",
                       isActive
-                        ? "bg-surface-container-lowest shadow-sm"
-                        : "hover:bg-[#d98d63]/16 hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
+                        ? isDarkMode
+                          ? "bg-white/10 shadow-sm"
+                          : "bg-surface-container-lowest shadow-sm"
+                        : isDarkMode
+                          ? "hover:bg-white/6"
+                          : "hover:bg-[#d98d63]/16 hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
                     )
                   }
                   to={profileRoute}
@@ -288,20 +338,30 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
                       src={profileImage}
                     />
                   ) : (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#d98d63]/20 text-lg font-semibold text-[#a86446] ring-1 ring-outline-variant/20">
+                    <div className={cn(
+                      "flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold ring-1",
+                      isDarkMode
+                        ? "bg-[#d98d63]/25 text-[#ffd8c4] ring-white/15"
+                        : "bg-[#d98d63]/20 text-[#a86446] ring-outline-variant/20",
+                    )}>
                       {profileInitial}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-semibold text-on-surface">
+                    <p className={cn("truncate text-base font-semibold", isDarkMode ? "text-white" : "text-on-surface")}>
                       {profileName}
                     </p>
-                    <p className="truncate text-sm text-on-surface-variant">
+                    <p className={cn("truncate text-sm", isDarkMode ? "text-white/60" : "text-on-surface-variant")}>
                       {profileHandle}
                     </p>
                   </div>
                   <button
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-on-surface-variant transition-all duration-200 hover:bg-[#d98d63]/22 hover:text-[#a86446]"
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200",
+                      isDarkMode
+                        ? "text-white/70 hover:bg-white/8 hover:text-white"
+                        : "text-on-surface-variant hover:bg-[#d98d63]/22 hover:text-[#a86446]",
+                    )}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -320,10 +380,10 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
           )}
 
           <section className="mb-10">
-            <p className="mb-2 text-xs font-bold uppercase tracking-widest text-[#D97757]">
+            <p className={cn("mb-2 text-xs font-bold uppercase tracking-widest", isDarkMode ? "text-[#f2a27b]" : "text-[#D97757]")}>
               {subtitle}
             </p>
-            <h1 className="font-headline text-4xl font-bold tracking-tight text-on-surface lg:text-5xl">
+            <h1 className={cn("font-headline text-4xl font-bold tracking-tight lg:text-5xl", isDarkMode ? "text-white" : "text-on-surface")}>
               {title}
             </h1>
           </section>
@@ -368,14 +428,17 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
       )}
 
       {user && (
-        <nav className="hide-scrollbar glass-panel fixed bottom-0 left-0 right-0 z-50 flex items-center gap-4 overflow-x-auto border-t border-outline-variant/10 px-4 py-3 lg:hidden">
+        <nav className={cn(
+          "hide-scrollbar glass-panel fixed bottom-0 left-0 right-0 z-50 flex items-center gap-4 overflow-x-auto border-t px-4 py-3 lg:hidden",
+          isDarkMode ? "border-white/10 bg-[#181817]/95" : "border-outline-variant/10",
+        )}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               className={({ isActive }) =>
                 cn(
                   "flex min-w-[72px] flex-col items-center gap-1",
-                  isActive ? "text-[#D97757]" : "text-on-surface-variant",
+                  isActive ? "text-[#D97757]" : isDarkMode ? "text-white/65" : "text-on-surface-variant",
                 )
               }
               to={item.to}
@@ -390,6 +453,6 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
           ))}
         </nav>
       )}
-    </div>
+      </div>
   );
 }

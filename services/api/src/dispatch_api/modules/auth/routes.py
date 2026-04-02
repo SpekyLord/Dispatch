@@ -35,6 +35,38 @@ def _issue_offline_token(
     )
 
 
+def _require_supabase_auth_config() -> None:
+    settings = current_app.config["SETTINGS"]
+    missing = settings.missing_supabase_keys
+    if not missing:
+        return
+    raise ApiError(
+        "Supabase auth is not configured. Check services/api/.env and confirm the Supabase project is active.",
+        code="supabase_config_missing",
+        details={"missing_env": missing},
+        status_code=HTTPStatus.BAD_REQUEST,
+    )
+
+
+# Normalize the upstream Supabase payload once so web and mobile see the
+# same error.code/error.message pair when signup is rejected.
+def _extract_supabase_error(error: dict | None) -> tuple[str, str, dict]:
+    payload = error or {}
+    code = (
+        payload.get("code")
+        or payload.get("error_code")
+        or payload.get("error")
+        or "registration_failed"
+    )
+    message = (
+        payload.get("msg")
+        or payload.get("message")
+        or payload.get("error_description")
+        or "Registration failed."
+    )
+    return str(code), str(message), payload
+
+
 @blueprint.post("/register")
 def register():
     """Create a new citizen or department account and return the access token."""
@@ -54,6 +86,7 @@ def register():
     if len(password) < 6:
         raise ApiError("Password must be at least 6 characters.", code="validation_error")
 
+    _require_supabase_auth_config()
     client = current_app.extensions["supabase_client"]
 
     # Create user in Supabase Auth (role stored in user_metadata for JWT access)
@@ -64,13 +97,20 @@ def register():
     )
 
     if "error" in result:
-        err = result["error"]
-        msg = err.get("msg") or err.get("message") or "Registration failed."
-        raise ApiError(msg, code="registration_failed", status_code=HTTPStatus.BAD_REQUEST)
+        code, message, details = _extract_supabase_error(result.get("error"))
+        raise ApiError(
+            message,
+            code=code,
+            details={"supabase_error": details},
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
 
     auth_user = result.get("user") or result
     user_id = auth_user.get("id")
     access_token = result.get("access_token") or (result.get("session") or {}).get("access_token")
+    refresh_token = result.get("refresh_token") or (result.get("session") or {}).get(
+        "refresh_token"
+    )
 
     if not user_id:
         raise ApiError("Registration failed.", code="registration_failed")
@@ -134,6 +174,7 @@ def register():
                 },
                 "department": dept_data,
                 "access_token": access_token,
+                "refresh_token": refresh_token,
                 "offline_verification_token": _issue_offline_token(
                     user_id=user_id,
                     role=role,
@@ -155,6 +196,7 @@ def login():
     if not email or not password:
         raise ApiError("Email and password are required.", code="validation_error")
 
+    _require_supabase_auth_config()
     client = current_app.extensions["supabase_client"]
     result = client.sign_in(email=email, password=password)
 
@@ -232,6 +274,7 @@ def refresh():
     if not refresh_token:
         raise ApiError("Refresh token is required.", code="validation_error")
 
+    _require_supabase_auth_config()
     client = current_app.extensions["supabase_client"]
     result = client.refresh_session(refresh_token=refresh_token)
 

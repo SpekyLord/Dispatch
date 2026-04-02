@@ -1,5 +1,5 @@
-// Register screen â€” citizen or department account creation.
-// Department fields shown conditionally when role = 'department'.
+// Register screen - citizen or department account creation.
+// Department fields remain conditional when role = 'department'.
 
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
@@ -78,185 +78,223 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
           children: [
-            const SizedBox(height: 40),
-            Text(
-              'DISPATCH',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: const Color(0xFFE05A2B),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.0,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Create an account',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 24),
-            if (_error != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFFA14B2F),
+                    Color(0xFF7B3A25),
+                    Color(0xFF425E72),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Colors.red.shade700, fontSize: 14),
-                ),
+                borderRadius: BorderRadius.circular(24),
               ),
-            // Role selector
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('Citizen'),
-                    selected: _role == 'citizen',
-                    onSelected: (_) => setState(() => _role = 'citizen'),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DISPATCH',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Text('Department'),
-                    selected: _role == 'department',
-                    onSelected: (_) => setState(() => _role = 'department'),
+                  SizedBox(height: 14),
+                  Text(
+                    'Create a field-ready account.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      height: 1.05,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _fullNameController,
-              decoration: const InputDecoration(
-                labelText: 'Full name',
-                border: OutlineInputBorder(),
+                  SizedBox(height: 10),
+                  Text(
+                    'Citizens can report emergencies immediately, while departments can submit their verification profile from the same mobile flow.',
+                    style: TextStyle(color: Color(0xFFF9EEE9), height: 1.45),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password (min 6 characters)',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            if (_role == 'department') ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+            const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'DEPARTMENT DETAILS',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        letterSpacing: 1.2,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black54,
-                      ),
+                      'Register',
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _orgNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Organization name *',
-                        border: OutlineInputBorder(),
-                      ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose your role and complete the matching profile fields.',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _deptType,
-                      decoration: const InputDecoration(
-                        labelText: 'Department type',
-                        border: OutlineInputBorder(),
+                    const SizedBox(height: 18),
+                    if (_error != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1EB),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: Color(0xFFA14B2F)),
+                        ),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'fire',
-                          child: Text('Fire (BFP)'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Citizen'),
+                            selected: _role == 'citizen',
+                            onSelected: (_) =>
+                                setState(() => _role = 'citizen'),
+                          ),
                         ),
-                        DropdownMenuItem(
-                          value: 'police',
-                          child: Text('Police (PNP)'),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Department'),
+                            selected: _role == 'department',
+                            onSelected: (_) =>
+                                setState(() => _role = 'department'),
+                          ),
                         ),
-                        DropdownMenuItem(
-                          value: 'medical',
-                          child: Text('Medical'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'disaster',
-                          child: Text('MDRRMO'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'rescue',
-                          child: Text('Rescue'),
-                        ),
-                        DropdownMenuItem(value: 'other', child: Text('Other')),
                       ],
-                      onChanged: (v) => setState(() => _deptType = v ?? 'fire'),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     TextField(
-                      controller: _contactController,
-                      decoration: const InputDecoration(
-                        labelText: 'Contact number',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.phone,
+                      controller: _fullNameController,
+                      decoration: const InputDecoration(labelText: 'Full name'),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: _addressController,
+                      controller: _emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _passwordController,
                       decoration: const InputDecoration(
-                        labelText: 'Address',
-                        border: OutlineInputBorder(),
+                        labelText: 'Password (min 6 characters)',
+                      ),
+                      obscureText: true,
+                    ),
+                    if (_role == 'department') ...[
+                      const SizedBox(height: 18),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7EADF),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Department details',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _orgNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Organization name *',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              initialValue: _deptType,
+                              decoration: const InputDecoration(
+                                labelText: 'Department type',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'fire',
+                                  child: Text('Fire (BFP)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'police',
+                                  child: Text('Police (PNP)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'medical',
+                                  child: Text('Medical'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'disaster',
+                                  child: Text('MDRRMO'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'rescue',
+                                  child: Text('Rescue'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'other',
+                                  child: Text('Other'),
+                                ),
+                              ],
+                              onChanged: (value) =>
+                                  setState(() => _deptType = value ?? 'fire'),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _contactController,
+                              decoration: const InputDecoration(
+                                labelText: 'Contact number',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _addressController,
+                              decoration: const InputDecoration(
+                                labelText: 'Address',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _areaController,
+                              decoration: const InputDecoration(
+                                labelText: 'Area of responsibility',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: _loading ? null : _handleRegister,
+                      child: Text(
+                        _loading ? 'Creating account...' : 'Create account',
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _areaController,
-                      decoration: const InputDecoration(
-                        labelText: 'Area of responsibility',
-                        border: OutlineInputBorder(),
-                      ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: widget.onSwitchToLogin,
+                      child: const Text('Already have an account? Sign in'),
                     ),
                   ],
                 ),
               ),
-            ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _loading ? null : _handleRegister,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-              ),
-              child: Text(_loading ? 'Creating account...' : 'Create account'),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: widget.onSwitchToLogin,
-              child: const Text('Already have an account? Sign in'),
             ),
           ],
         ),

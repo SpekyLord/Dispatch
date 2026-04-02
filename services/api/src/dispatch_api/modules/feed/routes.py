@@ -73,7 +73,9 @@ def toggle_feed_reaction(post_id: str):
 def delete_feed_post(post_id: str):
     user = get_current_user()
     if user.role != "department":
-        return jsonify({"error": {"message": "Only department users can delete posts."}}), HTTPStatus.FORBIDDEN
+        return jsonify(
+            {"error": {"message": "Only department users can delete posts."}}
+        ), HTTPStatus.FORBIDDEN
 
     department_service = _department_service()
     department = department_service.get_department_for_user(user.id)
@@ -87,7 +89,9 @@ def delete_feed_post(post_id: str):
 def update_feed_post(post_id: str):
     user = get_current_user()
     if user.role != "department":
-        return jsonify({"error": {"message": "Only department users can edit posts."}}), HTTPStatus.FORBIDDEN
+        return jsonify(
+            {"error": {"message": "Only department users can edit posts."}}
+        ), HTTPStatus.FORBIDDEN
 
     department_service = _department_service()
     department = department_service.get_department_for_user(user.id)
@@ -103,3 +107,4 @@ def update_feed_post(post_id: str):
         location=(body.get("location") or "").strip(),
     )
     return jsonify({"post": post}), HTTPStatus.OK
+

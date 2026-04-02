@@ -29,10 +29,12 @@ class SurvivorCompassScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialTargetMessageId,
     this.showMiniMap = true,
+    this.allowResolve = true,
   });
 
   final String? initialTargetMessageId;
   final bool showMiniMap;
+  final bool allowResolve;
 
   @override
   ConsumerState<SurvivorCompassScreen> createState() =>
@@ -489,12 +491,20 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
                 ),
               ],
               const SizedBox(height: 18),
-              _ResolveSignalCard(
-                controller: _resolutionController,
-                onResolve: _resolving ? null : () => _markLocated(target),
-                resolving: _resolving,
-                target: target,
-              ),
+              if (widget.allowResolve)
+                _ResolveSignalCard(
+                  controller: _resolutionController,
+                  onResolve: _resolving ? null : () => _markLocated(target),
+                  resolving: _resolving,
+                  target: target,
+                )
+              else
+                const _InfoCard(
+                  icon: Icons.explore,
+                  title: 'Locator only',
+                  body:
+                      'This view keeps the direction arrow, distance estimate, and search inset available without exposing responder-only resolve actions.',
+                ),
             ],
             const SizedBox(height: 18),
             _TargetBoard(
@@ -1448,6 +1458,7 @@ class _TargetBoard extends StatelessWidget {
     return '${diff.inHours}h ago';
   }
 }
+
 
 
 

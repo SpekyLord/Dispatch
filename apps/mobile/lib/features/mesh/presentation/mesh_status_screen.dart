@@ -4,6 +4,7 @@ import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,9 +46,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
 
   Future<void> _hydrateSignals({bool silent = false}) async {
     final session = ref.read(sessionControllerProvider);
-    final role = session.role;
-    if (session.accessToken == null ||
-        (role != AppRole.department && role != AppRole.municipality)) {
+    if (session.accessToken == null) {
       return;
     }
 
@@ -93,10 +92,30 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
   }
 
   void _openCompass([String? messageId]) {
+    final allowResolve =
+        ref.read(sessionControllerProvider).role != AppRole.citizen;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            SurvivorCompassScreen(initialTargetMessageId: messageId),
+        builder: (_) => SurvivorCompassScreen(
+          initialTargetMessageId: messageId,
+          allowResolve: allowResolve,
+        ),
+      ),
+    );
+  }
+
+  void _openPeopleMap() {
+    final session = ref.read(sessionControllerProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MeshPeopleMapScreen(
+          title: 'People & Mesh Map',
+          subtitle: session.role == AppRole.citizen
+              ? 'Citizen visibility into live people pins and survivor signals'
+              : 'Responder visibility into live people pins and survivor signals',
+          allowResolveActions: session.role != AppRole.citizen,
+          allowCompassActions: true,
+        ),
       ),
     );
   }
@@ -109,13 +128,9 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
     final canEnableSarMode =
         session.role == AppRole.department &&
         session.department?.verificationStatus == 'approved';
-    final canReviewSignals =
-        session.role == AppRole.department ||
-        session.role == AppRole.municipality;
+    final canReviewSignals = session.accessToken != null;
     final canOpenCompass =
-        canEnableSarMode &&
-        sarState.isEnabled &&
-        sarState.activeSignals.isNotEmpty;
+        canReviewSignals && sarState.activeSignals.isNotEmpty;
 
     return Scaffold(
       backgroundColor: _warmBackground,
@@ -288,6 +303,8 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                       }
                     },
                   ),
+                  const SizedBox(height: 18),
+                  _PeopleMapPanel(onOpenMap: _openPeopleMap),
                   const SizedBox(height: 18),
                   _SarModePanel(
                     activeTarget: sarState.activeTarget,
@@ -617,6 +634,67 @@ class _DiscoveryCard extends StatelessWidget {
   }
 }
 
+class _PeopleMapPanel extends StatelessWidget {
+  const _PeopleMapPanel({required this.onOpenMap});
+
+  final VoidCallback onOpenMap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _warmPanel,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _warmBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7EADF),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.map_outlined, color: _warmAccent),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'People & mesh map',
+                  style: TextStyle(
+                    color: _deepText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Open the shared mobile map to see people pins, mesh nodes, and survivor signals in one place.',
+                  style: TextStyle(color: _mutedText, height: 1.45),
+                ),
+              ],
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: onOpenMap,
+            style: FilledButton.styleFrom(
+              backgroundColor: _warmAccent,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Open'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SarModePanel extends StatelessWidget {
   const _SarModePanel({
     required this.activeTarget,
@@ -699,7 +777,7 @@ class _SarModePanel extends StatelessWidget {
             canEnableSarMode
                 ? 'Enable passive sensing, review relayed survivor signals, and jump into compass guidance from the same responder workflow.'
                 : canReviewSignals
-                ? 'Only verified department responders can enable passive sensing, but departments and municipalities can still review synced survivor signals here.'
+                ? 'Only verified department responders can enable passive sensing, but citizens, departments, and municipalities can still review synced survivor signals here.'
                 : 'SAR controls stay locked for non-responder accounts.',
             style: const TextStyle(color: _mutedText, height: 1.45),
           ),
@@ -1194,3 +1272,4 @@ class _EmptyPanel extends StatelessWidget {
     );
   }
 }
+

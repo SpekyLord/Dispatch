@@ -1,5 +1,6 @@
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
+import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/sar_platform_service.dart';
@@ -9,10 +10,17 @@ final meshInboxStorageProvider = Provider<MeshInboxStorage>((ref) {
   return MeshInboxStorage();
 });
 
+final meshPlatformServiceProvider = Provider<MeshPlatformService>((ref) {
+  final service = MethodChannelMeshPlatformService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 final meshTransportProvider = Provider<MeshTransportService>((ref) {
   final transport = MeshTransportService(
     inboxStorage: ref.read(meshInboxStorageProvider),
     locationService: ref.read(locationServiceProvider),
+    platform: ref.read(meshPlatformServiceProvider),
   );
   ref.onDispose(transport.dispose);
   return transport;
@@ -32,3 +40,4 @@ final sarModeControllerProvider =
         platform: ref.read(sarPlatformServiceProvider),
       );
     });
+

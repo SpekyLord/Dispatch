@@ -8,7 +8,9 @@ import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_scree
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
@@ -71,6 +73,31 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
             onPressed: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const MeshStatusScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.map_outlined),
+            tooltip: 'People map',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const MeshPeopleMapScreen(
+                  title: 'People & Mesh Map',
+                  subtitle:
+                      'Citizen visibility into people pins and survivor signals',
+                  allowResolveActions: false,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.explore_outlined),
+            tooltip: 'Survivor locator',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SurvivorCompassScreen(
+                  allowResolve: false,
+                ),
+              ),
+            ),
           ),
           Stack(
             alignment: Alignment.center,
@@ -249,3 +276,4 @@ class _UnreadBadge extends StatelessWidget {
     );
   }
 }
+

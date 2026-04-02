@@ -6,7 +6,9 @@ import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_scree
 import 'package:dispatch_mobile/features/department/presentation/department_assessment_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_board_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
@@ -474,6 +476,43 @@ class _ApprovedView extends ConsumerWidget {
         const SizedBox(height: 8),
         Card(
           child: ListTile(
+            leading: Icon(Icons.map_outlined, color: Colors.green.shade700),
+            title: const Text('People & Mesh Map'),
+            subtitle: const Text(
+              'See live people pins, mesh nodes, and survivor signals.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const MeshPeopleMapScreen(
+                  title: 'People & Mesh Map',
+                  subtitle:
+                      'Department visibility into people pins and survivor signals',
+                  allowResolveActions: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: Icon(Icons.explore, color: Colors.orange.shade700),
+            title: const Text('Survivor Locator'),
+            subtitle: const Text(
+              'Track direction and estimated distance to a selected signal.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SurvivorCompassScreen(),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
             leading: Icon(Icons.sos, color: Colors.red.shade700),
             title: Text(strings.emergencySos),
             subtitle: Text(strings.emergencySosSubtitle),
@@ -543,3 +582,4 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
+

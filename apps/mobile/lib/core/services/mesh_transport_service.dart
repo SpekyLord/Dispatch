@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
+import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
 
 enum MeshNodeRole { origin, relay, gateway }
 
@@ -350,14 +351,17 @@ class MeshTransportService {
   MeshTransportService({
     MeshInboxStorage? inboxStorage,
     LocationService? locationService,
+    MeshPlatformService? platform,
     bool automaticLocationBeaconing = true,
   }) : _inboxStorage = inboxStorage,
        _locationService = locationService ?? LocationService(),
+       _platform = platform,
        _automaticLocationBeaconing = automaticLocationBeaconing,
        _localDeviceId = _generateUuid();
 
   final MeshInboxStorage? _inboxStorage;
   final LocationService _locationService;
+  final MeshPlatformService? _platform;
   final bool _automaticLocationBeaconing;
   final String _localDeviceId;
   MeshNodeRole _role = MeshNodeRole.origin;
@@ -378,6 +382,11 @@ class MeshTransportService {
   Timer? _locationBeaconTimer;
   Duration? _activeLocationBeaconInterval;
   bool _hydratedInbox = false;
+  StreamSubscription<MeshPlatformEvent>? _platformSubscription;
+  MeshPlatformCapabilities _platformCapabilities =
+      MeshPlatformCapabilities.unsupported(
+        'Native mesh discovery bridge is unavailable on this build.',
+      );
 
   MeshNodeRole get role => _role;
   List<MeshPeer> get peers => List.unmodifiable(_peers);
@@ -392,6 +401,8 @@ class MeshTransportService {
   String get localDeviceId => _localDeviceId;
   bool get isMeshOnlyState => !_hasInternet;
   Duration? get activeLocationBeaconInterval => _activeLocationBeaconInterval;
+  MeshPlatformCapabilities get platformCapabilities => _platformCapabilities;
+  bool get hasNativeDiscovery => _platformCapabilities.bleDiscoverySupported;
   List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
   int get unreadMeshMessageCount =>
       _inbox.where((item) => !item.isRead && item.itemType == 'mesh_message').length;
@@ -448,6 +459,8 @@ class MeshTransportService {
 
   Future<void> initialize() async {
     _role = _hasInternet ? MeshNodeRole.gateway : MeshNodeRole.origin;
+    _bindPlatformEvents();
+    await _refreshPlatformCapabilities();
     await _hydrateInbox();
     _syncLocationBeaconSchedule();
   }
@@ -478,12 +491,41 @@ class MeshTransportService {
     await storage.save(_inbox.map((item) => item.toJson()).toList());
   }
 
+  void _bindPlatformEvents() {
+    if (_platform == null || _platformSubscription != null) {
+      return;
+    }
+    _platformSubscription = _platform.events.listen((event) {
+      switch (event.type) {
+        case MeshPlatformEventType.peerSeen:
+          final peer = event.peer;
+          if (peer == null) {
+            return;
+          }
+          onPeerDiscovered(peer.endpointId, peer.deviceName);
+      }
+    });
+  }
+
+  Future<void> _refreshPlatformCapabilities() async {
+    if (_platform == null) {
+      return;
+    }
+    _platformCapabilities = await _platform.getCapabilities();
+  }
+
   Future<void> startDiscovery() async {
     _isDiscovering = true;
+    await _refreshPlatformCapabilities();
+    await _platform?.startDiscovery(
+      localDeviceId: _localDeviceId,
+      isGateway: _role == MeshNodeRole.gateway,
+    );
   }
 
   Future<void> stopDiscovery() async {
     _isDiscovering = false;
+    await _platform?.stopDiscovery();
   }
 
   void setConnectivity(bool hasInternet) {
@@ -493,6 +535,14 @@ class MeshTransportService {
       _rehydratePendingInboxPackets();
     } else if (!hasInternet && _role == MeshNodeRole.gateway) {
       _role = MeshNodeRole.origin;
+    }
+    if (_isDiscovering && _platform != null) {
+      unawaited(
+        _platform.startDiscovery(
+          localDeviceId: _localDeviceId,
+          isGateway: _role == MeshNodeRole.gateway,
+        ),
+      );
     }
     _syncLocationBeaconSchedule();
   }
@@ -1120,6 +1170,7 @@ class MeshTransportService {
 
   void dispose() {
     _locationBeaconTimer?.cancel();
+    unawaited(_platformSubscription?.cancel());
     _packetController.close();
   }
 
@@ -1134,3 +1185,5 @@ class MeshTransportService {
         '${hex.substring(20)}';
   }
 }
+
+

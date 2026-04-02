@@ -41,7 +41,10 @@ def _require_supabase_auth_config() -> None:
     if not missing:
         return
     raise ApiError(
-        "Supabase auth is not configured. Check services/api/.env and confirm the Supabase project is active.",
+        (
+            "Supabase auth is not configured. Check services/api/.env and "
+            "confirm the Supabase project is active."
+        ),
         code="supabase_config_missing",
         details={"missing_env": missing},
         status_code=HTTPStatus.BAD_REQUEST,
@@ -406,3 +409,6 @@ def me():
             ),
         }
     )
+
+
+

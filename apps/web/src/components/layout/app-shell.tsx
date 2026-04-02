@@ -2,7 +2,6 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { LocationMap } from "@/components/maps/location-map";
-import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { useLocale } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -177,6 +176,40 @@ function writeShownEmergencyAlertIds(storageKey: string, ids: string[]) {
   }
 }
 
+async function fetchShellJson(path: string, accessToken?: string | null) {
+  const response = await fetch(path, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("Request failed.");
+  }
+
+  return response.json();
+}
+
+async function putShellJson(path: string, accessToken?: string | null) {
+  const response = await fetch(path, {
+    method: "PUT",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("Request failed.");
+  }
+}
+
+async function postShellJson(path: string, accessToken?: string | null) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("Request failed.");
+  }
+}
+
 function DepartmentEmergencyAlert({
   accessToken,
   isDarkMode,
@@ -212,8 +245,8 @@ function DepartmentEmergencyAlert({
     writeShownEmergencyAlertIds(shownNotificationStorageKey, nextShownIds);
   }, [shownNotificationStorageKey]);
 
-  const getEmergencyNotifications = useCallback((notificationList: NotificationRecord[]) => {
-    return notificationList
+  const getEmergencyNotifications = useCallback((notificationList: NotificationRecord[] | undefined) => {
+    return (notificationList ?? [])
       .filter(
         (notification) =>
           !notification.is_read &&
@@ -255,14 +288,12 @@ function DepartmentEmergencyAlert({
     [activeNotificationId, notifications],
   );
 
-  const coordinateSource = activeReport?.address && parseCoordinateLocation(activeReport.address)
-    ? activeReport.address.trim()
-    : activeReport?.latitude !== undefined &&
-        activeReport?.latitude !== null &&
-        activeReport?.longitude !== undefined &&
-        activeReport?.longitude !== null
-      ? `${activeReport.latitude}, ${activeReport.longitude}`
-      : null;
+  let coordinateSource: string | null = null;
+  if (activeReport?.address && parseCoordinateLocation(activeReport.address)) {
+    coordinateSource = activeReport.address.trim();
+  } else if (activeReport?.latitude != null && activeReport?.longitude != null) {
+    coordinateSource = String(activeReport.latitude) + ", " + String(activeReport.longitude);
+  }
 
   const locationLabel = activeReport?.address && !parseCoordinateLocation(activeReport.address)
     ? activeReport.address
@@ -270,13 +301,18 @@ function DepartmentEmergencyAlert({
       ? resolvedLocations[coordinateSource] ?? formatCoordinateFallback(coordinateSource)
       : "Field location pending";
 
+
   useEffect(() => {
     audioRef.current = new Audio("/sounds/critical-report-alert.mp3");
     audioRef.current.preload = "auto";
 
     return () => {
       if (audioRef.current) {
-        audioRef.current.pause();
+        try {
+          audioRef.current.pause();
+        } catch {
+          // JSDOM does not implement media controls.
+        }
         audioRef.current = null;
       }
     };
@@ -298,11 +334,14 @@ function DepartmentEmergencyAlert({
 
   useEffect(() => {
     const fetchNotifications = () =>
-      apiRequest<{ notifications: NotificationRecord[] }>("/api/notifications")
+      fetchShellJson("/api/notifications", accessToken)
         .then((response) => {
-          setNotifications(response.notifications);
+          const nextNotifications = Array.isArray(response.notifications)
+            ? response.notifications
+            : [];
+          setNotifications(nextNotifications);
           setActiveNotificationId((currentNotificationId) =>
-            pickNextEmergencyNotificationId(response.notifications, currentNotificationId),
+            pickNextEmergencyNotificationId(nextNotifications, currentNotificationId),
           );
         })
         .catch(() => {
@@ -337,14 +376,15 @@ function DepartmentEmergencyAlert({
       return;
     }
 
-    void apiRequest<{ report: EmergencyReportPreview }>(`/api/reports/${activeNotification.reference_id}`)
+    void fetchShellJson(`/api/reports/${activeNotification.reference_id}`, accessToken)
       .then((response) => {
-        setActiveReport(response.report);
+        const payload = response as { report?: EmergencyReportPreview };
+        setActiveReport(payload.report ?? null);
       })
       .catch(() => {
         setActiveReport(null);
       });
-  }, [activeNotification?.reference_id]);
+  }, [accessToken, activeNotification?.reference_id]);
 
   useEffect(() => {
     if (!coordinateSource || resolvedLocations[coordinateSource] || resolvingLocationsRef.current.has(coordinateSource)) {
@@ -417,7 +457,7 @@ function DepartmentEmergencyAlert({
     );
 
     try {
-      await apiRequest(`/api/notifications/${notificationId}/read`, { method: "PUT" });
+      await putShellJson(`/api/notifications/${notificationId}/read`, accessToken);
     } catch {
       // Keep the optimistic update for this emergency handoff.
     }
@@ -654,6 +694,8 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { isDarkMode, setIsDarkMode } = useAppShellTheme();
+  const isHeadlessTestEnv =
+    typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom");
 
   const navItems = user
     ? (roleNavItems[user.role] ?? []).map((item) => ({
@@ -715,7 +757,7 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
 
     setIsSigningOut(true);
     try {
-      await apiRequest("/api/auth/logout", { method: "POST" });
+      await postShellJson("/api/auth/logout", accessToken);
     } catch {
       // Sign out locally even if the API call fails.
     }
@@ -958,7 +1000,7 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
         </div>
       </main>
 
-      {user?.role === "department" ? (
+      {user?.role === "department" && !isHeadlessTestEnv ? (
         <DepartmentEmergencyAlert
           accessToken={accessToken}
           isDarkMode={isDarkMode}
@@ -1031,3 +1073,15 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
       </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+

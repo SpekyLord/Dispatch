@@ -1,6 +1,9 @@
+import 'dart:async';
+
 // Phase 4 mobile tests - offline queue, dedup, hop limit, token rejection.
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +13,112 @@ class _FakeLocationService extends LocationService {
 
   @override
   Stream<LocationData> watchPosition() => const Stream<LocationData>.empty();
+}
+
+
+class _FakeMeshPlatformService implements MeshPlatformService {
+  final StreamController<MeshPlatformEvent> _controller =
+      StreamController<MeshPlatformEvent>.broadcast();
+  final List<Map<String, dynamic>> sentPackets = [];
+  final List<List<String>> exclusionHistory = [];
+  bool started = false;
+
+  @override
+  Stream<MeshPlatformEvent> get events => _controller.stream;
+
+  @override
+  Future<MeshPlatformCapabilities> getCapabilities() async {
+    return const MeshPlatformCapabilities(
+      bleDiscoverySupported: true,
+      bleAdvertisingSupported: true,
+      wifiDirectSupported: true,
+      bleNote: 'ready',
+      wifiDirectNote: 'ready',
+    );
+  }
+
+  @override
+  Future<bool> startDiscovery({
+    required String localDeviceId,
+    required bool isGateway,
+  }) async {
+    started = true;
+    return true;
+  }
+
+  @override
+  Future<MeshPacketSendResult> sendPacket({
+    required Map<String, dynamic> packet,
+    required String preferredTransport,
+    List<String> excludeEndpointIds = const [],
+  }) async {
+    sentPackets.add(packet);
+    exclusionHistory.add(List<String>.from(excludeEndpointIds));
+    return const MeshPacketSendResult(
+      sentEndpointIds: ['peer-b'],
+      attemptedPeerCount: 1,
+      transport: 'wifi_direct',
+    );
+  }
+
+  void emitTransportState({
+    required int connectedPeerCount,
+    String? activeTransport = 'wifi_direct',
+    String? note,
+  }) {
+    _controller.add(
+      MeshPlatformEvent.fromPlatformMap({
+        'type': 'transport_state',
+        'connectedPeerCount': connectedPeerCount,
+        'activeTransport': activeTransport,
+        'note': note,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  void emitPeer({
+    required String endpointId,
+    required String deviceName,
+    bool isConnected = true,
+  }) {
+    _controller.add(
+      MeshPlatformEvent.fromPlatformMap({
+        'type': 'peer_seen',
+        'endpointId': endpointId,
+        'deviceName': deviceName,
+        'supportsWifiDirect': true,
+        'isConnected': isConnected,
+        'transport': isConnected ? 'wifi_direct' : 'wifi_discovery',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  void emitInboundPacket(
+    Map<String, dynamic> packet, {
+    String sourceEndpointId = 'peer-a',
+  }) {
+    _controller.add(
+      MeshPlatformEvent.fromPlatformMap({
+        'type': 'packet_received',
+        'sourceEndpointId': sourceEndpointId,
+        'transport': 'wifi_direct',
+        'packet': packet,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
+  }
+
+  @override
+  Future<void> stopDiscovery() async {
+    started = false;
+  }
+
+  @override
+  void dispose() {
+    _controller.close();
+  }
 }
 
 void main() {
@@ -63,9 +172,14 @@ void main() {
 
   group('MeshTransportService', () {
     late MeshTransportService svc;
+    late _FakeMeshPlatformService platform;
 
     setUp(() {
-      svc = MeshTransportService(locationService: _FakeLocationService());
+      platform = _FakeMeshPlatformService();
+      svc = MeshTransportService(
+        locationService: _FakeLocationService(),
+        platform: platform,
+      );
     });
 
     tearDown(() {
@@ -228,6 +342,65 @@ void main() {
       svc.stopSosBeaconBroadcast();
       expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
     });
+
+
+    test('enqueue relays packets over connected Wi-Fi Direct peers', () async {
+      await svc.initialize();
+      await svc.startDiscovery();
+      platform.emitTransportState(connectedPeerCount: 1);
+      await Future<void>.delayed(Duration.zero);
+
+      svc.enqueuePacket(
+        MeshTransportService.createMeshMessagePacket(
+          deviceId: 'device-c',
+          threadId: 'thread-1',
+          recipientScope: 'broadcast',
+          body: 'Medic team moving to zone 2.',
+          authorDisplayName: 'Responder Kai',
+          authorRole: 'department',
+        ),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(platform.sentPackets, isNotEmpty);
+      expect(platform.sentPackets.last['payloadType'], 'MESH_MESSAGE');
+      expect(svc.activeRelayTransport, 'wifi_direct');
+    });
+
+    test('transport state promotes an offline node into relay role', () async {
+      await svc.initialize();
+      await svc.startDiscovery();
+
+      platform.emitTransportState(connectedPeerCount: 2, note: 'relay ready');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(svc.role, MeshNodeRole.relay);
+      expect(svc.connectedRelayPeerCount, 2);
+      expect(svc.transportStatusNote, 'relay ready');
+    });
+
+    test('received packets are rebroadcast without echoing to the source peer', () async {
+      await svc.initialize();
+      await svc.startDiscovery();
+      platform.emitTransportState(connectedPeerCount: 2);
+      await Future<void>.delayed(Duration.zero);
+
+      platform.emitInboundPacket({
+        'messageId': 'relay-inbound',
+        'originDeviceId': 'other-dev',
+        'timestamp': '2026-03-31T00:00:00Z',
+        'hopCount': 0,
+        'maxHops': 7,
+        'payloadType': 'INCIDENT_REPORT',
+        'payload': {'description': 'Relayed warehouse fire'},
+        'signature': '',
+      });
+
+      await Future<void>.delayed(Duration.zero);
+      expect(platform.sentPackets.last['messageId'], 'relay-inbound');
+      expect(platform.sentPackets.last['hopCount'], 1);
+      expect(platform.exclusionHistory.last, contains('peer-a'));
+    });
   });
 
   group('Distress packet factory', () {
@@ -282,3 +455,4 @@ void main() {
     });
   });
 }
+

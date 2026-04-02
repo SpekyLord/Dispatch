@@ -105,14 +105,20 @@ class MeshPacket {
 
 class MeshPeer {
   final String endpointId;
-  final String deviceName;
-  final bool isGateway;
+  String deviceName;
+  bool isGateway;
+  bool supportsWifiDirect;
+  bool isConnected;
+  String? transport;
   DateTime lastSeen;
 
   MeshPeer({
     required this.endpointId,
     required this.deviceName,
     this.isGateway = false,
+    this.supportsWifiDirect = false,
+    this.isConnected = false,
+    this.transport,
     DateTime? lastSeen,
   }) : lastSeen = lastSeen ?? DateTime.now();
 }
@@ -373,9 +379,16 @@ class MeshTransportService {
   final Map<String, DeviceLocationTrailPoint> _lastSeenByDevice = {};
   final StreamController<MeshPacket> _packetController =
       StreamController<MeshPacket>.broadcast();
+  final Map<String, MeshPacket> _relayBacklog = {};
+  final Map<String, Set<String>> _relayRecipientsByMessage = {};
   DateTime? _lastSyncTime;
   bool _isDiscovering = false;
   bool _hasInternet = false;
+  bool _initialized = false;
+  bool _relayFlushInFlight = false;
+  int _connectedRelayPeerCount = 0;
+  String? _transportStatusNote;
+  String? _activeRelayTransport;
   bool _isSosBeaconBroadcasting = false;
   bool _sarModeEnabled = false;
   String? _sosBeaconDeviceId;
@@ -403,6 +416,9 @@ class MeshTransportService {
   Duration? get activeLocationBeaconInterval => _activeLocationBeaconInterval;
   MeshPlatformCapabilities get platformCapabilities => _platformCapabilities;
   bool get hasNativeDiscovery => _platformCapabilities.bleDiscoverySupported;
+  int get connectedRelayPeerCount => _connectedRelayPeerCount;
+  String? get transportStatusNote => _transportStatusNote;
+  String? get activeRelayTransport => _activeRelayTransport;
   List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
   int get unreadMeshMessageCount =>
       _inbox.where((item) => !item.isRead && item.itemType == 'mesh_message').length;
@@ -458,7 +474,11 @@ class MeshTransportService {
   }
 
   Future<void> initialize() async {
-    _role = _hasInternet ? MeshNodeRole.gateway : MeshNodeRole.origin;
+    if (_initialized) {
+      return;
+    }
+    _initialized = true;
+    _updateNodeRole();
     _bindPlatformEvents();
     await _refreshPlatformCapabilities();
     await _hydrateInbox();
@@ -502,7 +522,36 @@ class MeshTransportService {
           if (peer == null) {
             return;
           }
-          onPeerDiscovered(peer.endpointId, peer.deviceName);
+          onPeerDiscovered(
+            peer.endpointId,
+            peer.deviceName,
+            isGateway: peer.isGateway,
+            supportsWifiDirect: peer.supportsWifiDirect,
+            isConnected: peer.isConnected,
+            transport: peer.transport,
+          );
+        case MeshPlatformEventType.transportState:
+          final snapshot = event.transportState;
+          if (snapshot == null) {
+            return;
+          }
+          _connectedRelayPeerCount = snapshot.connectedPeerCount;
+          _transportStatusNote = snapshot.note;
+          _activeRelayTransport = snapshot.activeTransport;
+          _updateNodeRole();
+          if (snapshot.connectedPeerCount > 0) {
+            _scheduleRelayFlush();
+          }
+        case MeshPlatformEventType.packetReceived:
+          final inbound = event.packet;
+          if (inbound == null) {
+            return;
+          }
+          receivePacket(
+            MeshPacket.fromJson(inbound.packet),
+            sourceEndpointId: inbound.sourceEndpointId,
+            transport: inbound.transport,
+          );
       }
     });
   }
@@ -515,12 +564,14 @@ class MeshTransportService {
   }
 
   Future<void> startDiscovery() async {
+    await initialize();
     _isDiscovering = true;
     await _refreshPlatformCapabilities();
     await _platform?.startDiscovery(
       localDeviceId: _localDeviceId,
       isGateway: _role == MeshNodeRole.gateway,
     );
+    _scheduleRelayFlush();
   }
 
   Future<void> stopDiscovery() async {
@@ -530,12 +581,10 @@ class MeshTransportService {
 
   void setConnectivity(bool hasInternet) {
     _hasInternet = hasInternet;
-    if (hasInternet && _role != MeshNodeRole.gateway) {
-      _role = MeshNodeRole.gateway;
+    if (hasInternet) {
       _rehydratePendingInboxPackets();
-    } else if (!hasInternet && _role == MeshNodeRole.gateway) {
-      _role = MeshNodeRole.origin;
     }
+    _updateNodeRole();
     if (_isDiscovering && _platform != null) {
       unawaited(
         _platform.startDiscovery(
@@ -545,16 +594,23 @@ class MeshTransportService {
       );
     }
     _syncLocationBeaconSchedule();
+    _scheduleRelayFlush();
   }
 
   void enqueuePacket(MeshPacket packet) {
     _outboundQueue.add(packet);
     _seenMessageIds.add(packet.messageId);
+    _rememberForRelay(packet);
     _recordLocationTrail(packet);
     _recordPacketInInbox(packet, authoredLocally: true);
+    _scheduleRelayFlush(messageId: packet.messageId);
   }
 
-  bool receivePacket(MeshPacket packet) {
+  bool receivePacket(
+    MeshPacket packet, {
+    String? sourceEndpointId,
+    String? transport,
+  }) {
     if (_seenMessageIds.contains(packet.messageId)) {
       return false;
     }
@@ -572,9 +628,17 @@ class MeshTransportService {
       _outboundQueue.add(packet);
     }
 
+    _rememberForRelay(packet);
     _recordLocationTrail(packet);
     _recordPacketInInbox(packet, authoredLocally: false);
     _packetController.add(packet);
+    if (transport != null && transport.isNotEmpty) {
+      _activeRelayTransport = transport;
+    }
+    _scheduleRelayFlush(
+      messageId: packet.messageId,
+      excludeEndpointId: sourceEndpointId,
+    );
     return true;
   }
 
@@ -697,24 +761,63 @@ class MeshTransportService {
     }
   }
 
-  void onPeerDiscovered(String endpointId, String deviceName) {
+  void onPeerDiscovered(
+    String endpointId,
+    String deviceName, {
+    bool isGateway = false,
+    bool supportsWifiDirect = false,
+    bool isConnected = false,
+    String? transport,
+  }) {
     final existing = _peers.where((p) => p.endpointId == endpointId);
     if (existing.isNotEmpty) {
-      existing.first.lastSeen = DateTime.now();
+      final peer = existing.first;
+      peer
+        ..deviceName = deviceName
+        ..isGateway = isGateway
+        ..supportsWifiDirect = supportsWifiDirect
+        ..isConnected = isConnected
+        ..transport = transport
+        ..lastSeen = DateTime.now();
     } else {
-      _peers.add(MeshPeer(endpointId: endpointId, deviceName: deviceName));
+      _peers.add(
+        MeshPeer(
+          endpointId: endpointId,
+          deviceName: deviceName,
+          isGateway: isGateway,
+          supportsWifiDirect: supportsWifiDirect,
+          isConnected: isConnected,
+          transport: transport,
+        ),
+      );
+    }
+    _connectedRelayPeerCount = _peers.where((peer) => peer.isConnected).length;
+    if (transport != null && transport.isNotEmpty) {
+      _activeRelayTransport = transport;
+    }
+    _updateNodeRole();
+    if (isConnected) {
+      _scheduleRelayFlush();
     }
   }
 
   void pruneStalePeers() {
     final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
     _peers.removeWhere((p) => p.lastSeen.isBefore(cutoff));
+    _connectedRelayPeerCount = _peers.where((peer) => peer.isConnected).length;
+    _updateNodeRole();
   }
 
   void pruneStaleePeers() => pruneStalePeers();
 
   String transportForPacket(MeshPacket packet) {
-    return packet.requiresWifiDirect ? 'wifi_direct' : 'ble';
+    if (_platformCapabilities.wifiDirectSupported || _connectedRelayPeerCount > 0) {
+      return 'wifi_direct';
+    }
+    if (packet.requiresWifiDirect) {
+      return 'wifi_direct';
+    }
+    return hasNativeDiscovery ? 'ble_discovery' : 'queued';
   }
 
   void startSosBeaconBroadcast({required String deviceId}) {
@@ -732,6 +835,91 @@ class MeshTransportService {
   void setSarModeEnabled(bool enabled) {
     _sarModeEnabled = enabled;
     _syncLocationBeaconSchedule();
+  }
+
+  void _rememberForRelay(MeshPacket packet) {
+    _relayBacklog[packet.messageId] = MeshPacket.fromJson(packet.toJson());
+    if (_relayBacklog.length > 180) {
+      final oldestMessageId = _relayBacklog.values
+          .toList(growable: false)
+        ..sort((left, right) => left.timestamp.compareTo(right.timestamp));
+      if (oldestMessageId.isNotEmpty) {
+        final evicted = oldestMessageId.first.messageId;
+        _relayBacklog.remove(evicted);
+        _relayRecipientsByMessage.remove(evicted);
+      }
+    }
+  }
+
+  void _scheduleRelayFlush({
+    String? messageId,
+    String? excludeEndpointId,
+  }) {
+    if (_platform == null || !_isDiscovering) {
+      return;
+    }
+    unawaited(
+      _flushRelayBacklog(
+        messageId: messageId,
+        excludeEndpointId: excludeEndpointId,
+      ),
+    );
+  }
+
+  // Relay backlog keeps accepted packets available for newly connected peers without reprocessing them locally.
+  Future<void> _flushRelayBacklog({
+    String? messageId,
+    String? excludeEndpointId,
+  }) async {
+    if (_platform == null || _relayFlushInFlight || !_isDiscovering) {
+      return;
+    }
+    _relayFlushInFlight = true;
+    try {
+      final backlog = messageId == null
+          ? _relayBacklog.values.toList(growable: false)
+          : <MeshPacket>[
+              if (_relayBacklog[messageId] != null) _relayBacklog[messageId]!,
+            ];
+      backlog.sort(
+        (left, right) =>
+            _priorityFor(left.payloadType).compareTo(_priorityFor(right.payloadType)),
+      );
+
+      for (final packet in backlog) {
+        final excluded = {
+          ...(_relayRecipientsByMessage[packet.messageId] ?? const <String>{}),
+          if (excludeEndpointId != null && excludeEndpointId.isNotEmpty)
+            excludeEndpointId,
+        };
+        final result = await _platform.sendPacket(
+          packet: packet.toJson(),
+          preferredTransport: transportForPacket(packet),
+          excludeEndpointIds: excluded.toList(growable: false),
+        );
+        if (result.sentEndpointIds.isNotEmpty) {
+          _relayRecipientsByMessage
+              .putIfAbsent(packet.messageId, () => <String>{})
+              .addAll(result.sentEndpointIds);
+        }
+        if ((result.transport ?? '').isNotEmpty) {
+          _activeRelayTransport = result.transport;
+        }
+      }
+    } finally {
+      _relayFlushInFlight = false;
+      _updateNodeRole();
+    }
+  }
+
+  void _updateNodeRole() {
+    if (_hasInternet) {
+      _role = MeshNodeRole.gateway;
+      return;
+    }
+    final hasRelayLink =
+        _connectedRelayPeerCount > 0 || _peers.any((peer) => peer.isConnected);
+    _role = hasRelayLink ? MeshNodeRole.relay : MeshNodeRole.origin;
   }
 
   void _recordPacketInInbox(
@@ -1185,5 +1373,8 @@ class MeshTransportService {
         '${hex.substring(20)}';
   }
 }
+
+
+
 
 

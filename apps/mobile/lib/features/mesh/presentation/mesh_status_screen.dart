@@ -1193,7 +1193,9 @@ class _PeerBoard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          peer.isGateway ? 'Gateway peer' : 'Relay peer',
+                          peer.isConnected
+                              ? 'Connected ${peer.transport ?? 'relay'} peer'
+                              : (peer.isGateway ? 'Gateway peer' : 'Relay peer'),
                           style: const TextStyle(color: _mutedText),
                         ),
                       ],
@@ -1272,4 +1274,6 @@ class _EmptyPanel extends StatelessWidget {
     );
   }
 }
+
+
 

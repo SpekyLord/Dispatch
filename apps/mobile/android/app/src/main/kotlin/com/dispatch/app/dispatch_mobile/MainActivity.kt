@@ -11,6 +11,7 @@ import io.flutter.plugin.common.EventChannel
 
 class MainActivity : FlutterActivity() {
     private var sarPlatformBridge: SarPlatformBridge? = null
+    private var meshPlatformBridge: MeshPlatformBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -24,9 +25,14 @@ class MainActivity : FlutterActivity() {
         sarPlatformBridge = SarPlatformBridge(this, applicationContext).also {
             it.register(flutterEngine)
         }
+        meshPlatformBridge = MeshPlatformBridge(this, applicationContext).also {
+            it.register(flutterEngine)
+        }
     }
 
     override fun onDestroy() {
+        meshPlatformBridge?.dispose()
+        meshPlatformBridge = null
         sarPlatformBridge?.dispose()
         sarPlatformBridge = null
         super.onDestroy()
@@ -115,4 +121,3 @@ private class CompassHeadingStreamHandler(
         }
     }
 }
-

@@ -15,6 +15,14 @@ import 'package:dispatch_mobile/features/shared/presentation/notifications_scree
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+const _warmBackground = Color(0xFFFDF7F2);
+const _warmPanel = Color(0xFFFFF8F3);
+const _warmBorder = Color(0xFFE7D1C6);
+const _warmAccent = Color(0xFFA14B2F);
+const _coolAccent = Color(0xFF1695D3);
+const _deepText = Color(0xFF4E433D);
+const _mutedText = Color(0xFF7A6B63);
+
 class DepartmentHomeScreen extends ConsumerStatefulWidget {
   const DepartmentHomeScreen({super.key});
 
@@ -51,7 +59,10 @@ class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
+      backgroundColor: _warmBackground,
       appBar: AppBar(
+        backgroundColor: _warmBackground,
+        surfaceTintColor: Colors.transparent,
         title: Text(strings.departmentTitle),
         actions: [
           const LocaleActionButton(),
@@ -334,195 +345,369 @@ class _ApprovedView extends ConsumerWidget {
     final transport = ref.watch(meshTransportProvider);
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.green.shade100,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            strings.verified,
-            style: TextStyle(
-              color: Colors.green.shade800,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+            gradient: const LinearGradient(
+              colors: [Color(0xFFA14B2F), Color(0xFF7B3A25), Color(0xFF425E72)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x26131110),
+                blurRadius: 24,
+                offset: Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  strings.verified,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                dept.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  height: 1.05,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Run incident intake, publish advisories, track mesh movement, and jump into survivor guidance from the same mobile command surface.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.86),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _HeroChip(label: 'Mesh role', value: transport.role.name.toUpperCase()),
+                  _HeroChip(label: 'Relay peers', value: '${transport.connectedRelayPeerCount}'),
+                  _HeroChip(label: 'Queued sync', value: '${transport.queueSize}'),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          dept.name,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: _warmPanel,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: _warmBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Department profile',
+                style: TextStyle(
+                  color: _deepText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _DeptDetails(dept: dept, strings: strings),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        const Text(
+          'Quick actions',
+          style: TextStyle(
+            color: _deepText,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'These cards follow the same quick-action rhythm as the web dashboard, but stay tuned for thumb-first mobile use.',
+          style: TextStyle(color: _mutedText, height: 1.45),
         ),
         const SizedBox(height: 12),
-        _DeptDetails(dept: dept, strings: strings),
-        const SizedBox(height: 24),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.assignment),
-            title: Text(strings.incidentBoard),
-            subtitle: Text(strings.incidentBoardSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const DepartmentReportBoardScreen(),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.05,
+          children: [
+            _DepartmentActionCard(
+              icon: Icons.assignment,
+              accent: _coolAccent,
+              title: strings.incidentBoard,
+              body: strings.incidentBoardSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DepartmentReportBoardScreen(),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.campaign),
-            title: Text(strings.createPost),
-            subtitle: Text(strings.createPostSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const DepartmentCreatePostScreen(),
+            _DepartmentActionCard(
+              icon: Icons.campaign,
+              accent: _warmAccent,
+              title: strings.createPost,
+              body: strings.createPostSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DepartmentCreatePostScreen(),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.assessment),
-            title: Text(strings.damageAssessment),
-            subtitle: Text(strings.damageAssessmentSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const DepartmentAssessmentScreen(),
+            _DepartmentActionCard(
+              icon: Icons.assessment,
+              accent: const Color(0xFF397154),
+              title: strings.damageAssessment,
+              body: strings.damageAssessmentSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DepartmentAssessmentScreen(),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.newspaper),
-            title: Text(strings.communityFeed),
-            subtitle: Text(strings.communityFeedSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
+            _DepartmentActionCard(
+              icon: Icons.newspaper_outlined,
+              accent: const Color(0xFF7B5E57),
+              title: strings.communityFeed,
+              body: strings.communityFeedSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.notifications),
-            title: Text(strings.notifications),
-            subtitle: Text(strings.notificationsSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.forum_outlined),
-            title: Text(strings.offlineComms),
-            subtitle: Text(
-              transport.unreadMeshMessageCount > 0
+            _DepartmentActionCard(
+              icon: Icons.forum_outlined,
+              accent: _warmAccent,
+              title: strings.offlineComms,
+              body: transport.unreadMeshMessageCount > 0
                   ? strings.unreadMeshMessages(transport.unreadMeshMessageCount)
                   : strings.meshPostsSubtitle,
+              badgeLabel: transport.unreadMeshMessageCount > 0
+                  ? '${transport.unreadMeshMessageCount}'
+                  : null,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
+              ),
             ),
-            trailing: transport.unreadMeshMessageCount > 0
-                ? Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
+            _DepartmentActionCard(
+              icon: Icons.cell_tower,
+              accent: _coolAccent,
+              title: strings.meshSar,
+              body: transport.transportStatusNote ?? strings.meshSarSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
+              ),
+            ),
+            _DepartmentActionCard(
+              icon: Icons.map_outlined,
+              accent: const Color(0xFF397154),
+              title: 'People & Mesh Map',
+              body: 'See live people pins, mesh nodes, and survivor signals.',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MeshPeopleMapScreen(
+                    title: 'People & Mesh Map',
+                    subtitle:
+                        'Department visibility into people pins and survivor signals',
+                    allowResolveActions: true,
+                  ),
+                ),
+              ),
+            ),
+            _DepartmentActionCard(
+              icon: Icons.explore,
+              accent: const Color(0xFFD97757),
+              title: 'Survivor Locator',
+              body: 'Track direction and estimated distance to a selected signal.',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SurvivorCompassScreen(),
+                ),
+              ),
+            ),
+            _DepartmentActionCard(
+              icon: Icons.notifications_outlined,
+              accent: const Color(0xFF7B5E57),
+              title: strings.notifications,
+              body: strings.notificationsSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+              ),
+            ),
+            _DepartmentActionCard(
+              icon: Icons.sos,
+              accent: const Color(0xFFB3261E),
+              title: strings.emergencySos,
+              body: strings.emergencySosSubtitle,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SosScreen()),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _HeroChip extends StatelessWidget {
+  const _HeroChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 116),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.74),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepartmentActionCard extends StatelessWidget {
+  const _DepartmentActionCard({
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.body,
+    required this.onTap,
+    this.badgeLabel,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final String title;
+  final String body;
+  final String? badgeLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: _warmPanel,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _warmBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14131110),
+              blurRadius: 18,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(icon, color: accent),
+                ),
+                const Spacer(),
+                if (badgeLabel != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: Colors.brown.shade600,
+                      color: _warmAccent,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      '${transport.unreadMeshMessageCount}',
+                      badgeLabel!,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  )
-                : const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
+                  ),
+              ],
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.cell_tower, color: Colors.cyan.shade700),
-            title: Text(strings.meshSar),
-            subtitle: Text(strings.meshSarSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const MeshStatusScreen())),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.map_outlined, color: Colors.green.shade700),
-            title: const Text('People & Mesh Map'),
-            subtitle: const Text(
-              'See live people pins, mesh nodes, and survivor signals.',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const MeshPeopleMapScreen(
-                  title: 'People & Mesh Map',
-                  subtitle:
-                      'Department visibility into people pins and survivor signals',
-                  allowResolveActions: true,
-                ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              style: const TextStyle(
+                color: _deepText,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.explore, color: Colors.orange.shade700),
-            title: const Text('Survivor Locator'),
-            subtitle: const Text(
-              'Track direction and estimated distance to a selected signal.',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const SurvivorCompassScreen(),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Text(
+                body,
+                style: const TextStyle(color: _mutedText, height: 1.4),
               ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.sos, color: Colors.red.shade700),
-            title: Text(strings.emergencySos),
-            subtitle: Text(strings.emergencySosSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SosScreen())),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

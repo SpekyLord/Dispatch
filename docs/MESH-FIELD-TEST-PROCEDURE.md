@@ -29,10 +29,12 @@ These tests require **2+ physical Android/iOS devices** with BLE and optional Wi
 | 5 | Device C (gateway, online) | Open app with internet on | Device C discovers Device B, receives relayed packet, uploads to `POST /api/mesh/ingest` |
 | 6 | Device C | Check mesh status panel | Queue drains to 0; last sync time updates |
 | 7 | Server | Query `GET /api/reports` or check DB | New report exists with `is_mesh_origin = true` and a linked `mesh_messages` dedup entry |
-| 8 | Device C | Observe SYNC_ACK rebroadcast | SYNC_ACK packet propagates back toward Device A |
-| 9 | Device A | Check mesh status panel | Queue entry marked as synced after receiving the SYNC_ACK |
+| 8 | Server | Query `GET /api/mesh/topology` | Gateway node appears with fresh `synced_at`; responder/topology node count updates |
+| 9 | Web (municipality) | Open Mesh & SAR dashboard | Topology overlay reflects the latest gateway snapshot within the polling interval |
+| 10 | Device C | Observe SYNC_ACK rebroadcast | SYNC_ACK packet propagates back toward Device A |
+| 11 | Device A | Check mesh status panel | Queue entry marked as synced after receiving the SYNC_ACK |
 
-**Pass criteria:** Report visible on server, no duplicate records, SYNC_ACK reaches origin.
+**Pass criteria:** Report visible on server, topology snapshot visible via API/dashboard, no duplicate records, SYNC_ACK reaches origin.
 
 ---
 

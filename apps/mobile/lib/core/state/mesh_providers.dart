@@ -1,9 +1,11 @@
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_gateway_sync_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/sar_platform_service.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final meshInboxStorageProvider = Provider<MeshInboxStorage>((ref) {
@@ -26,6 +28,13 @@ final meshTransportProvider = Provider<MeshTransportService>((ref) {
   return transport;
 });
 
+final meshGatewaySyncServiceProvider = Provider<MeshGatewaySyncService>((ref) {
+  return MeshGatewaySyncService(
+    authService: ref.read(authServiceProvider),
+    transport: ref.read(meshTransportProvider),
+  );
+});
+
 final sarPlatformServiceProvider = Provider<SarPlatformService>((ref) {
   final service = MethodChannelSarPlatformService();
   ref.onDispose(service.dispose);
@@ -40,4 +49,3 @@ final sarModeControllerProvider =
         platform: ref.read(sarPlatformServiceProvider),
       );
     });
-

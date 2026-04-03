@@ -23,6 +23,9 @@ enum MeshPayloadType {
   syncAck,
 }
 
+const _topologyNodeWindow = Duration(minutes: 30);
+const _topologyNodeCap = 150;
+
 class MeshPacket {
   final String messageId;
   final String originDeviceId;
@@ -308,7 +311,8 @@ class DeviceLocationTrailPoint {
       batteryPct: (payload['batteryPct'] as num?)?.toInt(),
       appState: payload['appState'] as String? ?? 'foreground',
       recordedAt:
-          DateTime.tryParse(packet.timestamp)?.toUtc() ?? DateTime.now().toUtc(),
+          DateTime.tryParse(packet.timestamp)?.toUtc() ??
+          DateTime.now().toUtc(),
     );
   }
 
@@ -340,7 +344,10 @@ class DeviceLocationTrailPoint {
       batteryPct:
           (json['battery_pct'] as num?)?.toInt() ??
           (json['batteryPct'] as num?)?.toInt(),
-      appState: json['app_state'] as String? ?? json['appState'] as String? ?? 'foreground',
+      appState:
+          json['app_state'] as String? ??
+          json['appState'] as String? ??
+          'foreground',
       recordedAt:
           DateTime.tryParse(
             json['recorded_at'] as String? ??
@@ -420,8 +427,9 @@ class MeshTransportService {
   String? get transportStatusNote => _transportStatusNote;
   String? get activeRelayTransport => _activeRelayTransport;
   List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
-  int get unreadMeshMessageCount =>
-      _inbox.where((item) => !item.isRead && item.itemType == 'mesh_message').length;
+  int get unreadMeshMessageCount => _inbox
+      .where((item) => !item.isRead && item.itemType == 'mesh_message')
+      .length;
 
   List<MeshInboxItem> threadItems(String threadId) {
     return _sortedInbox()
@@ -654,6 +662,135 @@ class MeshTransportService {
     return packets;
   }
 
+  void restoreQueue(List<MeshPacket> packets) {
+    if (packets.isEmpty) {
+      return;
+    }
+    final queuedMessageIds = _outboundQueue
+        .map((packet) => packet.messageId)
+        .toSet();
+    for (final packet in packets) {
+      if (queuedMessageIds.contains(packet.messageId)) {
+        continue;
+      }
+      _outboundQueue.add(packet);
+      queuedMessageIds.add(packet.messageId);
+    }
+  }
+
+  Future<Map<String, dynamic>?> buildTopologySnapshot({
+    String? operatorRole,
+    String? departmentId,
+    String? departmentName,
+    String? displayName,
+    int maxNodes = _topologyNodeCap,
+  }) async {
+    final capturedAt = DateTime.now().toUtc();
+    final effectiveMaxNodes = max(1, maxNodes);
+    final localFingerprint = anonymizeDeviceFingerprint(
+      _sosBeaconDeviceId ?? _localDeviceId,
+    );
+    final freshnessCutoff = capturedAt.subtract(_topologyNodeWindow);
+
+    var gatewayPoint = _lastSeenByDevice[localFingerprint];
+    var gatewaySource = 'location_beacon';
+    if (gatewayPoint == null ||
+        gatewayPoint.recordedAt.isBefore(freshnessCutoff)) {
+      final location = await _locationService.getCurrentPosition();
+      if (location != null) {
+        gatewayPoint = DeviceLocationTrailPoint(
+          messageId: '',
+          deviceFingerprint: localFingerprint,
+          displayName: displayName,
+          lat: location.latitude,
+          lng: location.longitude,
+          accuracyMeters: location.accuracyMeters,
+          appState: _isSosBeaconBroadcasting ? 'sos_active' : 'foreground',
+          recordedAt: capturedAt,
+        );
+        gatewaySource = 'live_gps';
+      }
+    }
+    if (gatewayPoint == null) {
+      return null;
+    }
+
+    final normalizedRole = _normalizeTopologyRole(operatorRole);
+    final hasDepartmentId =
+        departmentId != null && departmentId.trim().isNotEmpty;
+    final normalizedDepartmentId = hasDepartmentId
+        ? departmentId!.trim()
+        : null;
+    final normalizedDepartmentName = (departmentName ?? '').trim();
+    final gatewayDisplayName = (displayName ?? gatewayPoint.displayName ?? '')
+        .trim();
+
+    final gatewayNode = <String, dynamic>{
+      'nodeDeviceId': _localDeviceId,
+      'gatewayDeviceId': _localDeviceId,
+      'role': 'gateway',
+      'lat': gatewayPoint.lat,
+      'lng': gatewayPoint.lng,
+      'peerCount': peerCount,
+      'queueDepth': queueSize,
+      'displayName': gatewayDisplayName.isEmpty
+          ? localFingerprint
+          : gatewayDisplayName,
+      'operatorRole': normalizedRole,
+      'departmentId': normalizedDepartmentId,
+      'departmentName': normalizedDepartmentName,
+      'isResponder': normalizedRole == 'department' || hasDepartmentId,
+      'lastSeenTimestamp': gatewayPoint.recordedAt.toIso8601String(),
+      'metadata': {
+        'batteryPct': gatewayPoint.batteryPct,
+        'appState': gatewayPoint.appState,
+        'accuracyMeters': gatewayPoint.accuracyMeters,
+        'source': gatewaySource,
+      },
+    };
+
+    final recentPeerBeacons =
+        _lastSeenByDevice.values
+            .where(
+              (point) =>
+                  point.deviceFingerprint != localFingerprint &&
+                  point.recordedAt.isAfter(freshnessCutoff),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+
+    final nodes = recentPeerBeacons
+        .take(effectiveMaxNodes)
+        .map(
+          (point) => <String, dynamic>{
+            'nodeDeviceId': point.deviceFingerprint,
+            'gatewayDeviceId': _localDeviceId,
+            'role': 'relay',
+            'lat': point.lat,
+            'lng': point.lng,
+            'peerCount': 0,
+            'queueDepth': 0,
+            'displayName': point.displayName ?? point.deviceFingerprint,
+            'isResponder': false,
+            'lastSeenTimestamp': point.recordedAt.toIso8601String(),
+            'metadata': {
+              'batteryPct': point.batteryPct,
+              'appState': point.appState,
+              'accuracyMeters': point.accuracyMeters,
+              'source': 'location_beacon',
+            },
+          },
+        )
+        .toList(growable: false);
+
+    return <String, dynamic>{
+      'gatewayDeviceId': _localDeviceId,
+      'capturedAt': capturedAt.toIso8601String(),
+      'gateway': gatewayNode,
+      'nodes': nodes,
+    };
+  }
+
   void processSyncAcks(List<Map<String, dynamic>> acks) {
     var changed = false;
     for (final ack in acks) {
@@ -676,7 +813,8 @@ class MeshTransportService {
   void ingestServerMessages(List<Map<String, dynamic>> rows) {
     for (final row in rows) {
       final messageId = row['message_id'] as String? ?? '';
-      if (messageId.isEmpty || _inbox.any((item) => item.messageId == messageId)) {
+      if (messageId.isEmpty ||
+          _inbox.any((item) => item.messageId == messageId)) {
         continue;
       }
       _inbox.add(
@@ -811,7 +949,8 @@ class MeshTransportService {
   void pruneStaleePeers() => pruneStalePeers();
 
   String transportForPacket(MeshPacket packet) {
-    if (_platformCapabilities.wifiDirectSupported || _connectedRelayPeerCount > 0) {
+    if (_platformCapabilities.wifiDirectSupported ||
+        _connectedRelayPeerCount > 0) {
       return 'wifi_direct';
     }
     if (packet.requiresWifiDirect) {
@@ -840,8 +979,7 @@ class MeshTransportService {
   void _rememberForRelay(MeshPacket packet) {
     _relayBacklog[packet.messageId] = MeshPacket.fromJson(packet.toJson());
     if (_relayBacklog.length > 180) {
-      final oldestMessageId = _relayBacklog.values
-          .toList(growable: false)
+      final oldestMessageId = _relayBacklog.values.toList(growable: false)
         ..sort((left, right) => left.timestamp.compareTo(right.timestamp));
       if (oldestMessageId.isNotEmpty) {
         final evicted = oldestMessageId.first.messageId;
@@ -851,10 +989,7 @@ class MeshTransportService {
     }
   }
 
-  void _scheduleRelayFlush({
-    String? messageId,
-    String? excludeEndpointId,
-  }) {
+  void _scheduleRelayFlush({String? messageId, String? excludeEndpointId}) {
     if (_platform == null || !_isDiscovering) {
       return;
     }
@@ -882,8 +1017,9 @@ class MeshTransportService {
               if (_relayBacklog[messageId] != null) _relayBacklog[messageId]!,
             ];
       backlog.sort(
-        (left, right) =>
-            _priorityFor(left.payloadType).compareTo(_priorityFor(right.payloadType)),
+        (left, right) => _priorityFor(
+          left.payloadType,
+        ).compareTo(_priorityFor(right.payloadType)),
       );
 
       for (final packet in backlog) {
@@ -936,7 +1072,9 @@ class MeshTransportService {
       isRead: authoredLocally,
       needsServerSync: true,
     );
-    final index = _inbox.indexWhere((item) => item.messageId == packet.messageId);
+    final index = _inbox.indexWhere(
+      (item) => item.messageId == packet.messageId,
+    );
     if (index >= 0) {
       _inbox[index] = nextItem.copyWith(
         isRead: authoredLocally ? true : _inbox[index].isRead,
@@ -981,7 +1119,8 @@ class MeshTransportService {
       () => <DeviceLocationTrailPoint>[],
     );
     final existingIndex = trail.indexWhere(
-      (entry) => entry.messageId == point.messageId && entry.messageId.isNotEmpty,
+      (entry) =>
+          entry.messageId == point.messageId && entry.messageId.isNotEmpty,
     );
     if (existingIndex >= 0) {
       trail[existingIndex] = point;
@@ -994,7 +1133,8 @@ class MeshTransportService {
     }
 
     final currentLastSeen = _lastSeenByDevice[point.deviceFingerprint];
-    if (currentLastSeen == null || point.recordedAt.isAfter(currentLastSeen.recordedAt)) {
+    if (currentLastSeen == null ||
+        point.recordedAt.isAfter(currentLastSeen.recordedAt)) {
       _lastSeenByDevice[point.deviceFingerprint] = point;
     }
   }
@@ -1022,7 +1162,8 @@ class MeshTransportService {
       return;
     }
 
-    if (_locationBeaconTimer != null && _activeLocationBeaconInterval == nextInterval) {
+    if (_locationBeaconTimer != null &&
+        _activeLocationBeaconInterval == nextInterval) {
       return;
     }
 
@@ -1054,7 +1195,8 @@ class MeshTransportService {
 
   bool _isDirectMessage(MeshPacket packet) {
     return packet.payloadType == MeshPayloadType.meshMessage &&
-        (packet.payload['recipientScope'] as String? ?? '').toLowerCase() == 'direct';
+        (packet.payload['recipientScope'] as String? ?? '').toLowerCase() ==
+            'direct';
   }
 
   bool _isPacketForThisDevice(MeshPacket packet) {
@@ -1264,7 +1406,10 @@ class MeshTransportService {
   }
 
   static String anonymizeDeviceFingerprint(String rawIdentifier) {
-    final segments = rawIdentifier.toUpperCase().replaceAll('-', ':').split(':');
+    final segments = rawIdentifier
+        .toUpperCase()
+        .replaceAll('-', ':')
+        .split(':');
     if (segments.length < 6) {
       final cleaned = rawIdentifier.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
       if (cleaned.length <= 4) {
@@ -1372,9 +1517,16 @@ class MeshTransportService {
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
         '${hex.substring(20)}';
   }
+
+  static String? _normalizeTopologyRole(String? role) {
+    if (role == null) {
+      return null;
+    }
+    return switch (role.trim().toLowerCase()) {
+      'citizen' => 'citizen',
+      'department' => 'department',
+      'municipality' => 'municipality',
+      _ => null,
+    };
+  }
 }
-
-
-
-
-

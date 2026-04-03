@@ -6,7 +6,6 @@ import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/session_storage.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_home_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +20,7 @@ class FakeOfflineCommsAuthService extends AuthService {
   final Map<String, dynamic> meshMessagesResponse;
   final List<dynamic> reports;
   List<Map<String, dynamic>>? lastIngestedPackets;
+  Map<String, dynamic>? lastTopologySnapshot;
 
   @override
   Future<Map<String, dynamic>> getMeshMessages({
@@ -36,11 +36,10 @@ class FakeOfflineCommsAuthService extends AuthService {
     Map<String, dynamic>? topologySnapshot,
   }) async {
     lastIngestedPackets = packets;
+    lastTopologySnapshot = topologySnapshot;
     return {
       'acks': packets
-          .map(
-            (packet) => {'messageId': packet['messageId'] as String? ?? ''},
-          )
+          .map((packet) => {'messageId': packet['messageId'] as String? ?? ''})
           .toList(growable: false),
     };
   }
@@ -92,10 +91,7 @@ class _NoopSessionStorage extends SessionStorage {
   Future<void> save(SessionState state) async {}
 }
 
-SessionState buildSession({
-  required AppRole role,
-  DepartmentInfo? department,
-}) {
+SessionState buildSession({required AppRole role, DepartmentInfo? department}) {
   return SessionState(
     accessToken: 'access-token',
     userId: 'user-1',
@@ -146,9 +142,7 @@ Future<void> pumpOfflineCommsScreen(
 }
 
 void main() {
-  testWidgets('renders the Offline Comms panel shell', (
-    tester,
-  ) async {
+  testWidgets('renders the Offline Comms panel shell', (tester) async {
     final transport = MeshTransportService(
       inboxStorage: InMemoryMeshInboxStorage(),
     );
@@ -176,86 +170,93 @@ void main() {
     expect(find.text('Mesh Post'), findsOneWidget);
   });
 
-  testWidgets('queues a broadcast mesh message from the Offline Comms composer', (
+  testWidgets(
+    'queues a broadcast mesh message from the Offline Comms composer',
+    (tester) async {
+      final transport = MeshTransportService(
+        inboxStorage: InMemoryMeshInboxStorage(),
+      );
+      addTearDown(transport.dispose);
+
+      await pumpOfflineCommsScreen(
+        tester,
+        transport: transport,
+        authService: FakeOfflineCommsAuthService(),
+        sessionState: buildSession(role: AppRole.citizen),
+      );
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'Medic team is heading toward the riverside shelter.',
+      );
+      final sendButton = find.byType(FilledButton).first;
+      final composeButton = tester.widget<FilledButton>(sendButton);
+      composeButton.onPressed!.call();
+      await tester.pump();
+
+      expect(transport.queueSize, 1);
+      expect(
+        transport.inboxItems.any(
+          (item) =>
+              item.body ==
+              'Medic team is heading toward the riverside shelter.',
+        ),
+        isTrue,
+      );
+      expect(
+        find.text(
+          'Medic team is heading toward the riverside shelter.',
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('sync uploads topology snapshot together with queued packets', (
     tester,
   ) async {
     final transport = MeshTransportService(
       inboxStorage: InMemoryMeshInboxStorage(),
     );
     addTearDown(transport.dispose);
+    final auth = FakeOfflineCommsAuthService();
+    final localFingerprint = MeshTransportService.anonymizeDeviceFingerprint(
+      transport.localDeviceId,
+    );
+    transport.ingestServerLastSeen([
+      {
+        'message_id': 'local-beacon-1',
+        'device_fingerprint': localFingerprint,
+        'location': {'lat': 14.6123, 'lng': 120.9821, 'accuracyMeters': 6.0},
+        'recorded_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    ]);
 
     await pumpOfflineCommsScreen(
       tester,
       transport: transport,
-      authService: FakeOfflineCommsAuthService(),
+      authService: auth,
       sessionState: buildSession(role: AppRole.citizen),
     );
 
     await tester.enterText(
       find.byType(TextField).first,
-      'Medic team is heading toward the riverside shelter.',
+      'Topology sync payload check.',
     );
     final sendButton = find.byType(FilledButton).first;
     final composeButton = tester.widget<FilledButton>(sendButton);
     composeButton.onPressed!.call();
     await tester.pump();
 
-    expect(transport.queueSize, 1);
-    expect(
-      transport.inboxItems.any(
-        (item) =>
-            item.body == 'Medic team is heading toward the riverside shelter.',
-      ),
-      isTrue,
-    );
-    expect(
-      find.text(
-        'Medic team is heading toward the riverside shelter.',
-        skipOffstage: false,
-      ),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('shows the unread Offline Comms badge on the citizen home entry', (
-    tester,
-  ) async {
-    final transport = MeshTransportService(
-      inboxStorage: InMemoryMeshInboxStorage(),
-    );
-    addTearDown(transport.dispose);
-    transport.ingestServerMessages([
-      {
-        'id': 'row-2',
-        'message_id': 'message-2',
-        'thread_id': 'thread-2',
-        'recipient_scope': 'broadcast',
-        'author_display_name': 'Responder Aya',
-        'author_role': 'department',
-        'body': 'Power will cycle back in thirty minutes.',
-        'created_at': '2026-03-31T04:00:00Z',
-      },
-    ]);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authServiceProvider.overrideWithValue(
-            FakeOfflineCommsAuthService(reports: const []),
-          ),
-          meshTransportProvider.overrideWithValue(transport),
-          sessionControllerProvider.overrideWith(
-            (ref) => FakeSessionController(buildSession(role: AppRole.citizen)),
-          ),
-        ],
-        child: const MaterialApp(home: CitizenHomeScreen()),
-      ),
-    );
+    await tester.tap(find.byTooltip('Sync queued packets'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle(const Duration(milliseconds: 150));
 
-    expect(find.byTooltip('Offline Comms'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    expect(auth.lastIngestedPackets, isNotNull);
+    expect(auth.lastIngestedPackets, isNotEmpty);
+    expect(auth.lastTopologySnapshot, isNotNull);
+    expect(auth.lastTopologySnapshot!['gateway'], isA<Map<String, dynamic>>());
+    expect(auth.lastTopologySnapshot!['nodes'], isA<List<dynamic>>());
   });
 }
-

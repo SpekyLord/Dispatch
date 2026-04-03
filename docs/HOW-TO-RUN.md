@@ -235,6 +235,12 @@ Minimum preflight:
 - confirmed backend URL on the gateway device
 - local mesh reset before each manual run
 
+Topology upload trigger points (gateway-ready mobile sessions):
+
+- Offline Comms `Sync queued packets` now uploads queued packets and a `topologySnapshot` in the same ingest call.
+- Mesh Network pull-to-refresh / refresh button now also performs a gateway sync, allowing topology-only uploads even when no packets are queued.
+- If gateway coordinates are unavailable, packet sync still proceeds and topology upload is skipped for that attempt.
+
 Use the reporting template inside `docs/MESH-FIELD-TEST-PROCEDURE.md` for the final pass/fail log.
 
 ---

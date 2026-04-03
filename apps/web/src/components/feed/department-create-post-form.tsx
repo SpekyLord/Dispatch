@@ -1,7 +1,7 @@
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
-import { apiUpload } from "@/lib/api/client";
+import { apiRequest, apiUpload } from "@/lib/api/client";
 
 const POST_CATEGORIES = [
   { value: "alert", label: "Alert" },
@@ -27,26 +27,50 @@ const ALLOWED_ATTACHMENT_TYPES = [
 ];
 
 type DepartmentCreatePostFormProps = {
+  mode?: "create" | "edit";
+  postId?: string | number;
+  initialValues?: {
+    title?: string;
+    content?: string;
+    category?: string;
+    location?: string;
+  };
   onCancel?: () => void;
   onSuccess?: () => void | Promise<void>;
   submitLabel?: string;
 };
 
 export function DepartmentCreatePostForm({
+  mode = "create",
+  postId,
+  initialValues,
   onCancel,
   onSuccess,
   submitLabel = "Publish",
 }: DepartmentCreatePostFormProps) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState("update");
-  const [location, setLocation] = useState("");
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [content, setContent] = useState(initialValues?.content ?? "");
+  const [category, setCategory] = useState(initialValues?.category ?? "update");
+  const [location, setLocation] = useState(initialValues?.location ?? "");
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<"idle" | "loading" | "done" | "error" | "unsupported">("idle");
+  const [gpsStatus, setGpsStatus] = useState<"idle" | "loading" | "done" | "error" | "unsupported">(
+    initialValues?.location ? "done" : "idle",
+  );
   const [permissionState, setPermissionState] = useState<"idle" | "prompt" | "granted" | "denied" | "unsupported">("idle");
+
+  useEffect(() => {
+    setTitle(initialValues?.title ?? "");
+    setContent(initialValues?.content ?? "");
+    setCategory(initialValues?.category ?? "update");
+    setLocation(initialValues?.location ?? "");
+    setPhotoFiles([]);
+    setAttachmentFiles([]);
+    setGpsStatus(initialValues?.location ? "done" : "idle");
+    setError(null);
+  }, [initialValues?.category, initialValues?.content, initialValues?.location, initialValues?.title, mode, postId]);
 
   function importCurrentLocation() {
     if (!("geolocation" in navigator)) {
@@ -165,35 +189,58 @@ export function DepartmentCreatePostForm({
       setError("Title and content are required.");
       return;
     }
-    if (gpsStatus !== "done" || !location.trim()) {
-      setError("Turn on location services and import your current location before publishing.");
+    if (!location.trim()) {
+      setError("Location is required.");
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append("title", title.trim());
-      formData.append("content", content.trim());
-      formData.append("category", category);
-      formData.append("location", location.trim());
-      for (const photo of photoFiles) {
-        formData.append("photos", photo);
-      }
-      for (const attachment of attachmentFiles) {
-        formData.append("attachments", attachment);
-      }
+      if (mode === "edit") {
+        if (!postId) {
+          throw new Error("Post id is required for editing.");
+        }
+        await apiRequest(`/api/feed/${postId}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            title: title.trim(),
+            content: content.trim(),
+            category,
+            location: location.trim(),
+          }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append("title", title.trim());
+        formData.append("content", content.trim());
+        formData.append("category", category);
+        formData.append("location", location.trim());
+        for (const photo of photoFiles) {
+          formData.append("photos", photo);
+        }
+        for (const attachment of attachmentFiles) {
+          formData.append("attachments", attachment);
+        }
 
-      await apiUpload("/api/departments/posts", formData);
-      setTitle("");
-      setContent("");
-      setCategory("update");
-      setPhotoFiles([]);
-      setAttachmentFiles([]);
+        await apiUpload("/api/departments/posts", formData);
+        setTitle("");
+        setContent("");
+        setCategory("update");
+        setLocation("");
+        setPhotoFiles([]);
+        setAttachmentFiles([]);
+        setGpsStatus("idle");
+      }
       await onSuccess?.();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to create post.");
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : mode === "edit"
+            ? "Failed to update post."
+            : "Failed to create post.",
+      );
     } finally {
       setLoading(false);
     }
@@ -246,8 +293,12 @@ export function DepartmentCreatePostForm({
             type="text"
             className="aegis-input"
             value={location}
-            readOnly
-            placeholder="Turn on location services to import your current location"
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder={
+              mode === "edit"
+                ? "Update the location for this announcement"
+                : "Turn on location services to import your current location"
+            }
           />
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -285,67 +336,71 @@ export function DepartmentCreatePostForm({
         </div>
       </div>
 
-      <div>
-        <label className="aegis-label">Photos</label>
-        <p className="mb-3 text-xs text-on-surface-variant">JPEG or PNG, up to 5 MB each.</p>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {photoFiles.map((file, index) => (
-            <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-container px-3 py-2 text-xs text-on-surface">
-              <span className="material-symbols-outlined text-[14px]">image</span>
-              <span className="max-w-[180px] truncate">{file.name}</span>
-              <button type="button" onClick={() => removePhoto(index)} className="ml-1 text-error hover:text-error/80">
-                <span className="material-symbols-outlined text-[14px]">close</span>
-              </button>
+      {mode === "create" && (
+        <>
+          <div>
+            <label className="aegis-label">Photos</label>
+            <p className="mb-3 text-xs text-on-surface-variant">JPEG or PNG, up to 5 MB each.</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {photoFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-container px-3 py-2 text-xs text-on-surface">
+                  <span className="material-symbols-outlined text-[14px]">image</span>
+                  <span className="max-w-[180px] truncate">{file.name}</span>
+                  <button type="button" onClick={() => removePhoto(index)} className="ml-1 text-error hover:text-error/80">
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {photoFiles.length < MAX_POST_PHOTOS && (
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-outline-variant px-4 py-3 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container">
-            <span className="material-symbols-outlined text-[16px]">add_photo_alternate</span>
-            Add Photo
-            <input
-              type="file"
-              accept="image/jpeg,image/png"
-              multiple
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-          </label>
-        )}
-      </div>
+            {photoFiles.length < MAX_POST_PHOTOS && (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-outline-variant px-4 py-3 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container">
+                <span className="material-symbols-outlined text-[16px]">add_photo_alternate</span>
+                Add Photo
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+              </label>
+            )}
+          </div>
 
-      <div>
-        <label className="aegis-label">Attachments</label>
-        <p className="mb-3 text-xs text-on-surface-variant">PDF, Office documents, TXT, or CSV, up to 10 MB each.</p>
-        <div className="mb-3 flex flex-wrap gap-2">
-          {attachmentFiles.map((file, index) => (
-            <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-container px-3 py-2 text-xs text-on-surface">
-              <span className="material-symbols-outlined text-[14px]">attach_file</span>
-              <span className="max-w-[180px] truncate">{file.name}</span>
-              <button type="button" onClick={() => removeAttachment(index)} className="ml-1 text-error hover:text-error/80">
-                <span className="material-symbols-outlined text-[14px]">close</span>
-              </button>
+          <div>
+            <label className="aegis-label">Attachments</label>
+            <p className="mb-3 text-xs text-on-surface-variant">PDF, Office documents, TXT, or CSV, up to 10 MB each.</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {attachmentFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md bg-surface-container px-3 py-2 text-xs text-on-surface">
+                  <span className="material-symbols-outlined text-[14px]">attach_file</span>
+                  <span className="max-w-[180px] truncate">{file.name}</span>
+                  <button type="button" onClick={() => removeAttachment(index)} className="ml-1 text-error hover:text-error/80">
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {attachmentFiles.length < MAX_POST_ATTACHMENTS && (
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-outline-variant px-4 py-3 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container">
-            <span className="material-symbols-outlined text-[16px]">upload_file</span>
-            Add Attachment
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
-              multiple
-              className="hidden"
-              onChange={handleAttachmentChange}
-            />
-          </label>
-        )}
-      </div>
+            {attachmentFiles.length < MAX_POST_ATTACHMENTS && (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-outline-variant px-4 py-3 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container">
+                <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                Add Attachment
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                  multiple
+                  className="hidden"
+                  onChange={handleAttachmentChange}
+                />
+              </label>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="flex gap-3 pt-2">
         <Button type="submit" variant="secondary" disabled={loading}>
-          {loading ? "Publishing..." : submitLabel}
+          {loading ? (mode === "edit" ? "Saving..." : "Publishing...") : submitLabel}
         </Button>
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>

@@ -4,7 +4,9 @@ from dispatch_api.app import create_app
 from dispatch_api.config import Settings
 
 
-def make_settings(*, dispatch_env: str = "development", cors_origins: str = "http://localhost:5173") -> Settings:
+def make_settings(
+    *, dispatch_env: str = "development", cors_origins: str = "http://localhost:5173"
+) -> Settings:
     return Settings.model_validate(
         {
             "dispatch_env": dispatch_env,

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from dispatch_api.errors import ApiError
 from dispatch_api.services.notification_service import NotificationService
@@ -118,7 +121,7 @@ class ReportService:
         if not rows:
             raise ApiError("Failed to create report.", code="create_failed")
 
-        report = rows[0]
+        report = self._normalize_report_record(rows[0])
         self.record_status_history(
             report_id=report["id"],
             old_status=None,
@@ -242,7 +245,7 @@ class ReportService:
         )
         if not rows:
             raise ApiError("Report not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND)
-        return rows[0]
+        return self._normalize_report_record(rows[0])
 
     def accept_report(
         self,
@@ -412,7 +415,8 @@ class ReportService:
             params={"select": "*", "order": "created_at.desc"},
             use_service_role=True,
         )
-        return sorted(rows, key=lambda row: row.get("created_at") or "", reverse=True)
+        normalized_rows = [self._normalize_report_record(row) for row in rows]
+        return sorted(normalized_rows, key=lambda row: row.get("created_at") or "", reverse=True)
 
     def _append_department_response(
         self,
@@ -464,7 +468,11 @@ class ReportService:
             params={"id": f"eq.{report['id']}"},
             use_service_role=True,
         )
-        updated = updated_rows[0] if updated_rows else {**report, "is_escalated": True}
+        updated = (
+            self._normalize_report_record(updated_rows[0])
+            if updated_rows
+            else self._normalize_report_record({**report, "is_escalated": True})
+        )
 
         municipality_users = self.notification_service.list_users_by_role("municipality")
         self.notification_service.notify_report_escalated(
@@ -507,7 +515,7 @@ class ReportService:
         if not rows:
             raise ApiError("Failed to update report.", code="update_failed")
 
-        updated = rows[0]
+        updated = self._normalize_report_record(rows[0])
         self.record_status_history(
             report_id=report["id"],
             old_status=old_status,
@@ -644,3 +652,94 @@ class ReportService:
         if len(compact_description) <= 80:
             return compact_description
         return f"{compact_description[:77].rstrip()}..."
+
+    def _normalize_report_record(self, report: dict[str, Any]) -> dict[str, Any]:
+        image_urls = [
+            self._resolve_report_image_url(url)
+            for url in self._normalize_image_urls(report.get("image_urls"))
+        ]
+        return {
+            **report,
+            "image_urls": [url for url in image_urls if url],
+        }
+
+    def _normalize_image_urls(self, value: Any) -> list[str]:
+        if value is None:
+            return []
+
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if not trimmed:
+                return []
+            if trimmed.startswith("[") and trimmed.endswith("]"):
+                try:
+                    parsed = json.loads(trimmed)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            split_values = [item.strip() for item in re.split(r"[\r\n,]+", trimmed) if item.strip()]
+            return split_values or [trimmed]
+
+        if isinstance(value, list):
+            normalized: list[str] = []
+            for item in value:
+                if item is None:
+                    continue
+                if isinstance(item, str):
+                    trimmed = item.strip()
+                    if not trimmed:
+                        continue
+                    if trimmed.startswith("[") and trimmed.endswith("]"):
+                        try:
+                            parsed = json.loads(trimmed)
+                        except json.JSONDecodeError:
+                            parsed = None
+                        if isinstance(parsed, list):
+                            normalized.extend(
+                                str(parsed_item).strip()
+                                for parsed_item in parsed
+                                if str(parsed_item).strip()
+                            )
+                            continue
+                    normalized.append(trimmed)
+                    continue
+                normalized.append(str(item).strip())
+            return [item for item in normalized if item]
+
+        fallback = str(value).strip()
+        return [fallback] if fallback else []
+
+    def _resolve_report_image_url(self, value: str) -> str:
+        object_path = self._extract_report_image_object_path(value)
+        if not object_path:
+            return value
+
+        signer = getattr(self.client, "storage_signed_url", None)
+        if not callable(signer):
+            return value
+
+        try:
+            return signer(bucket="report-images", object_path=object_path, expires_in=3600)
+        except Exception:
+            return value
+
+    def _extract_report_image_object_path(self, value: str) -> str | None:
+        trimmed = value.strip().strip("'\"")
+        if not trimmed:
+            return None
+
+        if not trimmed.startswith("http://") and not trimmed.startswith("https://"):
+            return trimmed.lstrip("/")
+
+        parsed = urlparse(trimmed)
+        path = unquote(parsed.path or "")
+        public_prefix = "/storage/v1/object/public/report-images/"
+        sign_prefix = "/storage/v1/object/sign/report-images/"
+
+        if public_prefix in path:
+            return path.split(public_prefix, 1)[1]
+        if sign_prefix in path:
+            return path.split(sign_prefix, 1)[1]
+
+        return None

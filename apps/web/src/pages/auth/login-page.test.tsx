@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +7,12 @@ import { LoginPage } from "./login-page";
 
 describe("LoginPage", () => {
   beforeEach(() => {
-    useSessionStore.setState({ accessToken: null, user: null, refreshToken: null, department: null });
+    useSessionStore.setState({
+      accessToken: null,
+      user: null,
+      refreshToken: null,
+      department: null,
+    });
     vi.restoreAllMocks();
   });
 
@@ -19,14 +23,21 @@ describe("LoginPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByPlaceholderText("name@dispatch.org")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("••••••••••••")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("name@dispatch.org"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/security credentials/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /sign in/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows error on failed login", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: { message: "Invalid credentials" } }), { status: 401 }),
+      new Response(
+        JSON.stringify({ error: { message: "Invalid credentials" } }),
+        { status: 401 },
+      ),
     );
 
     render(
@@ -35,9 +46,13 @@ describe("LoginPage", () => {
       </MemoryRouter>,
     );
 
-    await userEvent.type(screen.getByPlaceholderText("name@dispatch.org"), "bad@test.com");
-    await userEvent.type(screen.getByPlaceholderText("••••••••••••"), "wrong");
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    fireEvent.change(screen.getByPlaceholderText("name@dispatch.org"), {
+      target: { value: "bad@test.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/security credentials/i), {
+      target: { value: "wrong" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument();
@@ -50,7 +65,12 @@ describe("LoginPage", () => {
         JSON.stringify({
           access_token: "tok-123",
           refresh_token: "ref-456",
-          user: { id: "u1", email: "citizen@test.com", role: "citizen", full_name: "Test Citizen" },
+          user: {
+            id: "u1",
+            email: "citizen@test.com",
+            role: "citizen",
+            full_name: "Test Citizen",
+          },
         }),
         { status: 200 },
       ),
@@ -62,9 +82,13 @@ describe("LoginPage", () => {
       </MemoryRouter>,
     );
 
-    await userEvent.type(screen.getByPlaceholderText("name@dispatch.org"), "citizen@test.com");
-    await userEvent.type(screen.getByPlaceholderText("••••••••••••"), "password");
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    fireEvent.change(screen.getByPlaceholderText("name@dispatch.org"), {
+      target: { value: "citizen@test.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/security credentials/i), {
+      target: { value: "password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       const state = useSessionStore.getState();

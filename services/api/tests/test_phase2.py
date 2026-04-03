@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import io
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-import io
 
 import pytest
 
@@ -567,7 +567,12 @@ def test_authenticated_user_can_create_feed_comment_and_public_can_read_it(setti
         user=FakeUser(id="citizen-1", email="citizen@example.com", role="citizen"),
         db_rows={
             "users": [
-                {"id": "citizen-1", "role": "citizen", "email": "citizen@example.com", "full_name": "Citizen One"}
+                {
+                    "id": "citizen-1",
+                    "role": "citizen",
+                    "email": "citizen@example.com",
+                    "full_name": "Citizen One",
+                }
             ],
             "departments": [
                 {
@@ -661,6 +666,194 @@ def test_authenticated_user_can_toggle_feed_reaction_per_user(settings):
     assert feed_after_unlike.json["posts"][0]["reaction"] == 2
     assert feed_after_unlike.json["posts"][0]["liked_by_me"] is False
     assert fake._db["department_feed_reactions"] == []
+
+
+def test_verified_department_can_delete_own_post_and_related_feed_rows(settings):
+    user = FakeUser(id="dept-fire-user", email="fire@example.com", role="department")
+    fake = FakeSupabaseClient(
+        user=user,
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-fire-user",
+                    "title": "Road Closure",
+                    "content": "Avoid the plaza.",
+                    "category": "alert",
+                    "location": "Town Plaza",
+                    "reaction": 2,
+                }
+            ],
+            "department_feed_storage": [
+                {"id": 1, "photos": "https://example.com/photo.png", "attachments": None},
+                {"id": 1, "photos": None, "attachments": "https://example.com/file.pdf"},
+            ],
+            "department_feed_comment": [
+                {
+                    "comment_id": 11,
+                    "post_id": 1,
+                    "user_id": "citizen-1",
+                    "user_name": "Citizen One",
+                    "comment": "Stay safe.",
+                }
+            ],
+            "department_feed_reactions": [
+                {"post_id": 1, "user_id": "citizen-1"},
+                {"post_id": 1, "user_id": "citizen-2"},
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        delete_response = client.delete("/api/feed/1", headers=auth_header())
+        feed_response = client.get("/api/feed")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json["deleted"] is True
+    assert feed_response.status_code == 200
+    assert feed_response.json["posts"] == []
+    assert fake._db["department_feed_posts"] == []
+    assert fake._db["department_feed_storage"] == []
+    assert fake._db["department_feed_comment"] == []
+    assert fake._db["department_feed_reactions"] == []
+
+
+def test_department_cannot_delete_someone_elses_post(settings):
+    user = FakeUser(id="dept-fire-user", email="fire@example.com", role="department")
+    fake = FakeSupabaseClient(
+        user=user,
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-other-user",
+                    "title": "Road Closure",
+                    "content": "Avoid the plaza.",
+                    "category": "alert",
+                    "location": "Town Plaza",
+                    "reaction": 0,
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        delete_response = client.delete("/api/feed/1", headers=auth_header())
+
+    assert delete_response.status_code == 403
+    assert fake._db["department_feed_posts"][0]["uploader"] == "dept-other-user"
+
+
+def test_verified_department_can_update_own_post(settings):
+    user = FakeUser(id="dept-fire-user", email="fire@example.com", role="department")
+    fake = FakeSupabaseClient(
+        user=user,
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-fire-user",
+                    "title": "Road Closure",
+                    "content": "Avoid the plaza.",
+                    "category": "alert",
+                    "location": "Town Plaza",
+                    "reaction": 0,
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        update_response = client.put(
+            "/api/feed/1",
+            headers=auth_header(),
+            json={
+                "title": "Updated Road Closure",
+                "content": "Road is now partially open.",
+                "category": "update",
+                "location": "North Avenue",
+            },
+        )
+
+    assert update_response.status_code == 200
+    assert update_response.json["post"]["title"] == "Updated Road Closure"
+    assert update_response.json["post"]["content"] == "Road is now partially open."
+    assert update_response.json["post"]["category"] == "update"
+    assert update_response.json["post"]["location"] == "North Avenue"
+
+
+def test_department_cannot_update_someone_elses_post(settings):
+    user = FakeUser(id="dept-fire-user", email="fire@example.com", role="department")
+    fake = FakeSupabaseClient(
+        user=user,
+        db_rows={
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+            "department_feed_posts": [
+                {
+                    "id": 1,
+                    "uploader": "dept-other-user",
+                    "title": "Road Closure",
+                    "content": "Avoid the plaza.",
+                    "category": "alert",
+                    "location": "Town Plaza",
+                    "reaction": 0,
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        update_response = client.put(
+            "/api/feed/1",
+            headers=auth_header(),
+            json={
+                "title": "Updated Road Closure",
+                "content": "Road is now partially open.",
+                "category": "update",
+                "location": "North Avenue",
+            },
+        )
+
+    assert update_response.status_code == 403
 
 
 def test_notification_endpoints_list_and_mark_items_read(settings):

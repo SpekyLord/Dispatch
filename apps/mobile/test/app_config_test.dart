@@ -14,16 +14,19 @@ void main() {
       expect(url, 'http://10.0.2.2:5000');
     });
 
-    test('uses the browser host for web when the Android alias is configured', () {
-      final url = resolveApiBaseUrl(
-        isWeb: true,
-        configuredApiBaseUrl: 'http://10.0.2.2:5000',
-        configuredWebApiBaseUrl: '',
-        currentUri: Uri.parse('http://localhost:4321'),
-      );
+    test(
+      'uses the browser host for web when the Android alias is configured',
+      () {
+        final url = resolveApiBaseUrl(
+          isWeb: true,
+          configuredApiBaseUrl: 'http://10.0.2.2:5000',
+          configuredWebApiBaseUrl: '',
+          currentUri: Uri.parse('http://localhost:4321'),
+        );
 
-      expect(url, 'http://localhost:5000');
-    });
+        expect(url, 'http://localhost:5000');
+      },
+    );
 
     test('prefers the dedicated web override when it is provided', () {
       final url = resolveApiBaseUrl(

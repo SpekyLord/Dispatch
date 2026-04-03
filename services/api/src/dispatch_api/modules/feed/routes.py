@@ -6,6 +6,7 @@ from flask import current_app, jsonify, request
 
 from dispatch_api.auth import get_current_user, require_auth
 from dispatch_api.modules.feed import blueprint
+from dispatch_api.services.department_service import DepartmentService
 from dispatch_api.services.feed_service import FeedService
 from dispatch_api.services.notification_service import NotificationService
 
@@ -13,6 +14,10 @@ from dispatch_api.services.notification_service import NotificationService
 def _feed_service() -> FeedService:
     client = current_app.extensions["supabase_client"]
     return FeedService(client, NotificationService(client))
+
+
+def _department_service() -> DepartmentService:
+    return DepartmentService(current_app.extensions["supabase_client"])
 
 
 @blueprint.get("")
@@ -29,7 +34,9 @@ def list_feed():
 @blueprint.get("/<post_id>")
 def get_feed_post(post_id: str):
     current_user = get_current_user()
-    post = _feed_service().get_post(post_id, viewer_user_id=current_user.id if current_user else None)
+    post = _feed_service().get_post(
+        post_id, viewer_user_id=current_user.id if current_user else None
+    )
     return jsonify({"post": post})
 
 
@@ -59,3 +66,45 @@ def toggle_feed_reaction(post_id: str):
     user = get_current_user()
     post = _feed_service().toggle_reaction(post_id=post_id, user_id=user.id)
     return jsonify({"post": post}), HTTPStatus.OK
+
+
+@blueprint.delete("/<post_id>")
+@require_auth()
+def delete_feed_post(post_id: str):
+    user = get_current_user()
+    if user.role != "department":
+        return jsonify(
+            {"error": {"message": "Only department users can delete posts."}}
+        ), HTTPStatus.FORBIDDEN
+
+    department_service = _department_service()
+    department = department_service.get_department_for_user(user.id)
+    department_service.require_verified_department(department)
+    _feed_service().delete_post(post_id=post_id, author_id=user.id)
+    return jsonify({"deleted": True}), HTTPStatus.OK
+
+
+@blueprint.put("/<post_id>")
+@require_auth()
+def update_feed_post(post_id: str):
+    user = get_current_user()
+    if user.role != "department":
+        return jsonify(
+            {"error": {"message": "Only department users can edit posts."}}
+        ), HTTPStatus.FORBIDDEN
+
+    department_service = _department_service()
+    department = department_service.get_department_for_user(user.id)
+    department_service.require_verified_department(department)
+
+    body = request.get_json(silent=True) or {}
+    post = _feed_service().update_post(
+        post_id=post_id,
+        author_id=user.id,
+        title=(body.get("title") or "").strip(),
+        content=(body.get("content") or "").strip(),
+        category=(body.get("category") or "").strip(),
+        location=(body.get("location") or "").strip(),
+    )
+    return jsonify({"post": post}), HTTPStatus.OK
+

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,10 +11,12 @@ class DepartmentReportDetailScreen extends ConsumerStatefulWidget {
   final String reportId;
 
   @override
-  ConsumerState<DepartmentReportDetailScreen> createState() => _DepartmentReportDetailScreenState();
+  ConsumerState<DepartmentReportDetailScreen> createState() =>
+      _DepartmentReportDetailScreenState();
 }
 
-class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportDetailScreen> {
+class _DepartmentReportDetailScreenState
+    extends ConsumerState<DepartmentReportDetailScreen> {
   Map<String, dynamic>? _report;
   List<Map<String, dynamic>> _history = [];
   List<Map<String, dynamic>> _roster = [];
@@ -92,8 +94,14 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       if (mounted) {
         setState(() {
           _report = detail['report'] as Map<String, dynamic>?;
-          _history = (detail['status_history'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          _roster = (rosterData['responses'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _history =
+              (detail['status_history'] as List?)
+                  ?.cast<Map<String, dynamic>>() ??
+              [];
+          _roster =
+              (rosterData['responses'] as List?)
+                  ?.cast<Map<String, dynamic>>() ??
+              [];
           _loading = false;
         });
       }
@@ -137,7 +145,10 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
             child: const Text('Decline'),
@@ -152,10 +163,9 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       _error = null;
     });
     try {
-      await ref.read(authServiceProvider).declineReport(
-            widget.reportId,
-            declineReason: reason,
-          );
+      await ref
+          .read(authServiceProvider)
+          .declineReport(widget.reportId, declineReason: reason);
       await _fetchAll(showLoader: false);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -170,10 +180,9 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       _error = null;
     });
     try {
-      await ref.read(authServiceProvider).updateReportStatus(
-            widget.reportId,
-            status: newStatus,
-          );
+      await ref
+          .read(authServiceProvider)
+          .updateReportStatus(widget.reportId, status: newStatus);
       await _fetchAll(showLoader: false);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -199,90 +208,103 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _report == null
-              ? const Center(child: Text('Report not found.'))
-              : RefreshIndicator(
-                  onRefresh: () => _fetchAll(),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (_error != null)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _error!,
-                            style: TextStyle(color: Colors.red.shade700, fontSize: 13),
-                          ),
-                        ),
-                      _buildHeader(),
-                      const SizedBox(height: 16),
-                      Text(
-                        _report!['title'] as String? ?? '',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700),
+          ? const Center(child: Text('Report not found.'))
+          : RefreshIndicator(
+              onRefresh: () => _fetchAll(),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_error != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _report!['description'] as String? ?? '',
-                        style: const TextStyle(fontSize: 14, height: 1.5),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 13,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      if (_report!['address'] != null) ...[
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                _report!['address'] as String,
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_report!['image_urls'] != null &&
-                          (_report!['image_urls'] as List).isNotEmpty) ...[
-                        SizedBox(
-                          height: 140,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: (_report!['image_urls'] as List).length,
-                            separatorBuilder: (context, index) => const SizedBox(width: 8),
-                            itemBuilder: (_, i) => ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                (_report!['image_urls'] as List)[i] as String,
-                                height: 140,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      _buildActions(),
-                      const SizedBox(height: 24),
-                      _buildRoster(),
-                      const SizedBox(height: 24),
-                      _buildHistory(),
-                    ],
+                    ),
+                  _buildHeader(),
+                  const SizedBox(height: 16),
+                  Text(
+                    _report!['title'] as String? ?? '',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _report!['description'] as String? ?? '',
+                    style: const TextStyle(fontSize: 14, height: 1.5),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_report!['address'] != null) ...[
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            _report!['address'] as String,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_report!['image_urls'] != null &&
+                      (_report!['image_urls'] as List).isNotEmpty) ...[
+                    SizedBox(
+                      height: 140,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: (_report!['image_urls'] as List).length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 8),
+                        itemBuilder: (_, i) => ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            (_report!['image_urls'] as List)[i] as String,
+                            height: 140,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  _buildActions(),
+                  const SizedBox(height: 24),
+                  _buildRoster(),
+                  const SizedBox(height: 24),
+                  _buildHistory(),
+                ],
+              ),
+            ),
     );
   }
 
   Widget _buildHeader() {
     final status = _report!['status'] as String? ?? 'pending';
     final severity = _report!['severity'] as String? ?? 'medium';
-    final category = (_report!['category'] as String? ?? '').replaceAll('_', ' ');
+    final category = (_report!['category'] as String? ?? '').replaceAll(
+      '_',
+      ' ',
+    );
     final isEscalated = _report!['is_escalated'] == true;
 
     return Wrap(
@@ -331,9 +353,9 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
     if (status == 'resolved') return const SizedBox.shrink();
 
     final ownResponse = _roster.cast<Map<String, dynamic>?>().firstWhere(
-          (r) => r?['is_requesting_department'] == true,
-          orElse: () => null,
-        );
+      (r) => r?['is_requesting_department'] == true,
+      orElse: () => null,
+    );
     final ownState = ownResponse?['state'] as String?;
 
     if (ownState == null || ownState == 'pending') {
@@ -373,13 +395,17 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
           const SizedBox(height: 8),
           if (status == 'accepted')
             FilledButton.icon(
-              onPressed: _actionLoading ? null : () => _updateStatus('responding'),
+              onPressed: _actionLoading
+                  ? null
+                  : () => _updateStatus('responding'),
               icon: const Icon(Icons.directions_run, size: 18),
               label: const Text('Mark Responding'),
             ),
           if (status == 'responding')
             FilledButton.icon(
-              onPressed: _actionLoading ? null : () => _updateStatus('resolved'),
+              onPressed: _actionLoading
+                  ? null
+                  : () => _updateStatus('resolved'),
               icon: const Icon(Icons.task_alt, size: 18),
               label: const Text('Mark Resolved'),
             ),
@@ -403,11 +429,16 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       children: [
         Text(
           'Department Responses',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         if (_roster.isEmpty)
-          const Text('No departments notified yet.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const Text(
+            'No departments notified yet.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          ),
         ..._roster.map((r) {
           final state = r['state'] as String? ?? 'pending';
           final isYou = r['is_requesting_department'] == true;
@@ -418,11 +449,16 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
               title: Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: r['department_name'] as String? ?? 'Unknown'),
+                    TextSpan(
+                      text: r['department_name'] as String? ?? 'Unknown',
+                    ),
                     if (isYou)
                       const TextSpan(
                         text: ' (you)',
-                        style: TextStyle(color: Color(0xFFD97757), fontSize: 11),
+                        style: TextStyle(
+                          color: Color(0xFFD97757),
+                          fontSize: 11,
+                        ),
                       ),
                   ],
                 ),
@@ -430,7 +466,10 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
               subtitle: r['decline_reason'] != null
                   ? Text(
                       'Reason: ${r['decline_reason']}',
-                      style: TextStyle(fontSize: 11, color: Colors.red.shade700),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.red.shade700,
+                      ),
                     )
                   : Text(
                       r['department_type'] as String? ?? '',
@@ -443,8 +482,8 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                     state == 'accepted'
                         ? 'accepted'
                         : state == 'declined'
-                            ? 'pending'
-                            : 'pending',
+                        ? 'pending'
+                        : 'pending',
                   ).withAlpha(25),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -456,8 +495,8 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                     color: state == 'accepted'
                         ? Colors.green
                         : state == 'declined'
-                            ? Colors.red
-                            : Colors.orange,
+                        ? Colors.red
+                        : Colors.orange,
                   ),
                 ),
               ),
@@ -474,11 +513,16 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
       children: [
         Text(
           'Status History',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         if (_history.isEmpty)
-          const Text('No status changes recorded.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const Text(
+            'No status changes recorded.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          ),
         ..._history.map((entry) {
           final newStatus = entry['new_status'] as String? ?? '';
           return Padding(
@@ -490,7 +534,10 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                   width: 8,
                   height: 8,
                   margin: const EdgeInsets.only(top: 5, right: 10),
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: _statusColor(newStatus)),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _statusColor(newStatus),
+                  ),
                 ),
                 Expanded(
                   child: Column(
@@ -507,11 +554,17 @@ class _DepartmentReportDetailScreenState extends ConsumerState<DepartmentReportD
                       if (entry['notes'] != null)
                         Text(
                           entry['notes'] as String,
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
                         ),
                       Text(
                         entry['created_at'] as String? ?? '',
-                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),

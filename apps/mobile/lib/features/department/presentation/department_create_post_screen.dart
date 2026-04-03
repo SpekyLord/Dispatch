@@ -1,6 +1,6 @@
-// Department post creation — verified departments publish announcements to citizen feed.
+// Department post creation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified departments publish announcements to citizen feed.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,10 +8,12 @@ class DepartmentCreatePostScreen extends ConsumerStatefulWidget {
   const DepartmentCreatePostScreen({super.key});
 
   @override
-  ConsumerState<DepartmentCreatePostScreen> createState() => _DepartmentCreatePostScreenState();
+  ConsumerState<DepartmentCreatePostScreen> createState() =>
+      _DepartmentCreatePostScreenState();
 }
 
-class _DepartmentCreatePostScreenState extends ConsumerState<DepartmentCreatePostScreen> {
+class _DepartmentCreatePostScreenState
+    extends ConsumerState<DepartmentCreatePostScreen> {
   final _titleCtrl = TextEditingController();
   final _contentCtrl = TextEditingController();
   String _category = 'update';
@@ -39,17 +41,29 @@ class _DepartmentCreatePostScreenState extends ConsumerState<DepartmentCreatePos
       setState(() => _error = 'Title and content are required.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      await ref.read(authServiceProvider).createPost(
-        title: _titleCtrl.text.trim(),
-        content: _contentCtrl.text.trim(),
-        category: _category,
-        isPinned: _isPinned,
-      );
-      if (mounted) Navigator.pop(context, true);
+      await ref
+          .read(authServiceProvider)
+          .createPost(
+            title: _titleCtrl.text.trim(),
+            content: _contentCtrl.text.trim(),
+            category: _category,
+            isPinned: _isPinned,
+          );
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
@@ -64,28 +78,48 @@ class _DepartmentCreatePostScreenState extends ConsumerState<DepartmentCreatePos
             Container(
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
             ),
 
           TextField(
             controller: _titleCtrl,
-            decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Title',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 16),
 
           TextField(
             controller: _contentCtrl,
-            decoration: const InputDecoration(labelText: 'Content', border: OutlineInputBorder(), alignLabelWithHint: true),
+            decoration: const InputDecoration(
+              labelText: 'Content',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
             maxLines: 5,
           ),
           const SizedBox(height: 16),
 
           DropdownButtonFormField<String>(
             initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
-            items: _categories.map((c) => DropdownMenuItem(value: c.$1, child: Text(c.$2))).toList(),
-            onChanged: (v) { if (v != null) setState(() => _category = v); },
+            decoration: const InputDecoration(
+              labelText: 'Category',
+              border: OutlineInputBorder(),
+            ),
+            items: _categories
+                .map((c) => DropdownMenuItem(value: c.$1, child: Text(c.$2)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) setState(() => _category = v);
+            },
           ),
           const SizedBox(height: 12),
 

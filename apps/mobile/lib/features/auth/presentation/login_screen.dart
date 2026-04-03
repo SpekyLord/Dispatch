@@ -1,6 +1,6 @@
-// Login screen — email/password form, delegates auth to SessionController.
+// Login screen - email/password form, delegates auth to SessionController.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,68 +51,107 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
           children: [
-            const SizedBox(height: 60),
-            Text(
-              'DISPATCH',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFFE05A2B),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Sign in',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Enter your credentials to access the platform.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-            ),
-            const SizedBox(height: 32),
-            if (_error != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFFA14B2F),
+                    Color(0xFF7B3A25),
+                    Color(0xFF425E72),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 14)),
+                borderRadius: BorderRadius.circular(24),
               ),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DISPATCH',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  SizedBox(height: 14),
+                  Text(
+                    'Mobile emergency coordination.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      height: 1.05,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Sign in to manage reports, verified response workflows, and offline mesh continuity from the field.',
+                    style: TextStyle(color: Color(0xFFF9EEE9), height: 1.45),
+                  ),
+                ],
               ),
-              keyboardType: TextInputType.emailAddress,
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
+            const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sign in',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Enter your credentials to access Dispatch.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 20),
+                    if (_error != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF1EB),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: Color(0xFFA14B2F)),
+                        ),
+                      ),
+                    TextField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(labelText: 'Password'),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: _loading ? null : _handleLogin,
+                      child: Text(_loading ? 'Signing in...' : 'Sign in'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: widget.onSwitchToRegister,
+                      child: const Text("Don't have an account? Register"),
+                    ),
+                  ],
+                ),
               ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _loading ? null : _handleLogin,
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              child: Text(_loading ? 'Signing in...' : 'Sign in'),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: widget.onSwitchToRegister,
-              child: const Text("Don't have an account? Register"),
             ),
           ],
         ),

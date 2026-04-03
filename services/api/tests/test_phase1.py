@@ -57,6 +57,19 @@ class FakeSupabaseClient:
     def sign_out(self, token):
         return True
 
+    def refresh_session(self, *, refresh_token: str):
+        if refresh_token == "bad-refresh":
+            return {"error": {"message": "Invalid refresh token"}}
+        return {
+            "access_token": "refreshed-token",
+            "refresh_token": "fresh-refresh-token",
+            "user": {
+                "id": "user-1",
+                "email": "u@e.com",
+                "user_metadata": {"role": "citizen"},
+            },
+        }
+
     def db_query(self, table, *, token=None, params=None, use_service_role=False):
         return self._db.get(table, [])
 
@@ -77,7 +90,23 @@ class FakeSupabaseClient:
         self, table, *, data, params, token=None, use_service_role=False, return_repr=True
     ):
         self._updates.append((table, data, params))
+        # Mutate stored rows so subsequent queries see the update
+        updated = []
+        for row in self._db.get(table, []):
+            match = True
+            for key, val in params.items():
+                if key in ("select", "order"):
+                    continue
+                expected = val.removeprefix("eq.") if isinstance(val, str) else val
+                if str(row.get(key, "")) != str(expected):
+                    match = False
+                    break
+            if match:
+                row.update(data)
+                updated.append({**row})
         if return_repr:
+            if updated:
+                return updated
             merged = {}
             rows = self._db.get(table, [])
             if rows:
@@ -214,6 +243,26 @@ class TestAuthLogin:
         with app.test_client() as c:
             resp = c.post("/api/auth/login", json={"email": ""})
             assert resp.status_code == 400
+
+    def test_refresh_success(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "users": [{"id": "user-1", "email": "u@e.com", "role": "citizen", "full_name": "U"}]
+            }
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.post("/api/auth/refresh", json={"refresh_token": "refresh-token"})
+            assert resp.status_code == 200
+            assert resp.json["access_token"] == "refreshed-token"
+            assert resp.json["refresh_token"] == "fresh-refresh-token"
+
+    def test_refresh_invalid_token(self, settings):
+        fake = FakeSupabaseClient()
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.post("/api/auth/refresh", json={"refresh_token": "bad-refresh"})
+            assert resp.status_code == 401
 
 
 class TestAuthMe:
@@ -416,6 +465,56 @@ class TestDepartmentResubmission:
             resp = c.get("/api/departments/profile", headers=auth_header())
             assert resp.status_code == 200
             assert resp.json["department"]["verification_status"] == "pending"
+
+
+class TestPublicDepartmentDirectory:
+    def test_public_directory_lists_only_approved_departments(self, settings):
+        fake = FakeSupabaseClient(
+            db_rows={
+                "departments": [
+                    {
+                        "id": "d1",
+                        "user_id": "dept-user-1",
+                        "name": "BFP Central",
+                        "type": "fire",
+                        "verification_status": "approved",
+                        "profile_picture": "https://example.com/bfp.png",
+                    },
+                    {
+                        "id": "d2",
+                        "user_id": "dept-user-2",
+                        "name": "Engineering",
+                        "type": "public_works",
+                        "verification_status": "pending",
+                    },
+                ],
+                "department_profile_summary": [
+                    {
+                        "id": "d1",
+                        "user_id": "dept-user-1",
+                        "name": "BFP Central",
+                        "type": "fire",
+                        "description": "24/7 response coverage",
+                        "profile_picture": "https://example.com/bfp.png",
+                        "area_of_responsibility": "Central District",
+                    }
+                ],
+                "department_feed_posts": [
+                    {"id": "p1", "uploader": "dept-user-1"},
+                    {"id": "p2", "uploader": "dept-user-1"},
+                ],
+            }
+        )
+        app = make_app(settings, fake)
+
+        with app.test_client() as c:
+            resp = c.get("/api/departments/directory")
+
+        assert resp.status_code == 200
+        assert len(resp.json["departments"]) == 1
+        assert resp.json["departments"][0]["name"] == "BFP Central"
+        assert resp.json["departments"][0]["description"] == "24/7 response coverage"
+        assert resp.json["departments"][0]["post_count"] == 2
 
 
 # ── Report tests ───────────────────────────────────────────────

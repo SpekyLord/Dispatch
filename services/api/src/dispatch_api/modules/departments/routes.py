@@ -7,6 +7,7 @@ from flask import current_app, jsonify, request
 from dispatch_api.auth import get_current_user, require_auth, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.departments import blueprint
+from dispatch_api.services.assessment_service import AssessmentService
 from dispatch_api.services.department_service import DepartmentService
 from dispatch_api.services.feed_service import FeedService
 from dispatch_api.services.notification_service import NotificationService
@@ -14,6 +15,10 @@ from dispatch_api.services.report_service import ReportService
 
 MAX_POST_PHOTOS = 3
 MAX_POST_ATTACHMENTS = 5
+
+
+def _assessment_service() -> AssessmentService:
+    return AssessmentService(current_app.extensions["supabase_client"])
 
 
 def _department_service() -> DepartmentService:
@@ -45,6 +50,12 @@ def get_public_department_profile(user_id: str):
     return jsonify({"department": department})
 
 
+@blueprint.get("/directory")
+def list_public_departments():
+    departments = _department_service().list_public_departments()
+    return jsonify({"departments": departments})
+
+
 @blueprint.put("/profile")
 @require_auth()
 @require_role("department")
@@ -53,7 +64,8 @@ def update_department_profile():
     department_service = _department_service()
     department = department_service.get_department_for_user(user.id)
     client = current_app.extensions["supabase_client"]
-    body = request.form if (request.files or request.form) else (request.get_json(silent=True) or {})
+    has_form = request.files or request.form
+    body = request.form if has_form else (request.get_json(silent=True) or {})
 
     allowed_fields = {
         "name",
@@ -233,7 +245,8 @@ def create_post():
         validator_name="validate_attachment_upload",
     )
 
-    body = request.form if (request.files or request.form) else (request.get_json(silent=True) or {})
+    has_form = request.files or request.form
+    body = request.form if has_form else (request.get_json(silent=True) or {})
     post = _feed_service().create_post(
         department=department,
         author_id=user.id,
@@ -277,6 +290,44 @@ def create_post():
         "image_urls": photo_urls,
     }
     return jsonify({"post": hydrated_post}), HTTPStatus.CREATED
+
+
+# -- Phase 3: department damage assessments --
+@blueprint.post("/assessments")
+@require_auth()
+@require_role("department")
+def create_assessment():
+    user = get_current_user()
+    department_service = _department_service()
+    department = department_service.get_department_for_user(user.id)
+    department_service.require_verified_department(department)
+
+    body = request.get_json(silent=True) or {}
+    assessment = _assessment_service().create_assessment(
+        department_id=department["id"],
+        report_id=(body.get("report_id") or "").strip() or None,
+        affected_area=(body.get("affected_area") or "").strip(),
+        damage_level=(body.get("damage_level") or "").strip(),
+        estimated_casualties=int(body.get("estimated_casualties") or 0),
+        displaced_persons=int(body.get("displaced_persons") or 0),
+        location=(body.get("location") or "").strip(),
+        description=(body.get("description") or "").strip(),
+        image_urls=body.get("image_urls") or [],
+    )
+    return jsonify({"assessment": assessment}), HTTPStatus.CREATED
+
+
+@blueprint.get("/assessments")
+@require_auth()
+@require_role("department")
+def list_department_assessments():
+    user = get_current_user()
+    department_service = _department_service()
+    department = department_service.get_department_for_user(user.id)
+    department_service.require_verified_department(department)
+
+    assessments = _assessment_service().list_department_assessments(department["id"])
+    return jsonify({"assessments": assessments})
 
 
 def _validate_feed_assets(*, files, limit: int, validator_name: str) -> None:
@@ -336,7 +387,13 @@ def _upload_feed_assets(
     return uploaded_urls
 
 
-def _upload_department_profile_asset(*, file, owner_id: str, department_id: str, domain: str) -> str:
+def _upload_department_profile_asset(
+    *,
+    file,
+    owner_id: str,
+    department_id: str,
+    domain: str,
+) -> str:
     storage = current_app.extensions["storage_service"]
     client = current_app.extensions["supabase_client"]
     file_data = file.read()

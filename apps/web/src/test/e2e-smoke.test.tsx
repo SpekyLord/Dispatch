@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,9 +6,14 @@ import { useSessionStore } from "@/lib/auth/session-store";
 import { LoginPage } from "@/pages/auth/login-page";
 import { RegisterPage } from "@/pages/auth/register-page";
 
-describe("E2E Smoke: Citizen register → login → submit report → view detail", () => {
+describe("E2E Smoke: Citizen register -> login -> submit report -> view detail", () => {
   beforeEach(() => {
-    useSessionStore.setState({ accessToken: null, user: null, refreshToken: null, department: null });
+    useSessionStore.setState({
+      accessToken: null,
+      user: null,
+      refreshToken: null,
+      department: null,
+    });
     vi.restoreAllMocks();
   });
 
@@ -19,7 +23,12 @@ describe("E2E Smoke: Citizen register → login → submit report → view detai
         JSON.stringify({
           access_token: "tok-new",
           refresh_token: "ref-new",
-          user: { id: "c-1", email: "new@test.com", role: "citizen", full_name: "New Citizen" },
+          user: {
+            id: "c-1",
+            email: "new@test.com",
+            role: "citizen",
+            full_name: "New Citizen",
+          },
         }),
         { status: 201 },
       ),
@@ -34,10 +43,16 @@ describe("E2E Smoke: Citizen register → login → submit report → view detai
       </MemoryRouter>,
     );
 
-    await userEvent.type(screen.getByPlaceholderText("Juan Dela Cruz"), "New Citizen");
-    await userEvent.type(screen.getByPlaceholderText("j.doe@dispatch.org"), "new@test.com");
-    await userEvent.type(screen.getByPlaceholderText("••••••••••••"), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+    fireEvent.change(screen.getByPlaceholderText("Juan Dela Cruz"), {
+      target: { value: "New Citizen" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("j.doe@dispatch.org"), {
+      target: { value: "new@test.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: "password123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => {
       const state = useSessionStore.getState();
@@ -52,7 +67,12 @@ describe("E2E Smoke: Citizen register → login → submit report → view detai
         JSON.stringify({
           access_token: "tok-login",
           refresh_token: "ref-login",
-          user: { id: "c-1", email: "new@test.com", role: "citizen", full_name: "New Citizen" },
+          user: {
+            id: "c-1",
+            email: "new@test.com",
+            role: "citizen",
+            full_name: "New Citizen",
+          },
         }),
         { status: 200 },
       ),
@@ -67,9 +87,13 @@ describe("E2E Smoke: Citizen register → login → submit report → view detai
       </MemoryRouter>,
     );
 
-    await userEvent.type(screen.getByPlaceholderText("name@dispatch.org"), "new@test.com");
-    await userEvent.type(screen.getByPlaceholderText("••••••••••••"), "password123");
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    fireEvent.change(screen.getByPlaceholderText("name@dispatch.org"), {
+      target: { value: "new@test.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/security credentials/i), {
+      target: { value: "password123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       expect(useSessionStore.getState().accessToken).toBe("tok-login");

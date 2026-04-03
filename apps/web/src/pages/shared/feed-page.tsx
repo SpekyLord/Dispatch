@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import type { FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
@@ -23,6 +24,7 @@ type Post = {
   attachments?: string[];
   image_urls?: string[];
   department?: FeedDepartmentPreview | null;
+  is_mesh_origin?: boolean;
 };
 
 // Category badge styles
@@ -93,7 +95,7 @@ export function FeedPage() {
 
       {loading ? (
         <Card className="py-16 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
+          <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
           Loading feed...
         </Card>
       ) : posts.length === 0 ? (
@@ -126,9 +128,14 @@ export function FeedPage() {
                           {post.is_pinned && <span className="material-symbols-outlined text-[14px] text-[#D97757] mr-1 align-middle">push_pin</span>}
                           {post.title}
                         </h3>
-                        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${catStyle.bg} ${catStyle.text}`}>
-                          {post.category.replace("_", " ")}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {post.is_mesh_origin && (
+                            <span className="rounded-md bg-cyan-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-cyan-800">Mesh</span>
+                          )}
+                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${catStyle.bg} ${catStyle.text}`}>
+                            {post.category.replace("_", " ")}
+                          </span>
+                        </div>
                       </div>
                       <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{post.content}</p>
                       {post.photos && post.photos.length > 0 && (

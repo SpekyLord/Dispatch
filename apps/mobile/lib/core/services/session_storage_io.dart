@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 
 // File-based session persistence. Saves JSON to system temp dir.
 class SessionStorage {

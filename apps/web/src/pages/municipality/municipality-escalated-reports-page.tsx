@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
@@ -112,7 +113,7 @@ export function MunicipalityEscalatedReportsPage() {
 
       {loading ? (
         <Card className="py-16 text-center text-on-surface-variant">
-          <span className="material-symbols-outlined text-4xl mb-4 block animate-pulse">hourglass_empty</span>
+          <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
           Loading escalated incidents...
         </Card>
       ) : reports.length === 0 ? (

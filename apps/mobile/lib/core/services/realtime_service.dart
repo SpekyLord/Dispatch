@@ -1,5 +1,5 @@
 import 'package:dispatch_mobile/core/config/app_config.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase/supabase.dart';
@@ -33,8 +33,8 @@ class RealtimeSubscriptionHandle {
 
 class RealtimeService {
   RealtimeService({AppConfig? config, SupabaseClient? client})
-      : _config = config ?? AppConfig.current,
-        _client = client;
+    : _config = config ?? AppConfig.current,
+      _client = client;
 
   final AppConfig _config;
   SupabaseClient? _client;

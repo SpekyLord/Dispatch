@@ -3,7 +3,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 
 // Browser-backed session persistence for Flutter web.
 class SessionStorage {

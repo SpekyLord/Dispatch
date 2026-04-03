@@ -1,5 +1,4 @@
-import 'package:dispatch_mobile/core/state/session_controller.dart';
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/auth/presentation/auth_gate_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_home_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_home_screen.dart';

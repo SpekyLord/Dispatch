@@ -1,7 +1,7 @@
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_report_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,13 +9,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 class FakeRealtimeService extends RealtimeService {
   FakeRealtimeService()
-      : super(
-          config: const AppConfig(
-            apiBaseUrl: '',
-            supabaseAnonKey: '',
-            supabaseUrl: '',
-          ),
-        );
+    : super(
+        config: const AppConfig(
+          apiBaseUrl: '',
+          supabaseAnonKey: '',
+          supabaseUrl: '',
+        ),
+      );
 
   final Map<String, List<VoidCallback>> _listeners = {};
 
@@ -84,10 +84,7 @@ class FakeDepartmentAuthService extends AuthService {
 
   @override
   Future<Map<String, dynamic>> getReport(String reportId) async {
-    return {
-      'report': _report,
-      'status_history': _history,
-    };
+    return {'report': _report, 'status_history': _history};
   }
 
   @override
@@ -96,7 +93,10 @@ class FakeDepartmentAuthService extends AuthService {
   }
 
   @override
-  Future<Map<String, dynamic>> acceptReport(String reportId, {String? notes}) async {
+  Future<Map<String, dynamic>> acceptReport(
+    String reportId, {
+    String? notes,
+  }) async {
     acceptCalls += 1;
     _report = {..._report, 'status': 'accepted'};
     _responses = [
@@ -139,7 +139,9 @@ class FakeDepartmentAuthService extends AuthService {
 }
 
 void main() {
-  testWidgets('department can accept a report and move it to responding', (tester) async {
+  testWidgets('department can accept a report and move it to responding', (
+    tester,
+  ) async {
     final auth = FakeDepartmentAuthService();
     final realtime = FakeRealtimeService();
 

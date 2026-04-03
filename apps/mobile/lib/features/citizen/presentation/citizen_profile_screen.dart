@@ -1,6 +1,6 @@
-// Profile screen — edit full name and phone number.
+// Profile screen Ã¢â‚¬â€ edit full name and phone number.
 
-import 'package:dispatch_mobile/core/state/session_controller.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +8,8 @@ class CitizenProfileScreen extends ConsumerStatefulWidget {
   const CitizenProfileScreen({super.key});
 
   @override
-  ConsumerState<CitizenProfileScreen> createState() => _CitizenProfileScreenState();
+  ConsumerState<CitizenProfileScreen> createState() =>
+      _CitizenProfileScreenState();
 }
 
 class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
@@ -46,10 +47,22 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
       );
-      ref.read(sessionControllerProvider.notifier).updateFullName(_nameController.text.trim());
-      if (mounted) setState(() { _loading = false; _success = true; });
+      ref
+          .read(sessionControllerProvider.notifier)
+          .updateFullName(_nameController.text.trim());
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _success = true;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
@@ -62,7 +75,12 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          Text(session.email ?? '', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54)),
+          Text(
+            session.email ?? '',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+          ),
           const SizedBox(height: 4),
           Chip(label: Text(session.role?.name ?? '')),
           const SizedBox(height: 24),
@@ -70,30 +88,50 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
             ),
           if (_success)
             Container(
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Text('Profile updated.', style: TextStyle(color: Colors.green.shade700)),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Profile updated.',
+                style: TextStyle(color: Colors.green.shade700),
+              ),
             ),
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Full name', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Full name',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _phoneController,
-            decoration: const InputDecoration(labelText: 'Phone number', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Phone number',
+              border: OutlineInputBorder(),
+            ),
             keyboardType: TextInputType.phone,
           ),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _loading ? null : _save,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
             child: Text(_loading ? 'Saving...' : 'Save Changes'),
           ),
         ],

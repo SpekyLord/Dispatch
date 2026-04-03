@@ -1,8 +1,8 @@
-// API service — wraps Dio for all backend calls. Token managed by SessionController.
+// API service Ã¢â‚¬â€ wraps Dio for all backend calls. Token managed by SessionController.
 
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
-import 'package:dispatch_mobile/core/state/session_state.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dio/dio.dart';
 
 class AuthService {
@@ -68,6 +68,16 @@ class AuthService {
     final response = await _dio.post(
       '/api/auth/login',
       data: {'email': email, 'password': password},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> refreshSession({
+    required String refreshToken,
+  }) async {
+    final response = await _dio.post(
+      '/api/auth/refresh',
+      data: {'refresh_token': refreshToken},
     );
     return response.data as Map<String, dynamic>;
   }
@@ -202,7 +212,7 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  // Decline a report — decline_reason is required
+  // Decline a report Ã¢â‚¬â€ decline_reason is required
   Future<Map<String, dynamic>> declineReport(
     String reportId, {
     required String declineReason,
@@ -294,5 +304,173 @@ class AuthService {
   // Mark all notifications as read
   Future<void> markAllNotificationsRead() async {
     await _dio.put('/api/notifications/read-all');
+  }
+
+  // --- Mesh survivor signals (Phase 4 extension) ---
+
+  Future<List<Map<String, dynamic>>> getSurvivorSignals({
+    String? status,
+    String? detectionMethod,
+  }) async {
+    final params = <String, dynamic>{};
+    if (status != null) params['status'] = status;
+    if (detectionMethod != null) params['detection_method'] = detectionMethod;
+    final response = await _dio.get(
+      '/api/mesh/survivor-signals',
+      queryParameters: params,
+    );
+    return (response.data['survivor_signals'] as List)
+        .cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> resolveSurvivorSignal(
+    String signalId, {
+    String note = '',
+  }) async {
+    final response = await _dio.put(
+      '/api/mesh/survivor-signals/$signalId/resolve',
+      data: {'note': note},
+    );
+    return (response.data as Map<String, dynamic>)['survivor_signal']
+        as Map<String, dynamic>;
+  }
+
+  // --- Mesh comms (Phase 4 extension) ---
+
+  Future<Map<String, dynamic>> ingestMeshPackets(
+    List<Map<String, dynamic>> packets, {
+    Map<String, dynamic>? topologySnapshot,
+  }) async {
+    final body = <String, dynamic>{'packets': packets};
+    if (topologySnapshot != null) {
+      body['topologySnapshot'] = topologySnapshot;
+    }
+    final response = await _dio.post('/api/mesh/ingest', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshMessages({
+    String? threadId,
+    bool includePosts = false,
+  }) async {
+    final params = <String, dynamic>{};
+    if (threadId != null) params['threadId'] = threadId;
+    if (includePosts) params['include_posts'] = '1';
+    final response = await _dio.get(
+      '/api/mesh/messages',
+      queryParameters: params,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshLastSeen() async {
+    final response = await _dio.get('/api/mesh/last-seen');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshTopology() async {
+    final response = await _dio.get('/api/mesh/topology');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMeshTrail(
+    String deviceFingerprint, {
+    int limit = 120,
+    String? timeStart,
+    String? timeEnd,
+  }) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (timeStart != null) params['time_start'] = timeStart;
+    if (timeEnd != null) params['time_end'] = timeEnd;
+    final response = await _dio.get(
+      '/api/mesh/trail/${Uri.encodeComponent(deviceFingerprint)}',
+      queryParameters: params,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  // --- Municipality (Phase 3) ---
+
+  Future<List<Map<String, dynamic>>> getMunicipalityDepartments({
+    String? status,
+  }) async {
+    final params = <String, dynamic>{};
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    final response = await _dio.get(
+      '/api/municipality/departments',
+      queryParameters: params,
+    );
+    return (response.data['departments'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> getMunicipalityPendingDepartments() async {
+    final response = await _dio.get('/api/municipality/departments/pending');
+    return (response.data['departments'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> verifyDepartment(
+    String departmentId, {
+    required String action,
+    String rejectionReason = '',
+  }) async {
+    final body = <String, dynamic>{'action': action};
+    if (rejectionReason.trim().isNotEmpty) {
+      body['rejection_reason'] = rejectionReason.trim();
+    }
+    final response = await _dio.put(
+      '/api/municipality/departments/$departmentId/verify',
+      data: body,
+    );
+    return (response.data as Map<String, dynamic>)['department']
+        as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getMunicipalityEscalatedReports() async {
+    final response = await _dio.get('/api/municipality/reports/escalated');
+    return (response.data['reports'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> getMunicipalityAnalytics() async {
+    final response = await _dio.get('/api/municipality/analytics');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getMunicipalityAssessments() async {
+    final response = await _dio.get('/api/municipality/assessments');
+    return (response.data['assessments'] as List).cast<Map<String, dynamic>>();
+  }
+
+  // --- Damage assessments (Phase 3) ---
+
+  // Submit a new damage assessment for this department
+  Future<Map<String, dynamic>> createAssessment({
+    required String affectedArea,
+    required String damageLevel,
+    int estimatedCasualties = 0,
+    int displacedPersons = 0,
+    String? location,
+    String? description,
+    String? reportId,
+  }) async {
+    final body = <String, dynamic>{
+      'affected_area': affectedArea,
+      'damage_level': damageLevel,
+      'estimated_casualties': estimatedCasualties,
+      'displaced_persons': displacedPersons,
+    };
+    if (location != null) body['location'] = location;
+    if (description != null) body['description'] = description;
+    if (reportId != null) body['report_id'] = reportId;
+    final response = await _dio.post(
+      '/api/departments/assessments',
+      data: body,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  // List this department's submitted assessments
+  Future<List<Map<String, dynamic>>> getDepartmentAssessments() async {
+    final response = await _dio.get('/api/departments/assessments');
+    return (response.data['assessments'] as List).cast<Map<String, dynamic>>();
   }
 }

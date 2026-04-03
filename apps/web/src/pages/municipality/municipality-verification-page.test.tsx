@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +23,12 @@ const mockPendingDepartments = {
 describe("MunicipalityVerificationPage", () => {
   beforeEach(() => {
     useSessionStore.setState({
-      user: { id: "muni-1", email: "admin@dispatch.local", role: "municipality", full_name: "Admin" },
+      user: {
+        id: "muni-1",
+        email: "admin@dispatch.local",
+        role: "municipality",
+        full_name: "Admin",
+      },
       accessToken: "valid-token",
       refreshToken: null,
       department: null,
@@ -46,14 +50,20 @@ describe("MunicipalityVerificationPage", () => {
     await waitFor(() => {
       expect(screen.getByText("BFP Station Alpha")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: /approve/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /approve/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /reject/i })).toBeInTheDocument();
   });
 
   it("removes department from list on approve", async () => {
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(mockPendingDepartments), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ department: {} }), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(mockPendingDepartments), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ department: {} }), { status: 200 }),
+      );
 
     render(
       <MemoryRouter>
@@ -65,7 +75,7 @@ describe("MunicipalityVerificationPage", () => {
       expect(screen.getByText("BFP Station Alpha")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: /approve/i }));
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
 
     await waitFor(() => {
       expect(screen.queryByText("BFP Station Alpha")).not.toBeInTheDocument();
@@ -87,9 +97,11 @@ describe("MunicipalityVerificationPage", () => {
       expect(screen.getByText("BFP Station Alpha")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: /reject/i }));
+    fireEvent.click(screen.getByRole("button", { name: /reject/i }));
 
-    expect(screen.getByPlaceholderText(/reason for rejection/i)).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(/reason for rejection/i),
+    ).toBeInTheDocument();
   });
 
   it("shows empty state when no pending departments", async () => {

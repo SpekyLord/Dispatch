@@ -1,5 +1,7 @@
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 
+import { cn } from "@/lib/utils";
+
 /**
  * Phase 1 — Location map component.
  * Aegis-styled Leaflet wrapper with muted tile layer.
@@ -8,14 +10,26 @@ import { MapContainer, Marker, TileLayer } from "react-leaflet";
 type LocationMapProps = {
   latitude?: number;
   longitude?: number;
+  wrapperClassName?: string;
+  mapClassName?: string;
 };
 
-export function LocationMap({ latitude = 14.5995, longitude = 120.9842 }: LocationMapProps) {
+export function LocationMap({
+  latitude = 14.5995,
+  longitude = 120.9842,
+  wrapperClassName,
+  mapClassName,
+}: LocationMapProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-outline-variant/10">
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border border-outline-variant/10",
+        wrapperClassName,
+      )}
+    >
       <MapContainer
         center={[latitude, longitude]}
-        className="h-64 w-full"
+        className={cn("h-64 w-full", mapClassName)}
         scrollWheelZoom={false}
         zoom={13}
       >

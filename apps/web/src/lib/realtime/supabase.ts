@@ -8,7 +8,10 @@ export type RealtimeTable =
   | "report_status_history"
   | "notifications"
   | "department_feed_posts"
-  | "department_feed_comment";
+  | "department_feed_comment"
+  | "distress_signals"
+  | "survivor_signals"
+  | "mesh_topology_nodes";
 
 export function getRealtimeClient() {
   const url = import.meta.env.VITE_SUPABASE_URL;
@@ -70,13 +73,9 @@ export function subscribeToTable(
 
   const channel = client
     .channel(`phase2:${table}:${options?.filter ?? "all"}:${Math.random().toString(36).slice(2)}`)
-    .on(
-      "postgres_changes",
-      postgresConfig,
-      (payload) => {
-        onChange(payload);
-      },
-    )
+    .on("postgres_changes", postgresConfig, (payload) => {
+      onChange(payload);
+    })
     .subscribe();
 
   return {
@@ -85,3 +84,4 @@ export function subscribeToTable(
     },
   };
 }
+

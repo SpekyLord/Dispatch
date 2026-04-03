@@ -5,6 +5,7 @@ import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
 
 class CitizenFeedScreen extends ConsumerStatefulWidget {
   const CitizenFeedScreen({super.key});

@@ -14,6 +14,8 @@ import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/bottom_nav_bar.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
 
 const _warmBackground = Color(0xFFFDF7F2);
 const _warmPanel = Color(0xFFFFF8F3);
@@ -23,33 +25,21 @@ const _coolAccent = Color(0xFF1695D3);
 const _deepText = Color(0xFF4E433D);
 const _mutedText = Color(0xFF7A6B63);
 
-class DepartmentHomeScreen extends ConsumerStatefulWidget {
+class DepartmentHomeScreen extends StatefulWidget {
   const DepartmentHomeScreen({super.key});
 
   @override
-  ConsumerState<DepartmentHomeScreen> createState() =>
-      _DepartmentHomeScreenState();
+  _DepartmentHomeScreenState createState() => _DepartmentHomeScreenState();
 }
 
-class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
-  bool _loading = true;
+class _DepartmentHomeScreenState extends State<DepartmentHomeScreen> {
+  int _selectedIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchDepartment();
-  }
-
-  Future<void> _fetchDepartment() async {
-    try {
-      final authService = ref.read(authServiceProvider);
-      final dept = await authService.getDepartmentProfile();
-      ref.read(sessionControllerProvider.notifier).updateDepartment(dept);
-    } catch (_) {}
-
-    if (mounted) {
-      setState(() => _loading = false);
-    }
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    // Handle navigation
   }
 
   @override
@@ -78,6 +68,10 @@ class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
           : dept == null
               ? Center(child: Text(strings.noDepartmentProfileFound))
               : _buildBody(context, dept, strings),
+      bottomNavigationBar: AppBottomNavigationBar(
+        selectedIndex: _selectedIndex,
+        onItemTapped: _onItemTapped,
+      ),
     );
   }
 

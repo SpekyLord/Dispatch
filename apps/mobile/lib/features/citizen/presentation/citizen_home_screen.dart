@@ -16,6 +16,9 @@ import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_scre
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/bottom_nav_bar.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
+import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/button.dart';
 
 const _warmBackground = Color(0xFFFDF7F2);
 const _warmPanel = Color(0xFFFFF8F3);
@@ -25,47 +28,33 @@ const _coolAccent = Color(0xFF1695D3);
 const _deepText = Color(0xFF4E433D);
 const _mutedText = Color(0xFF7A6B63);
 
-class CitizenHomeScreen extends ConsumerStatefulWidget {
+class CitizenHomeScreen extends StatefulWidget {
   const CitizenHomeScreen({super.key});
 
   @override
-  ConsumerState<CitizenHomeScreen> createState() => _CitizenHomeScreenState();
+  _CitizenHomeScreenState createState() => _CitizenHomeScreenState();
 }
 
-class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
-  List<Map<String, dynamic>> _reports = [];
-  bool _loading = true;
+class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
+  int _selectedIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchReports();
-  }
-
-  Future<void> _fetchReports() async {
-    setState(() => _loading = true);
-    try {
-      final authService = ref.read(authServiceProvider);
-      final reports = await authService.getReports();
-      if (mounted) {
-        setState(() {
-          _reports = reports.cast<Map<String, dynamic>>();
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  void _openReportForm() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()),
-    );
-    if (result == true) {
-      _fetchReports();
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    // Handle navigation based on index
+    switch (index) {
+      case 0:
+        // Already on home
+        break;
+      case 1:
+        // Navigate to Feed
+        Navigator.pushReplacementNamed(context, '/citizen/news-feed');
+        break;
+      case 2:
+        // Navigate to Profile
+        // Navigator.pushReplacementNamed(context, '/profile');
+        break;
     }
   }
 
@@ -111,92 +100,69 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: _warmAccent,
-        foregroundColor: Colors.white,
-        onPressed: _openReportForm,
-        icon: const Icon(Icons.add),
-        label: Text(strings.newReport),
-      ),
-      body: RefreshIndicator(
-        color: _warmAccent,
-        onRefresh: _fetchReports,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _CitizenHero(
-              reportCount: _reports.length,
-              queueCount: transport.queueSize,
-              reachCount: transport.estimatedReach,
-            ),
-            const SizedBox(height: 18),
-            _QuickActionRow(
-              unreadCount: transport.unreadMeshMessageCount,
-              onFeed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
-              ),
-              onMesh: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
-              ),
-              onMap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const MeshPeopleMapScreen(
-                    title: 'People & Mesh Map',
-                    subtitle:
-                        'Citizen visibility into people pins and survivor signals',
-                    allowResolveActions: false,
+            ResponsiveCard(
+              onTap: () {
+                Navigator.pushNamed(context, '/citizen/report/new');
+              },
+              child: const Column(
+                children: [
+                  Icon(Icons.add_alert, size: 48),
+                  SizedBox(height: 16),
+                  Text(
+                    'Submit a New Report',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                ),
-              ),
-              onCompass: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SurvivorCompassScreen(
-                    allowResolve: false,
+                  SizedBox(height: 8),
+                  Text(
+                    'Report incidents or concerns directly to the responsible department.',
+                    textAlign: TextAlign.center,
                   ),
-                ),
-              ),
-              onOfflineComms: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
-              ),
-              onSos: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SosScreen()),
+                ],
               ),
             ),
-            const SizedBox(height: 18),
-            _SectionHeader(
-              eyebrow: 'Citizen dashboard',
-              title: 'Recent reports',
-              body: _reports.isEmpty
-                  ? 'Your incident reports will appear here with the same status-chip rhythm used across the web dashboard.'
-                  : '${_reports.length} report${_reports.length == 1 ? '' : 's'} currently tracked from this account.',
+            const SizedBox(height: 16),
+            ResponsiveButton(
+              text: 'View My Reports',
+              onPressed: () {
+                // Navigator.pushNamed(context, '/citizen/reports');
+              },
+              buttonType: ButtonType.outlined,
+              icon: Icons.history,
             ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Center(child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(),
-              ))
-            else if (_reports.isEmpty)
-              _EmptyReportsPanel(onCreateReport: _openReportForm)
-            else
-              ..._reports.map(
-                (report) => _ReportCard(
-                  report: report,
-                  strings: strings,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => CitizenReportDetailScreen(
-                          reportId: report['id'] as String,
-                        ),
-                      ),
-                    );
-                    _fetchReports();
-                  },
-                ),
+            const SizedBox(height: 24),
+            const Text(
+              'Recent Updates',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            // Placeholder for recent updates
+            ResponsiveCard(
+              child: ListTile(
+                leading: const Icon(Icons.info),
+                title: const Text('Community cleanup event this Saturday'),
+                subtitle: const Text('Department of Public Works'),
+                onTap: () {},
               ),
+            ),
+            ResponsiveCard(
+              child: ListTile(
+                leading: const Icon(Icons.warning),
+                title: const Text('Road closure on Main St.'),
+                subtitle: const Text('Department of Transportation'),
+                onTap: () {},
+              ),
+            ),
           ],
         ),
+      ),
+      bottomNavigationBar: AppBottomNavigationBar(
+        selectedIndex: _selectedIndex,
+        onItemTapped: _onItemTapped,
       ),
     );
   }

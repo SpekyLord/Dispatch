@@ -1,3 +1,4 @@
+import 'package:dispatch_mobile/core/permissions/mesh_permission_gate.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/auth/presentation/auth_gate_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_home_screen.dart';
@@ -17,10 +18,12 @@ class AppRoot extends ConsumerWidget {
       return const AuthGateScreen();
     }
 
-    return switch (session.role!) {
+    final home = switch (session.role!) {
       AppRole.citizen => const CitizenHomeScreen(),
       AppRole.department => const DepartmentHomeScreen(),
       AppRole.municipality => const MunicipalityHomeScreen(),
     };
+
+    return MeshPermissionGate(child: home);
   }
 }

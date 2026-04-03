@@ -150,6 +150,21 @@ flutter pub get
 flutter run -d <DEVICE_ID> --dart-define-from-file=.env --no-pub
 ```
 
+6. Grant runtime permissions when prompted (required for mesh and SAR on phone):
+
+- Location (GPS)
+- Nearby Devices / Bluetooth (scan, connect, advertise)
+- Nearby Wi-Fi Devices
+- Microphone
+
+The app now keeps prompting for missing mesh/SAR permissions on resume until all required permissions are approved. If Android marks a permission as "Don't ask again", use **Open App Settings** in the app permission gate.
+
+### Wi-Fi Probe Notes (Mobile)
+
+- Wi-Fi probe detection means passively sniffing nearby device Wi-Fi probe requests to estimate presence.
+- In this mobile build, Wi-Fi probe is intentionally unavailable on standard Android/iOS app sandboxing.
+- Mesh and SAR still work through BLE passive scan, SOS beacon advertising, microphone window summaries, GPS/location beacons, and gateway sync.
+
 Optional (USB-only): route phone localhost to your computer localhost so you can use `http://127.0.0.1:5000` instead of LAN IP:
 
 ```bash

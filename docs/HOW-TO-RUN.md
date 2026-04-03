@@ -111,6 +111,7 @@ flutter run --dart-define-from-file=.env
 ### Running on a Physical Android Phone
 
 Use this flow when testing on a real phone instead of emulator/Chrome.
+For full mesh pass/fail execution steps, use [MESH-FIELD-TEST-PROCEDURE.md](MESH-FIELD-TEST-PROCEDURE.md).
 
 1. Set API host so your phone can reach your backend over LAN:
 

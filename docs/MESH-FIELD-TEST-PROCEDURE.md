@@ -1,176 +1,239 @@
-# Mesh Field-Test Procedure
+# Mesh Field-Test Procedure (Phase 4)
 
-Manual device-to-device verification steps for Phase 4 mesh networking.
-These tests require **2+ physical Android/iOS devices** with BLE and optional WiFi Direct support.
+Manual hardware verification for Phase 4 mesh networking.
+
+Status on **April 4, 2026**:
+- Automated verification is complete in-repo.
+- Physical multi-device execution is **prepared** and still **pending by design**.
+
+---
+
+## Scope
+
+This procedure validates:
+- offline report relay
+- offline department announcement relay
+- SOS distress propagation
+- deduplication and hop-limit behavior
+- mesh comms relay + history recovery
+- topology snapshot visibility on gateway sync
+
+This procedure does **not** require:
+- passive Wi-Fi probe sniffing (not available in standard mobile app sandbox)
 
 ---
 
 ## Prerequisites
 
-- At least 2 Android devices (API 28+) or iOS devices (iOS 14+) with BLE
-- The Dispatch mobile app installed on all devices
-- One device designated as **Gateway** (has internet connectivity)
-- Other devices in **airplane mode** (WiFi/cellular off, Bluetooth on)
-- A running backend at a reachable URL for the gateway device
-- At least one verified department account and one citizen account seeded in the database
+- 2 to 4 physical Android devices (BLE-capable); 3+ devices recommended for relay/hop tests
+- Dispatch mobile app installed on all devices
+- One device designated as **Gateway** (internet on)
+- At least one **department or municipality** account for gateway topology checks
+- At least one citizen account
+- Backend URL reachable from the gateway device
+- Seeded accounts and data from the normal setup docs
+
+---
+
+## Preflight Checklist (Run Before Test 1)
+
+1. On each device, open the app and approve required permissions:
+- Location
+- Bluetooth / Nearby devices
+- Nearby Wi-Fi devices (Android 13+ where shown)
+- Microphone (for SAR/acoustic flows)
+2. Confirm mesh status panel opens without permission errors.
+3. Confirm gateway device is logged in and online.
+4. Confirm non-gateway test devices can run offline (airplane mode + Bluetooth on).
+5. Confirm at least one gateway-role test account is `department` or `municipality` for topology/survivor endpoints.
 
 ---
 
 ## Test 1: Offline Incident Report Relay
 
-**Goal:** A citizen report created offline reaches the server via a relay chain.
+**Goal:** A citizen report created offline reaches the server through relays and returns ACK state.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline) | Log in as citizen, submit an incident report with description and category | Report queued locally; mesh status panel shows queue size = 1 |
-| 2 | Device A | Open mesh status panel | Role shows "Origin", queue size >= 1, peer count updates when B is nearby |
-| 3 | Device B (relay, offline) | Open app, ensure mesh is active | Device B discovers Device A via BLE; peer count increments |
-| 4 | — | Wait ~10 seconds for BLE relay | Device B receives the packet; its seen-messages log includes the messageId |
-| 5 | Device C (gateway, online) | Open app with internet on | Device C discovers Device B, receives relayed packet, uploads to `POST /api/mesh/ingest` |
-| 6 | Device C | Check mesh status panel | Queue drains to 0; last sync time updates |
-| 7 | Server | Query `GET /api/reports` or check DB | New report exists with `is_mesh_origin = true` and a linked `mesh_messages` dedup entry |
-| 8 | Server | Query `GET /api/mesh/topology` | Gateway node appears with fresh `synced_at`; responder/topology node count updates |
-| 9 | Web (municipality) | Open Mesh & SAR dashboard | Topology overlay reflects the latest gateway snapshot within the polling interval |
-| 10 | Device C | Observe SYNC_ACK rebroadcast | SYNC_ACK packet propagates back toward Device A |
-| 11 | Device A | Check mesh status panel | Queue entry marked as synced after receiving the SYNC_ACK |
+| 1 | Device A (offline) | Log in as citizen, submit an incident report | Report queued locally; mesh queue size = 1 |
+| 2 | Device A | Open mesh status panel | Role shows origin/relay, queue >= 1 |
+| 3 | Device B (relay, offline) | Keep app active and nearby | Peer discovery occurs; packet relays |
+| 4 | Device C (gateway, online) | Keep app active and sync | Gateway ingests packet via `POST /api/mesh/ingest` |
+| 5 | Device C | Check mesh status panel | Queue drains; last sync updates |
+| 6 | Server | Check reports data | New report exists with mesh-origin marker |
+| 7 | Server | Check topology data | Gateway node appears/updates with fresh sync time |
+| 8 | Web dashboard | Open Mesh/SAR map | Topology updates appear within polling interval |
+| 9 | Device A | Wait for ACK propagation | Queue item becomes synced |
 
-**Pass criteria:** Report visible on server, topology snapshot visible via API/dashboard, no duplicate records, SYNC_ACK reaches origin.
+**Pass criteria:** One server record only, topology updated, ACK reaches origin.
 
 ---
 
 ## Test 2: Offline Department Announcement Relay
 
-**Goal:** A verified department can broadcast an announcement offline; unverified devices cannot.
+**Goal:** Verified department can post offline with valid token; invalid token path fails safely.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline) | Log in as verified department while still online to cache the offline verification token | Token cached with 30-day TTL |
-| 2 | Device A | Switch to airplane mode (Bluetooth on) | Device goes offline; mesh role becomes "Origin" |
-| 3 | Device A | Create an announcement post from the department home screen | `ANNOUNCEMENT` packet queued locally with the embedded verification token |
-| 4 | Device B (gateway, online) | Discover Device A and receive the relayed packet | Gateway uploads packet to `POST /api/mesh/ingest` |
-| 5 | Server | Check `posts` table | New post exists with `mesh_originated = true`; token validated successfully |
-| 6 | Device A | Check mesh status panel | SYNC_ACK received; queue entry marked synced |
+| 1 | Device A | Log in as verified department while online | Offline verification token cached |
+| 2 | Device A | Go offline (airplane mode + Bluetooth on) | App remains usable in mesh mode |
+| 3 | Device A | Create announcement | `ANNOUNCEMENT` packet queued |
+| 4 | Device B (gateway, online) | Receive/relay/sync | Packet ingested by gateway |
+| 5 | Server | Check `posts` | Mesh-originated post created |
+| 6 | Device A | Wait for ACK | Queue entry marked synced |
 
-**Negative case — expired/missing token:**
+**Negative case (expired/missing token):**
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 7 | Device X (offline) | Log in as department but with expired or missing offline token | App blocks announcement creation with a clear error message |
-| 8 | — | If a forged announcement packet somehow reaches the gateway | Server rejects the packet; `mesh_messages` entry has `processing_state = error` |
+| 7 | Device X (offline) | Attempt department announcement with expired/missing token | App blocks creation with clear message |
+| 8 | Server | If forged packet reaches ingest | Server rejects; mesh message marked error |
 
-**Pass criteria:** Valid announcement reaches server and appears in feed; expired-token announcement is blocked on device and rejected by server.
+**Pass criteria:** Valid token succeeds, invalid token is blocked/rejected.
 
 ---
 
 ## Test 3: SOS Distress Signal Propagation
 
-**Goal:** A distress signal created without login propagates with highest priority and wider hop range.
+**Goal:** Distress works without login and is prioritized.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline, not logged in) | Tap the SOS button on the home screen | `DISTRESS` packet created with `maxHops = 15` and queued |
-| 2 | Device A | Observe mesh status panel (if accessible) or check queue | Distress packet is at front of queue (priority 0) |
-| 3 | Device B (relay, offline) | Nearby, mesh active | Receives distress packet; relays it; hopCount increments by 1 |
-| 4 | Device C (gateway, online) | Receives relayed distress packet | Uploads immediately; distress packets sorted to front of ingest batch |
-| 5 | Server | Check `distress_signals` table | New distress record with correct `origin_device_id`, coordinates, hop count |
-| 6 | Server | Check notifications | Municipality users notified of the distress signal |
-| 7 | — | Verify immutability | Attempting to re-ingest the same `messageId` returns `duplicate`, no new record created |
+| 1 | Device A (offline, no login) | Trigger SOS | `DISTRESS` packet queued with high priority |
+| 2 | Device B/C | Relay toward gateway | Distress relayed with hop increments |
+| 3 | Gateway | Sync queue | Distress ingested ahead of normal traffic |
+| 4 | Server | Check distress storage | Distress row exists with correct origin/hop metadata |
+| 5 | Re-ingest check | Resend same message ID | Duplicate handling prevents duplicate distress row |
 
-**Pass criteria:** Distress reaches server with priority handling, municipality notified, no duplicates on re-ingest.
+**Pass criteria:** Distress ingested once, prioritized, deduplicated correctly.
 
 ---
 
-## Test 4: Server Update Injection into Mesh
+## Test 4: Server Update Injection Back Into Mesh
 
-**Goal:** A gateway pulls server-side status changes and rebroadcasts them so offline devices see updated report statuses.
+**Goal:** Online server-side status changes reach offline devices via mesh rebroadcast.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Server/Web | A department accepts an incident report via the web dashboard, changing status to `accepted` | `report_status_history` entry created |
-| 2 | Device C (gateway) | Calls `GET /api/mesh/sync-updates?since=<last_sync>` | Response includes the status change in `report_updates` and `status_history` |
-| 3 | Device C | Rebroadcasts `STATUS_UPDATE` packets into mesh | Nearby offline devices receive the update |
-| 4 | Device A (offline, citizen) | Check report detail screen | Report status updated to `accepted` from the mesh-relayed STATUS_UPDATE |
+| 1 | Web/API | Change report status (e.g., `accepted`) | Status history written server-side |
+| 2 | Gateway | Pull `GET /api/mesh/sync-updates` | Updated status included in response |
+| 3 | Gateway | Rebroadcast update packets | Nearby offline devices receive status update |
+| 4 | Offline citizen device | Open report detail | New status appears without direct internet |
 
-**Pass criteria:** Offline device reflects the server-side status change without needing its own internet connection.
+**Pass criteria:** Offline client reflects server status transition after mesh rebroadcast.
 
 ---
 
-## Test 5: Mesh Deduplication Under Multi-Path Relay
+## Test 5: Multi-Path Deduplication
 
-**Goal:** The same packet arriving from multiple relay paths does not create duplicate records.
+**Goal:** Same message relayed through multiple paths creates one server-side effect.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline) | Submit an incident report | Packet queued |
-| 2 | Devices B & D (relays) | Both receive and relay the same packet to Device C (gateway) | Gateway receives 2 copies with same `messageId` |
-| 3 | Device C (gateway) | Uploads both to `POST /api/mesh/ingest` | First processed normally; second returns `duplicate` status |
-| 4 | Server | Check `incident_reports` and `mesh_messages` | Exactly 1 report, exactly 1 dedup entry |
+| 1 | Device A | Create report/message | Packet queued |
+| 2 | Devices B and D | Relay same message to gateway | Gateway sees duplicate `messageId` arrivals |
+| 3 | Gateway | Ingest both copies | First processed, second marked duplicate |
+| 4 | Server | Inspect records | Exactly one linked domain record |
 
-**Pass criteria:** Single server record regardless of relay path count.
+**Pass criteria:** No duplicate domain record for same `messageId`.
 
 ---
 
-## Test 6: Hop Limit Enforcement
+## Test 6: Hop-Limit Enforcement
 
-**Goal:** Packets exceeding `maxHops` are dropped and not relayed further.
+**Goal:** Packets stop relaying once `hopCount >= maxHops`.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A | Create a packet with `maxHops = 2` (test override or use a normal report with default 7 and chain enough devices) | Packet queued with `hopCount = 0` |
-| 2 | Device B (relay) | Receives and relays | `hopCount` incremented to 1 |
-| 3 | Device C (relay) | Receives and relays | `hopCount` incremented to 2 |
-| 4 | Device D (relay) | Receives packet with `hopCount = 2`, `maxHops = 2` | Packet dropped; not relayed further |
+| 1 | Device A | Emit packet with low max hops | Starts at `hopCount = 0` |
+| 2 | Relay chain B then C | Relay packet | Hop count increments each relay |
+| 3 | Next relay device D | Receives with hop limit reached | Packet dropped, not relayed onward |
 
-**Pass criteria:** Device D does not relay the packet; `hopCount >= maxHops` triggers drop.
+**Pass criteria:** No forwarding after max hops threshold.
 
 ---
 
-## Test 7: WiFi Direct Handoff for Large Payloads
+## Test 7: Large Payload Transport Fallback (Wi-Fi Direct Optional)
 
-**Goal:** Payloads above 10 KB automatically negotiate WiFi Direct instead of BLE.
+**Goal:** Large payload transfer remains reliable, with Wi-Fi Direct when available and BLE fallback otherwise.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline) | Submit a report with 3 attached images (total payload > 10 KB) | Transport selection picks WiFi Direct |
-| 2 | Device B (nearby) | Accept WiFi Direct connection | Large payload transferred over WiFi Direct |
-| 3 | — | If WiFi Direct negotiation fails | Falls back to BLE fragmentation; packet still delivered (slower) |
+| 1 | Device A | Create large payload report (e.g., multiple images) | Transfer path selection attempts large-payload strategy |
+| 2 | Nearby relay/gateway | Receive payload | Delivery succeeds |
+| 3 | If Wi-Fi Direct supported and negotiated | Observe transport | Wi-Fi Direct path may be used |
+| 4 | If Wi-Fi Direct unavailable/fails | Observe fallback | BLE fragmentation path used, still delivered |
 
-**Pass criteria:** Large payloads use WiFi Direct when available; BLE fragmentation is the fallback.
+**Pass criteria:** Delivery succeeds; Wi-Fi Direct use is optional, BLE fallback is valid.
 
 ---
 
-## Test 8: Mesh Communications (MESH_MESSAGE / MESH_POST)
+## Test 8: Mesh Comms (MESH_MESSAGE / MESH_POST)
 
-**Goal:** Offline direct messages and mesh posts relay correctly and recover thread history on sync.
+**Goal:** Offline messages/posts relay and history is recoverable after sync.
 
 | Step | Device | Action | Expected Result |
 |------|--------|--------|-----------------|
-| 1 | Device A (offline, department) | Open Offline Comms, send a message in a thread | `MESH_MESSAGE` packet queued; appears in local inbox |
-| 2 | Device B (relay/gateway) | Receives and relays or uploads | Message reaches server; stored in `mesh_comms_messages` |
-| 3 | Device A | Reconnects to internet, opens Offline Comms | Thread history recovered from server via `GET /api/mesh/messages?threadId=...` |
+| 1 | Device A (offline) | Send Offline Comms message | `MESH_MESSAGE` queued and visible locally |
+| 2 | Relay/gateway device | Relay + ingest | Message stored server-side |
+| 3 | Device A (online later) | Open thread history | History recovered from API |
 
-**Pass criteria:** Messages persist locally offline, sync to server, and thread history is recoverable.
+**Pass criteria:** Offline persistence + successful server recovery of thread history.
+
+---
+
+## Test 9: Topology-Only Gateway Sync
+
+**Goal:** Gateway can publish topology snapshot even when packet queue is empty.
+
+| Step | Device | Action | Expected Result |
+|------|--------|--------|-----------------|
+| 1 | Gateway (department/municipality account) | Ensure queue is empty | Mesh queue shows 0 |
+| 2 | Gateway | Trigger mesh status refresh/sync | Topology snapshot upload attempted |
+| 3 | Server | Inspect topology endpoint/data | Node `synced_at` refreshes |
+| 4 | Web dashboard | Observe map | Fresh topology state appears after polling |
+
+**Pass criteria:** Topology updates without requiring queued payload packets.
+
+---
+
+## Expected Role-Based API Behavior
+
+These are **expected**, not failures:
+
+- `citizen` hitting `/api/mesh/topology` can return `403`
+- `citizen` hitting `/api/mesh/survivor-signals` can return `403`
+- topology/survivor operator checks should use `department` or `municipality` accounts
 
 ---
 
 ## Environment Reset Between Tests
 
-1. Clear the `mesh_queue`, `seen_messages`, and `mesh_peers` SQLite tables on each device (reinstall or use a debug reset)
-2. Clear `mesh_messages` and `distress_signals` on the server if testing dedup behavior
-3. Ensure all devices have fresh BLE discovery state
+1. Clear mobile mesh local state (`mesh_queue`, seen-message cache, peer cache) or reinstall debug build.
+2. Reset relevant server rows when validating dedup and fresh state behavior.
+3. Clear stale peer discovery by toggling Bluetooth/app restart.
+4. Reconfirm permissions after reinstall/device reboot.
 
 ---
 
 ## Reporting Template
 
-For each test, record:
-
 | Field | Value |
 |-------|-------|
 | Test # | |
 | Date | |
-| Devices used | (model, OS version) |
+| Devices used (model + OS) | |
+| App build/branch/commit | |
 | Backend URL | |
+| Account roles used | |
 | Result | Pass / Fail / Partial |
-| Notes | (latency observed, unexpected behavior, error messages) |
-| Screenshots | (mesh status panel, server DB queries) |
+| Notes (latency/errors) | |
+| Evidence (screenshots/logs) | |
+
+---
+
+## Quick Triage Notes
+
+- Queue not draining + `403` topology/survivor calls: verify account role (use department/municipality for operator APIs).
+- Missing permission prompts: open OS app settings and grant permissions manually, then relaunch app.
+- Device discovery unstable: keep screens awake, Bluetooth on, and app foregrounded during relay tests.

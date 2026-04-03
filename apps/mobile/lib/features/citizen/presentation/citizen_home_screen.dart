@@ -354,7 +354,7 @@ class _QuickActionRow extends StatelessWidget {
       crossAxisCount: 2,
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 1.08,
+      childAspectRatio: 0.88,
       children: [
         _ActionCard(
           icon: Icons.cell_tower,
@@ -445,6 +445,7 @@ class _ActionCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -481,14 +482,20 @@ class _ActionCard extends StatelessWidget {
               title,
               style: const TextStyle(
                 color: _deepText,
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 6),
-            Text(
-              body,
-              style: const TextStyle(color: _mutedText, height: 1.4),
+            const SizedBox(height: 4),
+            Flexible(
+              child: Text(
+                body,
+                style: const TextStyle(color: _mutedText, fontSize: 13, height: 1.4),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 3,
+              ),
             ),
           ],
         ),

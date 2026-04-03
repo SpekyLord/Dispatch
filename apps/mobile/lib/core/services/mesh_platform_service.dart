@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 class MeshPlatformCapabilities {
@@ -262,7 +263,7 @@ class MethodChannelMeshPlatformService implements MeshPlatformService {
 
   @override
   Future<MeshPlatformCapabilities> getCapabilities() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return MeshPlatformCapabilities.unsupported(
         'Native mesh transport currently ships with Android-host integrations only.',
       );
@@ -292,7 +293,7 @@ class MethodChannelMeshPlatformService implements MeshPlatformService {
     required String localDeviceId,
     required bool isGateway,
   }) async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return false;
     }
     try {
@@ -314,7 +315,7 @@ class MethodChannelMeshPlatformService implements MeshPlatformService {
     required String preferredTransport,
     List<String> excludeEndpointIds = const [],
   }) async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return MeshPacketSendResult.empty(preferredTransport);
     }
 
@@ -337,7 +338,7 @@ class MethodChannelMeshPlatformService implements MeshPlatformService {
 
   @override
   Future<void> stopDiscovery() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return;
     }
     try {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 const String sarSosServiceUuid = '6f53a7fb-3258-4d8f-bf1d-6cf36442f0e0';
@@ -246,7 +247,7 @@ class MethodChannelSarPlatformService implements SarPlatformService {
 
   @override
   Future<SarPlatformCapabilities> getCapabilities() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return SarPlatformCapabilities.unsupported(
         'Passive sensing currently ships with Android-host integrations only.',
       );
@@ -325,7 +326,7 @@ class MethodChannelSarPlatformService implements SarPlatformService {
     String method, [
     Map<String, dynamic>? arguments,
   ]) async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return false;
     }
     try {
@@ -345,7 +346,7 @@ class MethodChannelSarPlatformService implements SarPlatformService {
     String method, [
     Map<String, dynamic>? arguments,
   ]) async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return;
     }
     try {

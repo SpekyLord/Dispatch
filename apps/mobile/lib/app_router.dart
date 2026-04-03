@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:dispatch/apps/mobile/lib/features/auth/bloc/auth_bloc.dart';
-import 'package:dispatch/apps/mobile/lib/features/auth/presentation/login_screen.dart';
-import 'package:dispatch/apps/mobile/lib/features/citizen/presentation/citizen_home_screen.dart';
+import 'package:dispatch_mobile/features/auth/bloc/auth_bloc.dart';
+import 'package:dispatch_mobile/features/auth/presentation/login_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_home_screen.dart';
 import 'package:go_router/go_router.dart';
 
 class AppRouter {

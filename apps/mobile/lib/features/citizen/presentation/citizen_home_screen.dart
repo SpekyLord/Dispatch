@@ -16,9 +16,9 @@ import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_scre
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/bottom_nav_bar.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/button.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/card.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/button.dart';
 
 const _warmBackground = Color(0xFFFDF7F2);
 const _warmPanel = Color(0xFFFFF8F3);
@@ -28,14 +28,14 @@ const _coolAccent = Color(0xFF1695D3);
 const _deepText = Color(0xFF4E433D);
 const _mutedText = Color(0xFF7A6B63);
 
-class CitizenHomeScreen extends StatefulWidget {
+class CitizenHomeScreen extends ConsumerStatefulWidget {
   const CitizenHomeScreen({super.key});
 
   @override
-  _CitizenHomeScreenState createState() => _CitizenHomeScreenState();
+  ConsumerState<CitizenHomeScreen> createState() => _CitizenHomeScreenState();
 }
 
-class _CitizenHomeScreenState extends State<CitizenHomeScreen> {
+class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   int _selectedIndex = 0;
 
   void _onItemTapped(int index) {

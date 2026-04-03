@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' show ImageSource;
 import 'package:latlong2/latlong.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/button.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/button.dart';
 
 const _categories = [
   ('fire', 'Fire'),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/card.dart';
 
 class DepartmentNewsFeedScreen extends StatelessWidget {
   const DepartmentNewsFeedScreen({super.key});

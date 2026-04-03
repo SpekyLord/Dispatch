@@ -14,8 +14,8 @@ import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/bottom_nav_bar.dart';
-import 'package:dispatch/apps/mobile/lib/features/shared/presentation/widgets/card.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/card.dart';
 
 const _warmBackground = Color(0xFFFDF7F2);
 const _warmPanel = Color(0xFFFFF8F3);
@@ -25,15 +25,16 @@ const _coolAccent = Color(0xFF1695D3);
 const _deepText = Color(0xFF4E433D);
 const _mutedText = Color(0xFF7A6B63);
 
-class DepartmentHomeScreen extends StatefulWidget {
+class DepartmentHomeScreen extends ConsumerStatefulWidget {
   const DepartmentHomeScreen({super.key});
 
   @override
-  _DepartmentHomeScreenState createState() => _DepartmentHomeScreenState();
+  ConsumerState<DepartmentHomeScreen> createState() => _DepartmentHomeScreenState();
 }
 
-class _DepartmentHomeScreenState extends State<DepartmentHomeScreen> {
+class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
   int _selectedIndex = 0;
+  bool _loading = false;
 
   void _onItemTapped(int index) {
     setState(() {

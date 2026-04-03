@@ -50,6 +50,7 @@ class _CitizenReportFormScreenState
   double? _longitude;
   bool _gpsLoading = false;
   String? _gpsStatus;
+  bool _hasUserPinnedLocation = false;
 
   // Images
   final List<SelectedMedia> _images = [];
@@ -73,8 +74,10 @@ class _CitizenReportFormScreenState
       final loc = await ref.read(locationServiceProvider).getCurrentPosition();
       if (loc != null && mounted) {
         setState(() {
-          _latitude = loc.latitude;
-          _longitude = loc.longitude;
+          if (!_hasUserPinnedLocation) {
+            _latitude = loc.latitude;
+            _longitude = loc.longitude;
+          }
           _gpsStatus = 'GPS acquired';
         });
       } else if (mounted) {
@@ -94,6 +97,7 @@ class _CitizenReportFormScreenState
 
   void _onLocationSelected(LatLng point) {
     setState(() {
+      _hasUserPinnedLocation = true;
       _latitude = point.latitude;
       _longitude = point.longitude;
     });

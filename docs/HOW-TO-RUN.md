@@ -108,6 +108,62 @@ flutter run --dart-define-from-file=.env
 >
 > **Chrome note:** `flutter run -d chrome` uses `MOBILE_WEB_API_BASE_URL` if provided. If you leave it blank, the app falls back to the current browser host on port `5000`. The API now allows localhost and `127.0.0.1` development origins on any port.
 
+### Running on a Physical Android Phone
+
+Use this flow when testing on a real phone instead of emulator/Chrome.
+
+1. Set API host so your phone can reach your backend over LAN:
+
+```bash
+# services/api/.env
+API_HOST=0.0.0.0
+API_PORT=5000
+```
+
+2. Set the mobile API base URL to your computer's LAN IP:
+
+```bash
+# apps/mobile/.env
+MOBILE_API_BASE_URL=http://<YOUR_PC_LAN_IP>:5000
+```
+
+Example: `http://192.168.254.119:5000`
+
+3. Start the API:
+
+```bash
+cd services/api
+uv run dispatch-api
+```
+
+4. Connect your Android phone (USB debugging on) and verify Flutter sees it:
+
+```bash
+flutter devices
+```
+
+5. Run the app on that specific device:
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter run -d <DEVICE_ID> --dart-define-from-file=.env --no-pub
+```
+
+Optional (USB-only): route phone localhost to your computer localhost so you can use `http://127.0.0.1:5000` instead of LAN IP:
+
+```bash
+adb reverse tcp:5000 tcp:5000
+```
+
+If `adb` is not in PATH, use Android Studio's terminal or add Android SDK platform-tools to your PATH.
+
+First Android build on a machine can be slow because Gradle/Flutter artifacts are downloaded. To prefetch them once:
+
+```bash
+flutter precache --android
+```
+
 ### Mobile Linting & Tests
 
 ```bash

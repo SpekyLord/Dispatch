@@ -13,6 +13,9 @@ class AuthService {
             BaseOptions(
               baseUrl: AppConfig.current.apiBaseUrl,
               headers: {'Content-Type': 'application/json'},
+              connectTimeout: const Duration(seconds: 12),
+              sendTimeout: const Duration(seconds: 12),
+              receiveTimeout: const Duration(seconds: 20),
             ),
           );
 

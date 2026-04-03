@@ -33,10 +33,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     final controller = ref.read(sessionControllerProvider.notifier);
-    final err = await controller.login(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    String? err;
+    try {
+      err = await controller.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+    } catch (e) {
+      err = e.toString();
+    }
 
     if (mounted) {
       setState(() {

@@ -26,7 +26,10 @@ class LocationPicker extends StatefulWidget {
 }
 
 class _LocationPickerState extends State<LocationPicker> {
+  final MapController _mapController = MapController();
   late LatLng _selected;
+  bool _hasUserInteracted = false;
+  bool _mapReady = false;
 
   @override
   void initState() {
@@ -34,9 +37,55 @@ class _LocationPickerState extends State<LocationPicker> {
     _selected = LatLng(widget.initialLatitude, widget.initialLongitude);
   }
 
+  @override
+  void didUpdateWidget(covariant LocationPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final externalLocationChanged =
+        widget.initialLatitude != oldWidget.initialLatitude ||
+        widget.initialLongitude != oldWidget.initialLongitude;
+    if (!externalLocationChanged || _hasUserInteracted) {
+      return;
+    }
+
+    setState(() {
+      _selected = LatLng(widget.initialLatitude, widget.initialLongitude);
+    });
+    _moveCameraToSelected();
+  }
+
+  void _moveCameraToSelected() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_mapReady) {
+        return;
+      }
+      try {
+        _mapController.move(_selected, _mapController.camera.zoom);
+      } on StateError {
+        // Map controller may not be attached yet during early rebuilds.
+      }
+    });
+  }
+
   void _handleTap(TapPosition tapPosition, LatLng point) {
-    setState(() => _selected = point);
+    setState(() {
+      _selected = point;
+      _hasUserInteracted = true;
+    });
     widget.onLocationSelected?.call(point);
+  }
+
+  void _handlePositionChanged(MapCamera camera, bool hasGesture) {
+    if (!hasGesture || _hasUserInteracted) {
+      return;
+    }
+    setState(() {
+      _hasUserInteracted = true;
+    });
+  }
+
+  void _handleMapReady() {
+    _mapReady = true;
+    _moveCameraToSelected();
   }
 
   @override
@@ -49,10 +98,13 @@ class _LocationPickerState extends State<LocationPicker> {
         child: Stack(
           children: [
             FlutterMap(
+              mapController: _mapController,
               options: MapOptions(
                 initialCenter: _selected,
                 initialZoom: widget.zoom,
                 onTap: _handleTap,
+                onPositionChanged: _handlePositionChanged,
+                onMapReady: _handleMapReady,
               ),
               children: [
                 ...buildDispatchMapTileLayers(),

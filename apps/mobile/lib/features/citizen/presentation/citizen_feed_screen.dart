@@ -5,7 +5,11 @@ import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dispatch_mobile/features/shared/presentation/widgets/card.dart';
+const _feedBackground = Color(0xFFFDF7F2);
+const _feedCard = Color(0xFFFFF8F3);
+const _feedBorder = Color(0xFFE7D1C6);
+const _feedText = Color(0xFF4E433D);
+const _feedMuted = Color(0xFF7A6B63);
 
 class CitizenFeedScreen extends ConsumerStatefulWidget {
   const CitizenFeedScreen({super.key});
@@ -87,104 +91,261 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Community Feed')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _posts.isEmpty
-          ? const Center(child: Text('No announcements yet.'))
-          : RefreshIndicator(
-              onRefresh: () => _fetchPosts(),
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _posts.length,
-                itemBuilder: (context, index) {
-                  final post = _posts[index];
-                  final category = post['category'] as String? ?? 'update';
-                  final isPinned = post['is_pinned'] == true;
-                  final dept = post['department'] as Map<String, dynamic>?;
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CitizenFeedDetailScreen(
-                            postId: post['id'] as String,
+    if (_posts.isEmpty) {
+      return const Center(child: Text('No announcements yet.'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _fetchPosts(),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+        itemCount: _posts.length,
+        itemBuilder: (context, index) {
+          final post = _posts[index];
+          final category = post['category'] as String? ?? 'update';
+          final isPinned = post['is_pinned'] == true;
+          final dept = post['department'] as Map<String, dynamic>?;
+          final postId = post['id']?.toString();
+          final createdAt = post['created_at']?.toString() ?? '';
+          final content = post['content'] as String? ?? '';
+          final title = post['title'] as String? ?? '';
+          final imageUrls =
+              (post['image_urls'] as List?)?.whereType<String>().toList() ??
+              const <String>[];
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: _feedCard,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _feedBorder),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14131110),
+                  blurRadius: 18,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () {
+                if (postId == null || postId.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Post is unavailable.')),
+                  );
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CitizenFeedDetailScreen(postId: postId),
+                  ),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor:
+                              _categoryColor(category).withAlpha(30),
+                          child: Icon(
+                            _categoryIcon(category),
+                            color: _categoryColor(category),
+                            size: 18,
                           ),
                         ),
-                      ),
-                      leading: CircleAvatar(
-                        backgroundColor: _categoryColor(category).withAlpha(30),
-                        child: Icon(
-                          _categoryIcon(category),
-                          color: _categoryColor(category),
-                          size: 20,
-                        ),
-                      ),
-                      title: Row(
-                        children: [
-                          if (isPinned)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(
-                                Icons.push_pin,
-                                size: 14,
-                                color: Colors.orange.shade700,
-                              ),
-                            ),
-                          Expanded(
-                            child: Text(
-                              post['title'] as String? ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          Text(
-                            post['content'] as String? ?? '',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (dept != null)
-                                Text(
-                                  dept['name'] as String? ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      dept?['name'] as String? ??
+                                          'Verified Department',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: _feedText,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              const Spacer(),
+                                  const Icon(
+                                    Icons.verified,
+                                    color: Color(0xFF1695D3),
+                                    size: 16,
+                                  ),
+                                  if (isPinned)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6),
+                                      child: Icon(
+                                        Icons.push_pin,
+                                        size: 14,
+                                        color: Colors.orange.shade700,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
                               Text(
-                                category.replaceAll('_', ' '),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: _categoryColor(category),
-                                  fontWeight: FontWeight.w600,
+                                _formatTime(createdAt),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: _feedMuted,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      trailing: const Icon(Icons.chevron_right, size: 18),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _categoryColor(category).withAlpha(20),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            category.replaceAll('_', ' '),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _categoryColor(category),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                  if (title.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: _feedText,
+                        ),
+                      ),
+                    ),
+                  if (content.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Text(
+                        content,
+                        style: const TextStyle(color: _feedText, height: 1.4),
+                      ),
+                    ),
+                  if (imageUrls.isNotEmpty)
+                    SizedBox(
+                      height: 200,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: imageUrls.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (_, i) => ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.network(
+                            imageUrls[i],
+                            width: 260,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.thumb_up_alt, size: 14, color: _feedMuted),
+                        SizedBox(width: 6),
+                        Text('Like', style: TextStyle(color: _feedMuted)),
+                        Spacer(),
+                        Text('Comments', style: TextStyle(color: _feedMuted)),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Row(
+                      children: [
+                        _FeedAction(
+                          icon: Icons.thumb_up_alt_outlined,
+                          label: 'Like',
+                          onTap: () {},
+                        ),
+                        _FeedAction(
+                          icon: Icons.chat_bubble_outline,
+                          label: 'Comment',
+                          onTap: () {},
+                        ),
+                        _FeedAction(
+                          icon: Icons.ios_share_outlined,
+                          label: 'Share',
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatTime(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return raw.isEmpty ? 'Just now' : raw;
+    }
+    final local = parsed.toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(local);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${local.month}/${local.day}/${local.year}';
+  }
+}
+
+class _FeedAction extends StatelessWidget {
+  const _FeedAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: TextButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: _feedMuted),
+        label: Text(label, style: const TextStyle(color: _feedMuted)),
+      ),
     );
   }
 }

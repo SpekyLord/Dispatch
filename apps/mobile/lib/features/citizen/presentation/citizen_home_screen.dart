@@ -2,7 +2,6 @@
 
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
-import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
@@ -39,57 +38,41 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   int _selectedIndex = 0;
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    // Handle navigation based on index
-    switch (index) {
-      case 0:
-        // Already on home
-        break;
-      case 1:
-        // Navigate to Feed
-        Navigator.pushReplacementNamed(context, '/citizen/news-feed');
-        break;
-      case 2:
-        // Navigate to Profile
-        // Navigator.pushReplacementNamed(context, '/profile');
-        break;
-    }
+    setState(() => _selectedIndex = index);
+  }
+
+  String _titleForIndex(int index, AppStrings strings) {
+    return switch (index) {
+      0 => strings.myReports,
+      1 => strings.feed,
+      2 => strings.profile,
+      _ => strings.myReports,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final transport = ref.watch(meshTransportProvider);
     final strings = ref.watch(appStringsProvider);
+
+    final pages = [
+      _buildHomePage(context),
+      const CitizenFeedScreen(),
+      const CitizenProfileScreen(),
+    ];
 
     return Scaffold(
       backgroundColor: _warmBackground,
       appBar: AppBar(
         backgroundColor: _warmBackground,
         surfaceTintColor: Colors.transparent,
-        title: Text(strings.myReports),
+        title: Text(_titleForIndex(_selectedIndex, strings)),
         actions: [
           const LocaleActionButton(),
-          IconButton(
-            icon: const Icon(Icons.newspaper_outlined),
-            tooltip: strings.feed,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             tooltip: strings.notifications,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: strings.profile,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CitizenProfileScreen()),
             ),
           ),
           IconButton(
@@ -100,69 +83,76 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ResponsiveCard(
-              onTap: () {
-                Navigator.pushNamed(context, '/citizen/report/new');
-              },
-              child: const Column(
-                children: [
-                  Icon(Icons.add_alert, size: 48),
-                  SizedBox(height: 16),
-                  Text(
-                    'Submit a New Report',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Report incidents or concerns directly to the responsible department.',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ResponsiveButton(
-              text: 'View My Reports',
-              onPressed: () {
-                // Navigator.pushNamed(context, '/citizen/reports');
-              },
-              buttonType: ButtonType.outlined,
-              icon: Icons.history,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Recent Updates',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            // Placeholder for recent updates
-            ResponsiveCard(
-              child: ListTile(
-                leading: const Icon(Icons.info),
-                title: const Text('Community cleanup event this Saturday'),
-                subtitle: const Text('Department of Public Works'),
-                onTap: () {},
-              ),
-            ),
-            ResponsiveCard(
-              child: ListTile(
-                leading: const Icon(Icons.warning),
-                title: const Text('Road closure on Main St.'),
-                subtitle: const Text('Department of Transportation'),
-                onTap: () {},
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: AppBottomNavigationBar(
         selectedIndex: _selectedIndex,
         onItemTapped: _onItemTapped,
+      ),
+    );
+  }
+
+  Widget _buildHomePage(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ResponsiveCard(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CitizenReportFormScreen(),
+                ),
+              );
+            },
+            child: const Column(
+              children: [
+                Icon(Icons.add_alert, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Submit a New Report',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Report incidents or concerns directly to the responsible department.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          ResponsiveButton(
+            text: 'View My Reports',
+            onPressed: () {
+              // Navigator.pushNamed(context, '/citizen/reports');
+            },
+            buttonType: ButtonType.outlined,
+            icon: Icons.history,
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Recent Updates',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          ResponsiveCard(
+            child: ListTile(
+              leading: const Icon(Icons.info),
+              title: const Text('Community cleanup event this Saturday'),
+              subtitle: const Text('Department of Public Works'),
+              onTap: () {},
+            ),
+          ),
+          ResponsiveCard(
+            child: ListTile(
+              leading: const Icon(Icons.warning),
+              title: const Text('Road closure on Main St.'),
+              subtitle: const Text('Department of Transportation'),
+              onTap: () {},
+            ),
+          ),
+        ],
       ),
     );
   }

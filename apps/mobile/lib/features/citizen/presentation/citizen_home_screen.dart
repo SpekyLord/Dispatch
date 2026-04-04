@@ -1,5 +1,6 @@
-// Citizen home — editorial mesh dashboard with bento stats, activity feed,
-// and glassmorphic SOS button. Follows "The Calm Authority" design system.
+// Citizen home — "The Calm Authority" mesh dashboard.
+// Pixel-identical to the editorial design mockup: vertical bento stats,
+// map preview, tonal activity feed, glassmorphic SOS + bottom nav.
 
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
@@ -8,13 +9,8 @@ import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
-import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,6 +31,23 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   void initState() {
     super.initState();
     _fetchReports();
+    // Auto-start mesh: initialize + begin discovery immediately.
+    // If no peers are found the device stays as an origin node.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoStartMesh();
+    });
+  }
+
+  Future<void> _autoStartMesh() async {
+    try {
+      final transport = ref.read(meshTransportProvider);
+      await transport.initialize();
+      if (!transport.isDiscovering) {
+        await transport.startDiscovery();
+      }
+    } catch (_) {
+      // Mesh may not be available on this platform — continue silently.
+    }
   }
 
   Future<void> _fetchReports() async {
@@ -52,15 +65,6 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       if (mounted) {
         setState(() => _loading = false);
       }
-    }
-  }
-
-  void _openReportForm() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()),
-    );
-    if (result == true) {
-      _fetchReports();
     }
   }
 
@@ -100,24 +104,20 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       children: [
         RefreshIndicator(
           color: dc.primary,
-          onRefresh: _fetchReports,
+          onRefresh: () async {
+            _fetchReports();
+            await _autoStartMesh();
+          },
           child: ListView(
             padding: EdgeInsets.fromLTRB(
               24,
               MediaQuery.of(context).padding.top + 16,
               24,
-              180, // room for SOS button + bottom nav
+              180,
             ),
             children: [
-              // ── Top App Bar (inline) ────────────────────────────────
-              _DashboardAppBar(
-                onSync: _fetchReports,
-                onNotifications: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationsScreen(),
-                  ),
-                ),
-              ),
+              // ── Top App Bar ─────────────────────────────────────────
+              const _DashboardAppBar(),
               const SizedBox(height: 20),
 
               // ── Status Banner ───────────────────────────────────────
@@ -127,36 +127,35 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Network Health Bento Grid ───────────────────────────
-              _BentoGrid(
-                activeNodes: transport.peerCount,
-                newNodes: transport.connectedRelayPeerCount,
-                recentDispatches: _reports.length,
-                networkRange: transport.estimatedReach,
+              // ── Bento Stats (vertical stack) ────────────────────────
+              _BentoCard(
+                label: 'TOTAL ACTIVE NODES',
+                value: '${transport.peerCount}',
+                badge: transport.connectedRelayPeerCount > 0
+                    ? '+${transport.connectedRelayPeerCount}'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              _BentoCard(
+                label: 'RECENT DISPATCHES',
+                value: '${_reports.length}',
+                trailingIcon: Icons.emergency_share,
+                trailingIconColor: dc.error,
+              ),
+              const SizedBox(height: 16),
+              _BentoCard(
+                label: 'NETWORK RANGE',
+                value: transport.estimatedReach > 1000
+                    ? (transport.estimatedReach / 1000).toStringAsFixed(1)
+                    : '${transport.estimatedReach}',
+                unit: transport.estimatedReach > 1000 ? 'km' : 'm',
               ),
               const SizedBox(height: 24),
 
-              // ── Quick Actions Row ───────────────────────────────────
-              _QuickActions(
-                unreadCount: transport.unreadMeshMessageCount,
-                onMesh: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const MeshStatusScreen(),
-                  ),
-                ),
-                onCompass: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const SurvivorCompassScreen(
-                      allowResolve: false,
-                    ),
-                  ),
-                ),
-                onOfflineComms: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const OfflineCommsScreen(),
-                  ),
-                ),
-                onNewReport: _openReportForm,
+              // ── Map Preview ─────────────────────────────────────────
+              _MapPreview(
+                isDiscovering: transport.isDiscovering,
+                estimatedReach: transport.estimatedReach,
               ),
               const SizedBox(height: 32),
 
@@ -175,18 +174,15 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
                   );
                   _fetchReports();
                 },
-                onViewLog: () {
-                  // Switch to reports tab
-                  _onItemTapped(2);
-                },
+                onViewLog: () => _onItemTapped(2),
               ),
             ],
           ),
         ),
 
-        // ── Floating SOS Button ─────────────────────────────────────
+        // ── Floating SOS Button ───────────────────────────────────
         Positioned(
-          bottom: 100,
+          bottom: 96,
           left: 0,
           right: 0,
           child: Center(
@@ -203,17 +199,11 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Dashboard App Bar — editorial clean, glassmorphic-style
+// Top App Bar — signal icon + title + sync button
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _DashboardAppBar extends StatelessWidget {
-  const _DashboardAppBar({
-    required this.onSync,
-    required this.onNotifications,
-  });
-
-  final VoidCallback onSync;
-  final VoidCallback onNotifications;
+  const _DashboardAppBar();
 
   @override
   Widget build(BuildContext context) {
@@ -238,62 +228,30 @@ class _DashboardAppBar extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        _GlassIconButton(
-          icon: Icons.notifications_outlined,
-          onPressed: onNotifications,
-        ),
-        const SizedBox(width: 8),
-        _GlassIconButton(
-          icon: Icons.sync,
-          onPressed: onSync,
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {}, // sync handled by pull-to-refresh
+            borderRadius: BorderRadius.circular(999),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                Icons.sync,
+                size: 24,
+                color: isDark
+                    ? dc.darkInk.withValues(alpha: 0.6)
+                    : dc.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-class _GlassIconButton extends StatelessWidget {
-  const _GlassIconButton({
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isDark
-                ? dc.darkSurfaceContainer.withValues(alpha: 0.6)
-                : dc.surfaceContainerHigh.withValues(alpha: 0.6),
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: isDark
-                ? dc.darkInk.withValues(alpha: 0.6)
-                : dc.onSurface.withValues(alpha: 0.6),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// Status Banner — mesh connectivity status with pulse halo
+// Status Banner — connectivity state with pulse halo
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _StatusBanner extends StatelessWidget {
@@ -308,12 +266,8 @@ class _StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark
-        ? dc.darkSurfaceContainer
-        : dc.primaryContainer;
-    final textColor = isDark
-        ? dc.darkInk
-        : dc.onPrimaryContainer;
+    final bg = isDark ? dc.darkSurfaceContainer : dc.primaryContainer;
+    final textColor = isDark ? dc.darkInk : dc.onPrimaryContainer;
 
     final String title;
     final String subtitle;
@@ -341,17 +295,13 @@ class _StatusBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Pulsing halo icon
           SizedBox(
             width: 40,
             height: 40,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                if (isOffline || isDiscovering)
-                  _PulseHalo(
-                    color: isDark ? dc.darkPrimaryAccent : dc.primary,
-                  ),
+                _PulseHalo(color: isDark ? dc.darkPrimaryAccent : dc.primary),
                 Icon(icon, color: isDark ? dc.darkPrimaryAccent : dc.primary),
               ],
             ),
@@ -440,79 +390,26 @@ class _PulseHaloState extends State<_PulseHalo>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Bento Grid — 3-column network health stats
+// Bento Card — tall stat card, vertical stack layout
+// p-8 (32px), rounded-[2rem] (32px), min-h 180px, text-5xl number
 // ═══════════════════════════════════════════════════════════════════════════
-
-class _BentoGrid extends StatelessWidget {
-  const _BentoGrid({
-    required this.activeNodes,
-    required this.newNodes,
-    required this.recentDispatches,
-    required this.networkRange,
-  });
-
-  final int activeNodes;
-  final int newNodes;
-  final int recentDispatches;
-  final int networkRange;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final spacing = 12.0;
-        final cardWidth = (constraints.maxWidth - spacing * 2) / 3;
-
-        return Row(
-          children: [
-            _BentoCard(
-              width: cardWidth,
-              label: 'ACTIVE NODES',
-              value: '$activeNodes',
-              badge: newNodes > 0 ? '+$newNodes' : null,
-            ),
-            SizedBox(width: spacing),
-            _BentoCard(
-              width: cardWidth,
-              label: 'DISPATCHES',
-              value: '$recentDispatches',
-              icon: Icons.emergency_share,
-              iconColor: dc.error,
-            ),
-            SizedBox(width: spacing),
-            _BentoCard(
-              width: cardWidth,
-              label: 'REACH',
-              value: networkRange > 1000
-                  ? (networkRange / 1000).toStringAsFixed(1)
-                  : '$networkRange',
-              unit: networkRange > 1000 ? 'km' : 'm',
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
 
 class _BentoCard extends StatelessWidget {
   const _BentoCard({
-    required this.width,
     required this.label,
     required this.value,
     this.badge,
     this.unit,
-    this.icon,
-    this.iconColor,
+    this.trailingIcon,
+    this.trailingIconColor,
   });
 
-  final double width;
   final String label;
   final String value;
   final String? badge;
   final String? unit;
-  final IconData? icon;
-  final Color? iconColor;
+  final IconData? trailingIcon;
+  final Color? trailingIconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -522,22 +419,24 @@ class _BentoCard extends StatelessWidget {
     final labelColor = isDark ? dc.darkMutedInk : dc.onSurfaceVariant;
 
     return Container(
-      width: width,
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 180),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(32),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
               fontFamily: 'Inter',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 1.5,
               color: labelColor,
             ),
           ),
@@ -546,25 +445,19 @@ class _BentoCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.bottomLeft,
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 40,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -2,
-                      color: textColor,
-                      height: 1.0,
-                    ),
-                  ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 48,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -2,
+                  color: textColor,
+                  height: 1.0,
                 ),
               ),
               if (badge != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   badge!,
                   style: TextStyle(
@@ -576,20 +469,24 @@ class _BentoCard extends StatelessWidget {
                 ),
               ],
               if (unit != null) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 Text(
                   unit!,
                   style: TextStyle(
                     fontFamily: 'Inter',
-                    fontSize: 20,
+                    fontSize: 24,
                     fontWeight: FontWeight.w700,
                     color: labelColor,
                   ),
                 ),
               ],
-              if (icon != null) ...[
-                const SizedBox(width: 6),
-                Icon(icon, size: 20, color: iconColor ?? dc.error),
+              if (trailingIcon != null) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  trailingIcon,
+                  size: 24,
+                  color: trailingIconColor ?? dc.error,
+                ),
               ],
             ],
           ),
@@ -600,134 +497,91 @@ class _BentoCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Quick Actions — compact horizontal action chips
+// Map Preview — topographic-style container with scanning indicator
+// rounded-[2.5rem] (40px), aspect-[16/9], surface-container-highest bg
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({
-    required this.unreadCount,
-    required this.onMesh,
-    required this.onCompass,
-    required this.onOfflineComms,
-    required this.onNewReport,
+class _MapPreview extends StatelessWidget {
+  const _MapPreview({
+    required this.isDiscovering,
+    required this.estimatedReach,
   });
 
-  final int unreadCount;
-  final VoidCallback onMesh;
-  final VoidCallback onCompass;
-  final VoidCallback onOfflineComms;
-  final VoidCallback onNewReport;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _QuickChip(
-            icon: Icons.cell_tower,
-            label: 'Mesh Status',
-            onTap: onMesh,
-          ),
-          const SizedBox(width: 10),
-          _QuickChip(
-            icon: Icons.explore_outlined,
-            label: 'Locator',
-            onTap: onCompass,
-          ),
-          const SizedBox(width: 10),
-          _QuickChip(
-            icon: Icons.forum_outlined,
-            label: 'Comms',
-            badge: unreadCount > 0 ? '$unreadCount' : null,
-            onTap: onOfflineComms,
-          ),
-          const SizedBox(width: 10),
-          _QuickChip(
-            icon: Icons.add,
-            label: 'New Report',
-            isPrimary: true,
-            onTap: onNewReport,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickChip extends StatelessWidget {
-  const _QuickChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.badge,
-    this.isPrimary = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final String? badge;
-  final bool isPrimary;
+  final bool isDiscovering;
+  final int estimatedReach;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? dc.darkSurfaceContainerHigh : dc.surfaceContainerHighest;
+    final overlayBg = isDark
+        ? dc.darkSurface.withValues(alpha: 0.9)
+        : dc.surface.withValues(alpha: 0.9);
 
-    final bg = isPrimary
-        ? (isDark ? dc.darkPrimaryAccent.withValues(alpha: 0.15) : dc.primaryContainer)
-        : (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerLow);
-    final fg = isPrimary
-        ? (isDark ? dc.darkPrimaryAccent : dc.primary)
-        : (isDark ? dc.darkInk : dc.onSurface);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(40),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          decoration: BoxDecoration(color: bg),
+          child: Stack(
             children: [
-              Icon(icon, size: 18, color: fg),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: fg,
-                ),
+              // Topographic pattern overlay
+              CustomPaint(
+                size: Size.infinite,
+                painter: _TopographicPainter(isDark: isDark),
               ),
-              if (badge != null) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
+              // Gradient fade from bottom
+              Positioned.fill(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: isDark ? dc.darkPrimaryAccent : dc.primary,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    badge!,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? dc.darkBackground : dc.onPrimary,
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        (isDark ? dc.darkBackground : dc.background)
+                            .withValues(alpha: 0.4),
+                        Colors.transparent,
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
+              // Scanning pill indicator
+              Positioned(
+                bottom: 24,
+                left: 24,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: overlayBg,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ScanDot(
+                        color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        isDiscovering
+                            ? 'Scanning ${estimatedReach}m sector...'
+                            : 'Mesh active — ${estimatedReach}m range',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? dc.darkInk : dc.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -736,8 +590,101 @@ class _QuickChip extends StatelessWidget {
   }
 }
 
+/// Subtle topographic contour lines — mimics the editorial map aesthetic.
+class _TopographicPainter extends CustomPainter {
+  _TopographicPainter({required this.isDark});
+  final bool isDark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..color = isDark
+          ? dc.darkMutedInk.withValues(alpha: 0.12)
+          : dc.outlineVariant.withValues(alpha: 0.25);
+
+    final cx = size.width * 0.55;
+    final cy = size.height * 0.45;
+
+    for (var i = 1; i <= 10; i++) {
+      final rx = 30.0 + i * 28;
+      final ry = 20.0 + i * 18;
+      final rect = Rect.fromCenter(
+        center: Offset(cx, cy),
+        width: rx * 2,
+        height: ry * 2,
+      );
+      canvas.drawOval(rect, paint);
+    }
+
+    // Secondary contour cluster
+    final cx2 = size.width * 0.2;
+    final cy2 = size.height * 0.7;
+    for (var i = 1; i <= 5; i++) {
+      final rx = 15.0 + i * 20;
+      final ry = 12.0 + i * 14;
+      final rect = Rect.fromCenter(
+        center: Offset(cx2, cy2),
+        width: rx * 2,
+        height: ry * 2,
+      );
+      canvas.drawOval(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TopographicPainter old) => isDark != old.isDark;
+}
+
+/// Pulsing dot for the scanning indicator.
+class _ScanDot extends StatefulWidget {
+  const _ScanDot({required this.color});
+  final Color color;
+
+  @override
+  State<_ScanDot> createState() => _ScanDotState();
+}
+
+class _ScanDotState extends State<_ScanDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: widget.color.withValues(alpha: 0.5 + _ctrl.value * 0.5),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// Recent Activity — alternating tonal cards, no dividers
+// Recent Activity — alternating tonal backgrounds, no dividers
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _RecentActivitySection extends StatelessWidget {
@@ -850,20 +797,26 @@ class _ActivityItem extends StatelessWidget {
     final categoryKey = report['category'] as String? ?? '';
     final description = report['description'] as String? ?? 'Report';
 
+    // Alternating: white / light gray (matches mockup)
     final bg = useAltBackground
         ? (isDark ? dc.darkSurface : dc.surfaceContainerLow)
         : (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerLowest);
+
+    // Icon container uses opposite tone for contrast
+    final iconBg = useAltBackground
+        ? (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerLowest)
+        : (isDark ? dc.darkSurfaceContainerHigh : dc.surfaceContainerLow);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             children: [
@@ -871,9 +824,7 @@ class _ActivityItem extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? dc.darkSurfaceContainerHigh
-                      : dc.surfaceContainerLow,
+                  color: iconBg,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -989,7 +940,8 @@ class _EmptyActivity extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SOS Button — fixed floating, xl radius, ambient shadow
+// SOS Button — floating, primary gradient, ambient shadow
+// Fixed bottom-24 (96px), max-w-xs (320px), rounded-[1.5rem] (24px)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _SosButton extends StatelessWidget {
@@ -1029,7 +981,7 @@ class _SosButton extends StatelessWidget {
             ),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
+              padding: const EdgeInsets.symmetric(vertical: 20),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

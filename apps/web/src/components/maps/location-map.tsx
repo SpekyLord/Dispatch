@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 type LocationMapProps = {
   latitude?: number;
   longitude?: number;
+  centerLatitude?: number;
+  centerLongitude?: number;
   wrapperClassName?: string;
   mapClassName?: string;
 };
@@ -17,6 +19,8 @@ type LocationMapProps = {
 export function LocationMap({
   latitude = 14.5995,
   longitude = 120.9842,
+  centerLatitude,
+  centerLongitude,
   wrapperClassName,
   mapClassName,
 }: LocationMapProps) {
@@ -28,7 +32,7 @@ export function LocationMap({
       )}
     >
       <MapContainer
-        center={[latitude, longitude]}
+        center={[centerLatitude ?? latitude, centerLongitude ?? longitude]}
         className={cn("h-64 w-full", mapClassName)}
         scrollWheelZoom={false}
         zoom={13}

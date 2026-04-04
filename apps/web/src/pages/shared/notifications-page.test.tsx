@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSessionStore } from "@/lib/auth/session-store";
@@ -116,5 +116,80 @@ describe("NotificationsPage", () => {
       expect(screen.getByText("New advisory posted")).toBeInTheDocument();
     });
     expect(screen.getByText("1 unread notification")).toBeInTheDocument();
+  });
+
+  it("opens linked report notifications for department users", async () => {
+    const notifications = [
+      {
+        id: "notif-report-1",
+        type: "new_report",
+        title: "New fire report",
+        message: "Citizen report needs department response.",
+        is_read: false,
+        reference_id: "report-123",
+        reference_type: "report",
+        created_at: "2026-03-29T03:00:00Z",
+      },
+    ];
+
+    useSessionStore.setState({
+      user: {
+        id: "department-1",
+        email: "department@test.com",
+        role: "department",
+        full_name: "Department",
+      },
+      accessToken: "department-token",
+      refreshToken: null,
+      department: null,
+    });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.endsWith("/api/notifications") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            notifications,
+            unread_count: 1,
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (url.endsWith("/api/notifications/notif-report-1/read") && method === "PUT") {
+        return new Response(
+          JSON.stringify({
+            notification: {
+              ...notifications[0],
+              is_read: true,
+            },
+          }),
+          { status: 200 },
+        );
+      }
+
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/notifications"]}>
+        <Routes>
+          <Route element={<NotificationsPage />} path="/notifications" />
+          <Route element={<div>Department report detail</div>} path="/department/reports/:reportId" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("New fire report")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("New fire report"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Department report detail")).toBeInTheDocument();
+    });
   });
 });

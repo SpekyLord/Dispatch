@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { DepartmentReportsPage } from "./department-reports-page";
 
+vi.mock("@/components/maps/location-map", () => ({
+  LocationMap: () => <div data-testid="location-map" />,
+}));
+
 const realtimeMock = vi.hoisted(() => ({
   subscriptions: [] as Array<{
     table: string;
@@ -52,6 +56,8 @@ describe("DepartmentReportsPage", () => {
       severity: string;
       status: string;
       address: string;
+      latitude?: number;
+      longitude?: number;
       created_at: string;
       is_escalated: boolean;
       visible_via: string;
@@ -66,6 +72,8 @@ describe("DepartmentReportsPage", () => {
         severity: "critical",
         status: "pending",
         address: "North Avenue",
+        latitude: 14.6001,
+        longitude: 120.9849,
         created_at: "2026-03-29T01:00:00Z",
         is_escalated: false,
         visible_via: "primary",
@@ -87,6 +95,8 @@ describe("DepartmentReportsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Warehouse Fire")).toBeInTheDocument();
     });
+    expect(screen.getAllByTestId("report-map-preview-rep-1").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("report-map-overlay-tab-rep-1")).toBeInTheDocument();
     expect(screen.getByText("1 report")).toBeInTheDocument();
     expect(realtimeMock.subscriptions.map((subscription) => subscription.table)).toEqual([
       "incident_reports",
@@ -117,5 +127,91 @@ describe("DepartmentReportsPage", () => {
       expect(screen.getByText("Clinic Fire")).toBeInTheDocument();
     });
     expect(screen.getByText("2 reports")).toBeInTheDocument();
+  });
+
+  it("does not repeat the same report copy when title and description match", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({
+        reports: [
+          {
+            id: "rep-dup",
+            title: "Same copy for duplicate check",
+            description: "Same copy for duplicate check",
+            category: "fire",
+            severity: "low",
+            status: "pending",
+            address: "North Avenue",
+            latitude: 14.6,
+            longitude: 120.98,
+            created_at: "2026-03-29T01:00:00Z",
+            is_escalated: false,
+            visible_via: "primary",
+            current_response: null,
+            response_summary: { accepted: 0, declined: 0, pending: 1 },
+          },
+        ],
+      }), { status: 200 }),
+    );
+
+    render(
+      <MemoryRouter>
+        <DepartmentReportsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Same copy for duplicate check")).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText("Same copy for duplicate check")).toHaveLength(1);
+  });
+
+  it("shows a resolved location label when a report only has coordinates", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes("nominatim.openstreetmap.org/reverse")) {
+        return new Response(JSON.stringify({
+          name: "Quintin Salas Street",
+          address: {
+            city: "Iloilo City",
+            country: "Philippines",
+          },
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        reports: [
+          {
+            id: "rep-coords",
+            title: "Road obstruction",
+            description: "Debris blocking one lane.",
+            category: "road_accident",
+            severity: "high",
+            status: "pending",
+            address: null,
+            latitude: 10.7202,
+            longitude: 122.5621,
+            created_at: "2026-03-29T01:00:00Z",
+            is_escalated: false,
+            visible_via: "primary",
+            current_response: null,
+            response_summary: { accepted: 0, declined: 0, pending: 1 },
+          },
+        ],
+      }), { status: 200 });
+    });
+
+    render(
+      <MemoryRouter>
+        <DepartmentReportsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Quintin Salas Street, Iloilo City, Philippines")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Field location pending")).not.toBeInTheDocument();
   });
 });

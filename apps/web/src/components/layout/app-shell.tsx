@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { LocationMap } from "@/components/maps/location-map";
+import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 import { useLocale } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -176,38 +177,16 @@ function writeShownEmergencyAlertIds(storageKey: string, ids: string[]) {
   }
 }
 
-async function fetchShellJson(path: string, accessToken?: string | null) {
-  const response = await fetch(path, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-  });
-
-  if (!response.ok) {
-    throw new Error("Request failed.");
-  }
-
-  return response.json();
+async function fetchShellJson<T>(path: string) {
+  return apiRequest<T>(path);
 }
 
-async function putShellJson(path: string, accessToken?: string | null) {
-  const response = await fetch(path, {
-    method: "PUT",
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-  });
-
-  if (!response.ok) {
-    throw new Error("Request failed.");
-  }
+async function putShellJson(path: string) {
+  await apiRequest(path, { method: "PUT" });
 }
 
-async function postShellJson(path: string, accessToken?: string | null) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-  });
-
-  if (!response.ok) {
-    throw new Error("Request failed.");
-  }
+async function postShellJson(path: string) {
+  await apiRequest(path, { method: "POST" });
 }
 
 function DepartmentEmergencyAlert({
@@ -334,7 +313,7 @@ function DepartmentEmergencyAlert({
 
   useEffect(() => {
     const fetchNotifications = () =>
-      fetchShellJson("/api/notifications", accessToken)
+      fetchShellJson<{ notifications?: NotificationRecord[] }>("/api/notifications")
         .then((response) => {
           const nextNotifications = Array.isArray(response.notifications)
             ? response.notifications
@@ -376,10 +355,9 @@ function DepartmentEmergencyAlert({
       return;
     }
 
-    void fetchShellJson(`/api/reports/${activeNotification.reference_id}`, accessToken)
+    void fetchShellJson<{ report?: EmergencyReportPreview }>(`/api/reports/${activeNotification.reference_id}`)
       .then((response) => {
-        const payload = response as { report?: EmergencyReportPreview };
-        setActiveReport(payload.report ?? null);
+        setActiveReport(response.report ?? null);
       })
       .catch(() => {
         setActiveReport(null);
@@ -457,7 +435,7 @@ function DepartmentEmergencyAlert({
     );
 
     try {
-      await putShellJson(`/api/notifications/${notificationId}/read`, accessToken);
+      await putShellJson(`/api/notifications/${notificationId}/read`);
     } catch {
       // Keep the optimistic update for this emergency handoff.
     }
@@ -516,7 +494,7 @@ function DepartmentEmergencyAlert({
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
-      <div className={`w-full max-w-[520px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}>
+      <div className={`w-full max-w-[640px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}>
         <div className={`relative border-b px-6 py-5 ${headerToneClassName}`}>
           <button
             aria-label="Dismiss emergency alert"
@@ -527,7 +505,7 @@ function DepartmentEmergencyAlert({
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
 
-          <div className="flex items-start justify-between gap-6 pr-10">
+          <div className="flex items-start justify-between gap-8 pr-10">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white/80">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/14">
@@ -535,18 +513,18 @@ function DepartmentEmergencyAlert({
                 </span>
                 System Priority: Alpha
               </div>
-              <h3 className="mt-2 font-headline text-[2.35rem] uppercase italic leading-[0.88] sm:text-[2.7rem]">
+              <h3 className="mt-2 font-headline text-[2.2rem] uppercase italic leading-[0.88] sm:text-[2.45rem]">
                 Critical {categoryLabel} Alert
               </h3>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">Elapsed Time</p>
-              <p className="mt-1 text-[2.2rem] leading-none sm:text-[2.35rem]">{elapsedLabel}</p>
+              <p className="mt-1 text-[2rem] leading-none sm:text-[2.15rem]">{elapsedLabel}</p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-6 px-6 py-6">
+        <div className="space-y-5 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>Incident ID</p>
@@ -560,12 +538,12 @@ function DepartmentEmergencyAlert({
             </div>
           </div>
 
-          <div className={`rounded-[24px] border px-5 py-5 ${insetCardClassName}`}>
+          <div className={`rounded-[24px] border px-5 py-4 ${insetCardClassName}`}>
             <p className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>
               <span className="material-symbols-outlined text-[16px] text-[#d97757]">location_on</span>
               Primary Location
             </p>
-            <p className="mt-2 font-headline text-[2.15rem] leading-[0.95]">{locationLabel}</p>
+            <p className="mt-2 font-headline text-[1.85rem] leading-[0.95]">{locationLabel}</p>
             <p className={`mt-2 text-[15px] leading-6 ${mutedTextClassName}`}>
               {summarizeText(activeReport?.description || activeNotification.message, 106) ||
                 "Emergency report forwarded from citizen intake. Open the full incident detail for response routing."}
@@ -577,7 +555,7 @@ function DepartmentEmergencyAlert({
             activeReport?.latitude !== null &&
             activeReport?.longitude !== undefined &&
             activeReport?.longitude !== null ? (
-              <div className="relative h-[220px] overflow-hidden">
+              <div className="relative h-[190px] overflow-hidden">
                 <LocationMap
                   latitude={activeReport.latitude}
                   longitude={activeReport.longitude}
@@ -592,7 +570,7 @@ function DepartmentEmergencyAlert({
                 </div>
               </div>
             ) : (
-              <div className="flex h-[220px] items-center justify-center bg-[linear-gradient(135deg,#efe4db,#dac4b8)]">
+              <div className="flex h-[190px] items-center justify-center bg-[linear-gradient(135deg,#efe4db,#dac4b8)]">
                 <div className="text-center">
                   <span className="material-symbols-outlined text-4xl text-[#b55a36]">crisis_alert</span>
                   <p className="mt-2 text-xs font-bold uppercase tracking-[0.22em] text-[#8a4c31]">
@@ -604,7 +582,7 @@ function DepartmentEmergencyAlert({
           </div>
 
           <button
-            className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#b55a36] px-5 py-4 text-sm font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[#9d4c2c]"
+            className="flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#b55a36] px-5 py-3.5 text-sm font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[#9d4c2c]"
             onClick={() => void handleViewIncidentDetails()}
             type="button"
           >
@@ -757,7 +735,7 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
 
     setIsSigningOut(true);
     try {
-      await postShellJson("/api/auth/logout", accessToken);
+      await postShellJson("/api/auth/logout");
     } catch {
       // Sign out locally even if the API call fails.
     }

@@ -1,13 +1,14 @@
 // Notification center — lists all user notifications with mark-read and mark-all-read actions.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
-import { useSessionStore } from "@/lib/auth/session-store";
+import { useSessionStore, type AppRole } from "@/lib/auth/session-store";
 import { subscribeToTable } from "@/lib/realtime/supabase";
 
 type Notification = {
@@ -30,10 +31,22 @@ const typeIcons: Record<string, string> = {
 };
 
 export function NotificationsPage() {
+  const navigate = useNavigate();
   const accessToken = useSessionStore((state) => state.accessToken);
+  const userRole = useSessionStore((state) => state.user?.role);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const notificationTargets = useMemo(
+    () =>
+      Object.fromEntries(
+        notifications.map((notification) => [
+          notification.id,
+          getNotificationTarget(notification, userRole),
+        ]),
+      ) as Record<string, string | null>,
+    [notifications, userRole],
+  );
 
   function fetchNotifications(showLoader = true) {
     if (showLoader) {
@@ -100,6 +113,17 @@ export function NotificationsPage() {
     }
   }
 
+  async function handleNotificationClick(notification: Notification) {
+    if (!notification.is_read) {
+      await markRead(notification.id);
+    }
+
+    const target = notificationTargets[notification.id];
+    if (target) {
+      navigate(target);
+    }
+  }
+
   return (
     <AppShell subtitle="Stay informed" title="Notifications">
       <div className="flex items-center justify-between mb-8">
@@ -130,7 +154,7 @@ export function NotificationsPage() {
             <Card
               key={n.id}
               className={`cursor-pointer transition-all hover:shadow-glass ${!n.is_read ? "border-l-4 border-l-[#D97757]" : "opacity-70"}`}
-              onClick={() => !n.is_read && markRead(n.id)}
+              onClick={() => void handleNotificationClick(n)}
             >
               <div className="flex items-start gap-3">
                 <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${!n.is_read ? "bg-[#ffdbd0] text-secondary" : "bg-surface-container text-on-surface-variant"}`}>
@@ -153,4 +177,31 @@ export function NotificationsPage() {
       )}
     </AppShell>
   );
+}
+
+function getNotificationTarget(
+  notification: Notification,
+  userRole: AppRole | undefined,
+) {
+  if (!notification.reference_id) {
+    return null;
+  }
+
+  if (notification.reference_type === "report") {
+    if (userRole === "department") {
+      return `/department/reports/${notification.reference_id}`;
+    }
+    if (userRole === "municipality") {
+      return `/municipality/reports/${notification.reference_id}`;
+    }
+    if (userRole === "citizen") {
+      return `/citizen/report/${notification.reference_id}`;
+    }
+  }
+
+  if (notification.reference_type === "department" && userRole === "department") {
+    return "/department/profile";
+  }
+
+  return null;
 }

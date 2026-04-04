@@ -4,6 +4,8 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from dispatch_api.validation import sanitize_postgrest_value
+
 # threshold (seconds) to consider a report "unattended"
 UNATTENDED_THRESHOLD_SECONDS = 3600
 
@@ -16,20 +18,23 @@ class AnalyticsService:
     def get_municipality_reports(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
 
-        if filters.get("status"):
-            params["status"] = f"eq.{filters['status']}"
-        if filters.get("category"):
-            params["category"] = f"eq.{filters['category']}"
-        date_from = filters.get("date_from")
-        date_to = filters.get("date_to")
+        status = sanitize_postgrest_value(filters.get("status"))
+        if status:
+            params["status"] = f"eq.{status}"
+        category = sanitize_postgrest_value(filters.get("category"))
+        if category:
+            params["category"] = f"eq.{category}"
+        date_from = sanitize_postgrest_value(filters.get("date_from"))
+        date_to = sanitize_postgrest_value(filters.get("date_to"))
         if date_from and date_to:
             params["and"] = f"(created_at.gte.{date_from},created_at.lte.{date_to})"
         elif date_from:
             params["created_at"] = f"gte.{date_from}"
         elif date_to:
             params["created_at"] = f"lte.{date_to}"
-        if filters.get("is_escalated"):
-            params["is_escalated"] = f"eq.{filters['is_escalated']}"
+        is_escalated = sanitize_postgrest_value(filters.get("is_escalated"))
+        if is_escalated:
+            params["is_escalated"] = f"eq.{is_escalated}"
 
         return self.client.db_query("incident_reports", params=params, use_service_role=True)
 

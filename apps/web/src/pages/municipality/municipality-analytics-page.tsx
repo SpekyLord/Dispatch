@@ -64,7 +64,8 @@ export function MunicipalityAnalyticsPage() {
   }
 
   // Find the max category count for proportional bars
-  const maxCategoryCount = Math.max(...Object.values(data.by_category), 1);
+  const categoryValues = Object.values(data.by_category);
+  const maxCategoryCount = categoryValues.length > 0 ? Math.max(...categoryValues, 1) : 1;
 
   return (
     <AppShell subtitle={t("analytics.subtitle")} title={t("analytics.title")}>

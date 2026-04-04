@@ -478,14 +478,6 @@ function WeatherPreviewCard() {
   );
 }
 
-function ProfileField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#684836]">{label}</p>
-      <p className="mt-2 text-[1.12rem] leading-8 text-[#3f3028]">{value}</p>
-    </div>
-  );
-}
 
 function ProfileInfoRow({
   icon,
@@ -549,9 +541,6 @@ function formatDepartmentType(value?: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatRegistryId(id: string) {
-  return id.replace(/-/g, "").slice(0, 5).toUpperCase() || "00000";
-}
 
 function formatRegistryDisplayId(id: string) {
   const compact = id.replace(/-/g, "").toUpperCase();

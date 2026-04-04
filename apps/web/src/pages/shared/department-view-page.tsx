@@ -70,6 +70,7 @@ export function DepartmentViewPage() {
   const [department, setDepartment] = useState<DepartmentInfo | null>(null);
   const [posts, setPosts] = useState<ProfileInteractivePost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     if (!uploaderId) {
@@ -103,6 +104,7 @@ export function DepartmentViewPage() {
         }
         setDepartment(null);
         setPosts([]);
+        setFetchError(true);
       })
       .finally(() => {
         if (isActive) {
@@ -140,7 +142,17 @@ export function DepartmentViewPage() {
     return (
       <AppShell subtitle="Publisher profile" title="Department">
         <Card className="py-16 text-center text-on-surface-variant">
-          This department profile is not available right now.
+          <span className="material-symbols-outlined mb-2 text-3xl">{fetchError ? "cloud_off" : "info"}</span>
+          <p>{fetchError ? "Failed to load department profile." : "This department profile is not available right now."}</p>
+          {fetchError && (
+            <button
+              type="button"
+              className="mt-4 rounded-full bg-primary px-6 py-2 text-sm font-medium text-on-primary"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+          )}
         </Card>
       </AppShell>
     );

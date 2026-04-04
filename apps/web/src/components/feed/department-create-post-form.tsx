@@ -1,5 +1,10 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 
+import {
+  FEED_DAMAGE_LEVEL_OPTIONS,
+  type FeedAssessmentDetails,
+  type FeedPostKind,
+} from "@/components/feed/assessment-post-summary";
 import { Button } from "@/components/ui/button";
 import { apiRequest, apiUpload } from "@/lib/api/client";
 
@@ -26,6 +31,37 @@ const ALLOWED_ATTACHMENT_TYPES = [
   "text/csv",
 ];
 
+const POST_KIND_OPTIONS: Array<{
+  value: FeedPostKind;
+  label: string;
+  description: string;
+  icon: string;
+  iconAccentClassName: string;
+}> = [
+  {
+    value: "standard",
+    label: "Regular Post",
+    description: "Use the usual public bulletin layout for announcements and updates.",
+    icon: "campaign",
+    iconAccentClassName: "bg-[#ffeadf] text-[#a14b2f]",
+  },
+  {
+    value: "assessment",
+    label: "Assessment Post",
+    description: "Publish a structured field assessment with damage and impact statistics.",
+    icon: "monitoring",
+    iconAccentClassName: "bg-[#f5e9dd] text-[#8b5b3e]",
+  },
+] as const;
+
+const DEFAULT_ASSESSMENT_DETAILS: FeedAssessmentDetails = {
+  affected_area: "",
+  damage_level: "minor",
+  estimated_casualties: 0,
+  displaced_persons: 0,
+  description: "",
+};
+
 type DepartmentCreatePostFormProps = {
   mode?: "create" | "edit";
   postId?: string | number;
@@ -34,11 +70,22 @@ type DepartmentCreatePostFormProps = {
     content?: string;
     category?: string;
     location?: string;
+    post_kind?: FeedPostKind;
+    assessment_details?: FeedAssessmentDetails | null;
   };
   onCancel?: () => void;
   onSuccess?: () => void | Promise<void>;
   submitLabel?: string;
 };
+
+function FieldLabel({ icon, children }: { icon: string; children: ReactNode }) {
+  return (
+    <label className="aegis-label flex items-center gap-2">
+      <span className="material-symbols-outlined text-[15px] text-[#b35e38]">{icon}</span>
+      <span>{children}</span>
+    </label>
+  );
+}
 
 export function DepartmentCreatePostForm({
   mode = "create",
@@ -52,6 +99,10 @@ export function DepartmentCreatePostForm({
   const [content, setContent] = useState(initialValues?.content ?? "");
   const [category, setCategory] = useState(initialValues?.category ?? "update");
   const [location, setLocation] = useState(initialValues?.location ?? "");
+  const [postKind, setPostKind] = useState<FeedPostKind>(initialValues?.post_kind ?? "standard");
+  const [assessmentDetails, setAssessmentDetails] = useState<FeedAssessmentDetails>(
+    initialValues?.assessment_details ?? DEFAULT_ASSESSMENT_DETAILS,
+  );
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,11 +117,40 @@ export function DepartmentCreatePostForm({
     setContent(initialValues?.content ?? "");
     setCategory(initialValues?.category ?? "update");
     setLocation(initialValues?.location ?? "");
+    setPostKind(initialValues?.post_kind ?? "standard");
+    setAssessmentDetails(initialValues?.assessment_details ?? DEFAULT_ASSESSMENT_DETAILS);
     setPhotoFiles([]);
     setAttachmentFiles([]);
     setGpsStatus(initialValues?.location ? "done" : "idle");
     setError(null);
-  }, [initialValues?.category, initialValues?.content, initialValues?.location, initialValues?.title, mode, postId]);
+  }, [
+    initialValues?.assessment_details,
+    initialValues?.category,
+    initialValues?.content,
+    initialValues?.location,
+    initialValues?.post_kind,
+    initialValues?.title,
+    mode,
+    postId,
+  ]);
+
+  function updateAssessmentField<Key extends keyof FeedAssessmentDetails>(
+    field: Key,
+    value: FeedAssessmentDetails[Key],
+  ) {
+    setAssessmentDetails((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function handlePostKindChange(nextKind: FeedPostKind) {
+    setPostKind(nextKind);
+    setError(null);
+    if (nextKind === "assessment" && category === "update") {
+      setCategory("situational_report");
+    }
+  }
 
   function importCurrentLocation() {
     if (!("geolocation" in navigator)) {
@@ -193,10 +273,33 @@ export function DepartmentCreatePostForm({
       setError("Location is required.");
       return;
     }
+    if (postKind === "assessment" && !assessmentDetails.affected_area.trim()) {
+      setError("Affected area is required for assessment posts.");
+      return;
+    }
+    if (postKind === "assessment" && assessmentDetails.estimated_casualties < 0) {
+      setError("Estimated casualties must be zero or greater.");
+      return;
+    }
+    if (postKind === "assessment" && assessmentDetails.displaced_persons < 0) {
+      setError("Displaced persons must be zero or greater.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     try {
+      const normalizedAssessmentDetails =
+        postKind === "assessment"
+          ? {
+              affected_area: assessmentDetails.affected_area.trim(),
+              damage_level: assessmentDetails.damage_level,
+              estimated_casualties: Number(assessmentDetails.estimated_casualties || 0),
+              displaced_persons: Number(assessmentDetails.displaced_persons || 0),
+              description: assessmentDetails.description?.trim() ?? "",
+            }
+          : null;
+
       if (mode === "edit") {
         if (!postId) {
           throw new Error("Post id is required for editing.");
@@ -208,6 +311,8 @@ export function DepartmentCreatePostForm({
             content: content.trim(),
             category,
             location: location.trim(),
+            post_kind: postKind,
+            assessment_details: normalizedAssessmentDetails,
           }),
         });
       } else {
@@ -216,6 +321,10 @@ export function DepartmentCreatePostForm({
         formData.append("content", content.trim());
         formData.append("category", category);
         formData.append("location", location.trim());
+        formData.append("post_kind", postKind);
+        if (normalizedAssessmentDetails) {
+          formData.append("assessment_details", JSON.stringify(normalizedAssessmentDetails));
+        }
         for (const photo of photoFiles) {
           formData.append("photos", photo);
         }
@@ -228,6 +337,8 @@ export function DepartmentCreatePostForm({
         setContent("");
         setCategory("update");
         setLocation("");
+        setPostKind("standard");
+        setAssessmentDetails(DEFAULT_ASSESSMENT_DETAILS);
         setPhotoFiles([]);
         setAttachmentFiles([]);
         setGpsStatus("idle");
@@ -254,40 +365,157 @@ export function DepartmentCreatePostForm({
         </div>
       )}
 
-      <div>
-        <label className="aegis-label">Title</label>
-        <input
-          type="text"
-          className="aegis-input"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Announcement title"
-        />
+      <div className="pb-1">
+        <FieldLabel icon="tune">Post Format</FieldLabel>
+        <div className="grid gap-3 md:grid-cols-2">
+          {POST_KIND_OPTIONS.map((option) => {
+            const active = postKind === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-label={option.label}
+                aria-pressed={active}
+                onClick={() => handlePostKindChange(option.value)}
+                className={`rounded-[22px] border px-4 py-4 text-left transition-all ${
+                  active
+                    ? "border-[#b35e38] bg-[#fff3ec] shadow-[0_12px_22px_-18px_rgba(179,94,56,0.55)]"
+                    : "border-[#e2d1c7] bg-[#fff8f3] hover:border-[#d9c2b5] hover:bg-[#fffaf6]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-[0_10px_18px_-14px_rgba(161,75,47,0.38)] ${option.iconAccentClassName}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">{option.icon}</span>
+                  </span>
+                  <p className="text-sm font-semibold text-on-surface">{option.label}</p>
+                </div>
+                <div className="mt-3 border-t border-[#ead8cc] pt-3">
+                  <p className="text-xs leading-5 text-on-surface-variant">{option.description}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div>
-        <label className="aegis-label">Content</label>
-        <textarea
-          className="aegis-input min-h-[120px]"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Write your announcement..."
-        />
+      <div className="border-t border-[#ead8cc] pt-6">
+        <div>
+          <FieldLabel icon="title">Title</FieldLabel>
+          <input
+            type="text"
+            className="aegis-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={postKind === "assessment" ? "Assessment headline" : "Announcement title"}
+          />
+        </div>
+
+        <div className="mt-5">
+          <FieldLabel icon="notes">Content</FieldLabel>
+          <textarea
+            className="aegis-input min-h-[120px]"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={
+              postKind === "assessment"
+                ? "Write the operational summary for this field assessment..."
+                : "Write your announcement..."
+            }
+          />
+        </div>
+
+        <div className="mt-5">
+          <FieldLabel icon="sell">Feed Category</FieldLabel>
+          <select className="aegis-input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {POST_CATEGORIES.map((postCategory) => (
+              <option key={postCategory.value} value={postCategory.value}>
+                {postCategory.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div>
-        <label className="aegis-label">Category</label>
-        <select className="aegis-input" value={category} onChange={(e) => setCategory(e.target.value)}>
-          {POST_CATEGORIES.map((postCategory) => (
-            <option key={postCategory.value} value={postCategory.value}>
-              {postCategory.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {postKind === "assessment" && (
+        <div className="rounded-[28px] border border-[#e2d1c7] bg-[#fff8f3] p-5">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+              <span className="material-symbols-outlined text-[16px]">monitoring</span>
+              <span>Assessment Details</span>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
+              Publish the same structured impact details teams already use inside the assessments tab.
+            </p>
+          </div>
 
-      <div>
-        <label className="aegis-label">Location</label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <FieldLabel icon="pin_drop">Affected Area</FieldLabel>
+              <input
+                aria-label="Affected Area"
+                type="text"
+                className="aegis-input w-full"
+                value={assessmentDetails.affected_area}
+                onChange={(e) => updateAssessmentField("affected_area", e.target.value)}
+                placeholder="Barangay, district, or operations zone"
+              />
+            </div>
+            <div>
+              <FieldLabel icon="warning">Damage Level</FieldLabel>
+              <select
+                aria-label="Damage Level"
+                className="aegis-input w-full"
+                value={assessmentDetails.damage_level}
+                onChange={(e) => updateAssessmentField("damage_level", e.target.value)}
+              >
+                {FEED_DAMAGE_LEVEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <FieldLabel icon="groups">Estimated Casualties</FieldLabel>
+              <input
+                aria-label="Estimated Casualties"
+                type="number"
+                min={0}
+                className="aegis-input w-full"
+                value={assessmentDetails.estimated_casualties}
+                onChange={(e) => updateAssessmentField("estimated_casualties", Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <FieldLabel icon="group_off">Displaced Persons</FieldLabel>
+              <input
+                aria-label="Displaced Persons"
+                type="number"
+                min={0}
+                className="aegis-input w-full"
+                value={assessmentDetails.displaced_persons}
+                onChange={(e) => updateAssessmentField("displaced_persons", Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <FieldLabel icon="article">Assessment Note</FieldLabel>
+            <textarea
+              aria-label="Assessment Note"
+              className="aegis-input min-h-[110px] w-full"
+              value={assessmentDetails.description ?? ""}
+              onChange={(e) => updateAssessmentField("description", e.target.value)}
+              placeholder="Summarize damage observations, access limits, and response concerns..."
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="border-t border-[#ead8cc] pt-6">
+        <FieldLabel icon="location_on">Location</FieldLabel>
         <div className="space-y-3">
           <input
             type="text"
@@ -338,8 +566,8 @@ export function DepartmentCreatePostForm({
 
       {mode === "create" && (
         <>
-          <div>
-            <label className="aegis-label">Photos</label>
+          <div className="border-t border-[#ead8cc] pt-6">
+            <FieldLabel icon="photo_library">Photos</FieldLabel>
             <p className="mb-3 text-xs text-on-surface-variant">JPEG or PNG, up to 5 MB each.</p>
             <div className="mb-3 flex flex-wrap gap-2">
               {photoFiles.map((file, index) => (
@@ -367,8 +595,8 @@ export function DepartmentCreatePostForm({
             )}
           </div>
 
-          <div>
-            <label className="aegis-label">Attachments</label>
+          <div className="border-t border-[#ead8cc] pt-6">
+            <FieldLabel icon="attach_file">Attachments</FieldLabel>
             <p className="mb-3 text-xs text-on-surface-variant">PDF, Office documents, TXT, or CSV, up to 10 MB each.</p>
             <div className="mb-3 flex flex-wrap gap-2">
               {attachmentFiles.map((file, index) => (
@@ -398,7 +626,7 @@ export function DepartmentCreatePostForm({
         </>
       )}
 
-      <div className="flex gap-3 pt-2">
+      <div className="flex gap-3 border-t border-[#ead8cc] pt-5">
         <Button type="submit" variant="secondary" disabled={loading}>
           {loading ? (mode === "edit" ? "Saving..." : "Publishing...") : submitLabel}
         </Button>

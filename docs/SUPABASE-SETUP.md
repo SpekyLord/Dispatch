@@ -34,15 +34,19 @@ The migration file at `supabase/migrations/20260328011000_phase0_foundation.sql`
 
 The Phase 2 follow-up migration at `supabase/migrations/20260329020000_phase2_realtime_access.sql` adds realtime-friendly access policies and supporting indexes for department routing, feed reads, and notifications.
 
+The consolidated baseline at `supabase/migrations/20260401000000_consolidated.sql` is the current one-file setup most local environments should apply first.
+
+The assessment-post follow-up migration at `supabase/migrations/20260404000000_feed_assessment_posts.sql` adds the `post_kind` and `assessment_details` columns required for assessment-style feed posts.
+
 ### Option A: Supabase SQL Editor (Recommended)
 
 1. Open your project in the Supabase dashboard
 2. Go to **SQL Editor**
 3. Click **New query**
-4. Copy and paste the contents of `supabase/migrations/20260328011000_phase0_foundation.sql`
+4. Copy and paste the contents of `supabase/migrations/20260401000000_consolidated.sql`
 5. Click **Run**
 6. Create another query
-7. Copy and paste the contents of `supabase/migrations/20260329020000_phase2_realtime_access.sql`
+7. Copy and paste the contents of `supabase/migrations/20260404000000_feed_assessment_posts.sql`
 8. Click **Run**
 
 ### Option B: Supabase CLI

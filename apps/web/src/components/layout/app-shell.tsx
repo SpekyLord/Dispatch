@@ -21,6 +21,7 @@ type NavItem = {
   to: string;
   labelKey: MessageKey;
   icon: string;
+  highlightActive?: boolean;
 };
 
 const popupPanelShadowClassName =
@@ -616,9 +617,9 @@ const roleNavItems: Record<string, NavItem[]> = {
   department: [
     { to: "/department", labelKey: "nav.dashboard", icon: "dashboard" },
     { to: "/department/reports", labelKey: "nav.incidentBoard", icon: "assignment" },
-    { to: "/department/assessments", labelKey: "nav.assessments", icon: "assessment" },
-    { to: "/department/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
+    { to: "/department/news-feed?compose=1", labelKey: "nav.createPost", icon: "edit_square", highlightActive: false },
     { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
+    { to: "/department/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
     { to: "/department/profile", labelKey: "nav.profile", icon: "person" },
   ],
   municipality: [
@@ -871,32 +872,50 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
 
               <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-2">
                 {desktopNavItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    className={({ isActive }) =>
-                      cn(
+                  item.highlightActive === false ? (
+                    <Link
+                      key={item.to}
+                      className={cn(
                         "flex items-center gap-4 rounded-xl px-4 py-3.5 text-lg font-medium transition-all duration-200",
-                        isActive
-                          ? isDarkMode
-                            ? "bg-white/10 text-[#f2a27b] shadow-sm"
-                            : "bg-surface-container-lowest text-[#D97757] shadow-sm"
-                          : isDarkMode
-                            ? "text-white/72 hover:bg-white/6 hover:text-white"
-                            : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
-                      )
-                    }
-                    end={
-                      item.to === "/citizen" ||
-                      item.to === "/department" ||
-                      item.to === "/municipality"
-                    }
-                    to={item.to}
-                  >
-                    <span className="material-symbols-outlined text-[26px]">
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </NavLink>
+                        isDarkMode
+                          ? "text-white/72 hover:bg-white/6 hover:text-white"
+                          : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
+                      )}
+                      to={item.to}
+                    >
+                      <span className="material-symbols-outlined text-[26px]">
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <NavLink
+                      key={item.to}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center gap-4 rounded-xl px-4 py-3.5 text-lg font-medium transition-all duration-200",
+                          isActive
+                            ? isDarkMode
+                              ? "bg-white/10 text-[#f2a27b] shadow-sm"
+                              : "bg-surface-container-lowest text-[#D97757] shadow-sm"
+                            : isDarkMode
+                              ? "text-white/72 hover:bg-white/6 hover:text-white"
+                              : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
+                        )
+                      }
+                      end={
+                        item.to === "/citizen" ||
+                        item.to === "/department" ||
+                        item.to === "/municipality"
+                      }
+                      to={item.to}
+                    >
+                      <span className="material-symbols-outlined text-[26px]">
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </NavLink>
+                  )
                 ))}
               </nav>
 
@@ -1028,23 +1047,41 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
           isDarkMode ? "border-white/10 bg-[#181817]/95" : "border-outline-variant/10",
         )}>
           {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              className={({ isActive }) =>
-                cn(
+            item.highlightActive === false ? (
+              <Link
+                key={item.to}
+                className={cn(
                   "flex min-w-[72px] flex-col items-center gap-1",
-                  isActive ? "text-[#D97757]" : isDarkMode ? "text-white/65" : "text-on-surface-variant",
-                )
-              }
-              to={item.to}
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                {item.icon}
-              </span>
-              <span className="text-[10px] font-bold uppercase tracking-tighter">
-                {item.label}
-              </span>
-            </NavLink>
+                  isDarkMode ? "text-white/65" : "text-on-surface-variant",
+                )}
+                to={item.to}
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  {item.icon}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">
+                  {item.label}
+                </span>
+              </Link>
+            ) : (
+              <NavLink
+                key={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex min-w-[72px] flex-col items-center gap-1",
+                    isActive ? "text-[#D97757]" : isDarkMode ? "text-white/65" : "text-on-surface-variant",
+                  )
+                }
+                to={item.to}
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  {item.icon}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">
+                  {item.label}
+                </span>
+              </NavLink>
+            )
           ))}
         </nav>
       )}

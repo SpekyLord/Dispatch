@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from dispatch_api.app import create_app
@@ -560,6 +562,125 @@ def test_verified_department_can_create_text_only_post(settings):
     assert feed_response.json["posts"][0]["photos"] == []
     assert feed_response.json["posts"][0]["attachments"] == []
     assert "department_feed_storage" not in fake._db or fake._db["department_feed_storage"] == []
+
+
+def test_verified_department_can_create_assessment_style_post(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="dept-fire-user", email="fire@example.com", role="department"),
+        db_rows={
+            "users": [{"id": "citizen-1", "role": "citizen", "email": "citizen@example.com"}],
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    assessment_details = {
+        "affected_area": "Barangay Riverside",
+        "damage_level": "critical",
+        "estimated_casualties": 3,
+        "displaced_persons": 14,
+        "description": "Flood damage has cut road access.",
+    }
+
+    with app.test_client() as client:
+        create_response = client.post(
+            "/api/departments/posts",
+            headers=auth_header(),
+            data={
+                "title": "Rapid damage assessment bulletin",
+                "content": "Field teams are consolidating rescue priorities and relief staging plans.",
+                "category": "situational_report",
+                "location": "Floodplain",
+                "post_kind": "assessment",
+                "assessment_details": json.dumps(assessment_details),
+            },
+            content_type="multipart/form-data",
+        )
+        feed_response = client.get("/api/feed")
+
+    assert create_response.status_code == 201
+    assert feed_response.status_code == 200
+    assert feed_response.json["posts"][0]["post_kind"] == "assessment"
+    assert feed_response.json["posts"][0]["assessment_details"]["affected_area"] == "Barangay Riverside"
+    assert feed_response.json["posts"][0]["assessment_details"]["estimated_casualties"] == 3
+    assert fake._db["department_feed_posts"][0]["assessment_details"]["damage_level"] == "critical"
+
+
+def test_assessment_post_returns_clear_error_when_feed_schema_is_outdated(settings):
+    class OutdatedFeedSchemaClient(FakeSupabaseClient):
+        def db_insert(self, table, *, data, token=None, use_service_role=False, return_repr=True):
+            if table == "department_feed_posts":
+                request = httpx.Request("POST", "https://example.supabase.co/rest/v1/department_feed_posts")
+                response = httpx.Response(
+                    400,
+                    request=request,
+                    json={
+                        "code": "PGRST204",
+                        "message": "Could not find the 'post_kind' column of 'department_feed_posts' in the schema cache",
+                        "details": None,
+                        "hint": None,
+                    },
+                )
+                raise httpx.HTTPStatusError("schema cache miss", request=request, response=response)
+            return super().db_insert(
+                table,
+                data=data,
+                token=token,
+                use_service_role=use_service_role,
+                return_repr=return_repr,
+            )
+
+    fake = OutdatedFeedSchemaClient(
+        user=FakeUser(id="dept-fire-user", email="fire@example.com", role="department"),
+        db_rows={
+            "users": [{"id": "citizen-1", "role": "citizen", "email": "citizen@example.com"}],
+            "departments": [
+                {
+                    "id": "dept-fire",
+                    "user_id": "dept-fire-user",
+                    "type": "fire",
+                    "name": "BFP",
+                    "verification_status": "approved",
+                }
+            ],
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        create_response = client.post(
+            "/api/departments/posts",
+            headers=auth_header(),
+            data={
+                "title": "Rapid damage assessment bulletin",
+                "content": "Field teams are consolidating rescue priorities and relief staging plans.",
+                "category": "situational_report",
+                "location": "Floodplain",
+                "post_kind": "assessment",
+                "assessment_details": json.dumps(
+                    {
+                        "affected_area": "Barangay Riverside",
+                        "damage_level": "critical",
+                        "estimated_casualties": 3,
+                        "displaced_persons": 14,
+                        "description": "Flood damage has cut road access.",
+                    }
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert create_response.status_code == 500
+    assert create_response.json["error"]["code"] == "schema_outdated"
+    assert "20260404000000_feed_assessment_posts.sql" in create_response.json["error"]["message"]
 
 
 def test_authenticated_user_can_create_feed_comment_and_public_can_read_it(settings):

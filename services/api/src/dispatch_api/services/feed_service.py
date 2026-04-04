@@ -3,7 +3,10 @@ from __future__ import annotations
 from http import HTTPStatus
 from typing import Any
 
+import httpx
+
 from dispatch_api.errors import ApiError
+from dispatch_api.services.assessment_service import VALID_DAMAGE_LEVELS
 from dispatch_api.services.notification_service import NotificationService
 
 VALID_POST_CATEGORIES = {
@@ -13,6 +16,7 @@ VALID_POST_CATEGORIES = {
     "update",
     "situational_report",
 }
+VALID_POST_KINDS = {"standard", "assessment"}
 
 FEED_POSTS_TABLE = "department_feed_posts"
 FEED_STORAGE_TABLE = "department_feed_storage"
@@ -34,6 +38,8 @@ class FeedService:
         content: str,
         category: str,
         location: str,
+        post_kind: str = "standard",
+        assessment_details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not title:
             raise ApiError("Title is required.", code="validation_error")
@@ -46,18 +52,33 @@ class FeedService:
                 f"Category must be one of: {', '.join(sorted(VALID_POST_CATEGORIES))}.",
                 code="validation_error",
             )
+        if post_kind not in VALID_POST_KINDS:
+            raise ApiError(
+                f"post_kind must be one of: {', '.join(sorted(VALID_POST_KINDS))}.",
+                code="validation_error",
+            )
 
-        rows = self.client.db_insert(
-            FEED_POSTS_TABLE,
-            data={
-                "uploader": author_id,
-                "title": title,
-                "content": content,
-                "category": category,
-                "location": location,
-            },
-            use_service_role=True,
+        normalized_assessment_details = self._normalize_assessment_details(
+            post_kind=post_kind,
+            assessment_details=assessment_details,
         )
+
+        try:
+            rows = self.client.db_insert(
+                FEED_POSTS_TABLE,
+                data={
+                    "uploader": author_id,
+                    "title": title,
+                    "content": content,
+                    "category": category,
+                    "location": location,
+                    "post_kind": post_kind,
+                    "assessment_details": normalized_assessment_details,
+                },
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError as error:
+            self._raise_schema_migration_error(error)
         if not rows:
             raise ApiError("Failed to create post.", code="create_failed")
 
@@ -231,6 +252,8 @@ class FeedService:
         content: str,
         category: str,
         location: str,
+        post_kind: str = "standard",
+        assessment_details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not title:
             raise ApiError("Title is required.", code="validation_error")
@@ -243,6 +266,16 @@ class FeedService:
                 f"Category must be one of: {', '.join(sorted(VALID_POST_CATEGORIES))}.",
                 code="validation_error",
             )
+        if post_kind not in VALID_POST_KINDS:
+            raise ApiError(
+                f"post_kind must be one of: {', '.join(sorted(VALID_POST_KINDS))}.",
+                code="validation_error",
+            )
+
+        normalized_assessment_details = self._normalize_assessment_details(
+            post_kind=post_kind,
+            assessment_details=assessment_details,
+        )
 
         rows = self.client.db_query(
             FEED_POSTS_TABLE,
@@ -260,17 +293,22 @@ class FeedService:
                 status_code=HTTPStatus.FORBIDDEN,
             )
 
-        updated_rows = self.client.db_update(
-            FEED_POSTS_TABLE,
-            data={
-                "title": title,
-                "content": content,
-                "category": category,
-                "location": location,
-            },
-            params={"id": f"eq.{post_id}", "uploader": f"eq.{author_id}"},
-            use_service_role=True,
-        )
+        try:
+            updated_rows = self.client.db_update(
+                FEED_POSTS_TABLE,
+                data={
+                    "title": title,
+                    "content": content,
+                    "category": category,
+                    "location": location,
+                    "post_kind": post_kind,
+                    "assessment_details": normalized_assessment_details,
+                },
+                params={"id": f"eq.{post_id}", "uploader": f"eq.{author_id}"},
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError as error:
+            self._raise_schema_migration_error(error)
         if not updated_rows:
             raise ApiError("Failed to update post.", code="update_failed")
 
@@ -486,6 +524,8 @@ class FeedService:
             "content": post.get("content"),
             "category": post.get("category"),
             "location": post.get("location"),
+            "post_kind": post.get("post_kind") or "standard",
+            "assessment_details": post.get("assessment_details"),
             "reaction": post.get("reaction", 0),
             "liked_by_me": liked_by_me,
             "comment_count": comment_count,
@@ -509,3 +549,80 @@ class FeedService:
             if department
             else None,
         }
+
+    def _normalize_assessment_details(
+        self,
+        *,
+        post_kind: str,
+        assessment_details: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if post_kind != "assessment":
+            return None
+
+        if not isinstance(assessment_details, dict):
+            raise ApiError(
+                "assessment_details are required for assessment posts.",
+                code="validation_error",
+            )
+
+        affected_area = str(assessment_details.get("affected_area") or "").strip()
+        damage_level = str(assessment_details.get("damage_level") or "").strip()
+        description = str(assessment_details.get("description") or "").strip()
+
+        try:
+            estimated_casualties = int(assessment_details.get("estimated_casualties") or 0)
+            displaced_persons = int(assessment_details.get("displaced_persons") or 0)
+        except (TypeError, ValueError) as error:
+            raise ApiError(
+                "estimated_casualties and displaced_persons must be integers.",
+                code="validation_error",
+            ) from error
+
+        if not affected_area:
+            raise ApiError(
+                "affected_area is required for assessment posts.",
+                code="validation_error",
+            )
+        if damage_level not in VALID_DAMAGE_LEVELS:
+            raise ApiError(
+                f"damage_level must be one of: {', '.join(sorted(VALID_DAMAGE_LEVELS))}.",
+                code="validation_error",
+            )
+        if estimated_casualties < 0 or displaced_persons < 0:
+            raise ApiError(
+                "estimated_casualties and displaced_persons must be zero or greater.",
+                code="validation_error",
+            )
+
+        return {
+            "affected_area": affected_area,
+            "damage_level": damage_level,
+            "estimated_casualties": estimated_casualties,
+            "displaced_persons": displaced_persons,
+            "description": description,
+        }
+
+    def _raise_schema_migration_error(self, error: httpx.HTTPStatusError) -> None:
+        payload: dict[str, Any] = {}
+        try:
+            payload = error.response.json()
+        except ValueError:
+            payload = {}
+
+        diagnostic_text = " ".join(
+            str(payload.get(field) or "")
+            for field in ("message", "details", "hint")
+        ).lower()
+
+        if "department_feed_posts" in diagnostic_text and (
+            "post_kind" in diagnostic_text or "assessment_details" in diagnostic_text
+        ):
+            raise ApiError(
+                "Assessment posts need the latest database migration. Apply "
+                "`supabase/migrations/20260404000000_feed_assessment_posts.sql` "
+                "or run `npx supabase db push`, then try publishing again.",
+                code="schema_outdated",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            ) from error
+
+        raise error

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 
+import {
+  AssessmentPostSummary,
+  type FeedAssessmentDetails,
+  isAssessmentPost,
+} from "@/components/feed/assessment-post-summary";
 import { AttachmentList } from "@/components/feed/attachment-list";
 import { DepartmentHoverPreview, type FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { Card } from "@/components/ui/card";
@@ -11,6 +16,8 @@ export type ProfileInteractivePost = {
   title: string;
   content: string;
   category: string;
+  post_kind?: "standard" | "assessment";
+  assessment_details?: FeedAssessmentDetails | null;
   created_at: string;
   reaction?: number | null;
   liked_by_me?: boolean;
@@ -537,6 +544,7 @@ export function ProfileInteractivePostStack({
             const locationChip = post.location
               ? resolvedLocations[post.location.trim()] ?? formatCoordinateFallback(post.location)
               : null;
+            const assessmentPost = isAssessmentPost(post);
             const profilePicture = department.profile_picture || department.profile_photo;
             const previewDepartment: FeedDepartmentPreview = {
               id: department.id,
@@ -589,7 +597,7 @@ export function ProfileInteractivePostStack({
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
-                          {locationChip ? (
+                          {locationChip && !assessmentPost ? (
                             <span className="dispatch-profile-pill inline-flex max-w-[250px] items-center gap-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-2.5 py-1 text-[10px] text-[#6f625b]">
                               <span className="material-symbols-outlined text-[13px]">location_on</span>
                               <span className="truncate">{locationChip}</span>
@@ -606,6 +614,14 @@ export function ProfileInteractivePostStack({
 
                   <div className="pl-0 md:pl-14">
                     <h3 className="font-headline text-3xl leading-tight text-on-surface">{post.title}</h3>
+                    {assessmentPost && post.assessment_details ? (
+                      <AssessmentPostSummary
+                        className="mt-4"
+                        compact
+                        details={post.assessment_details}
+                        locationLabel={locationChip}
+                      />
+                    ) : null}
                     <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-on-surface-variant">{post.content}</p>
 
                     {displayPhotos.length > 0 ? (

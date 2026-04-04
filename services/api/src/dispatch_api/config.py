@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     dispatch_env: Literal["development", "test", "production"] = "development"
-    api_host: str = "127.0.0.1"
+    api_host: str = "0.0.0.0"
     api_port: int = 5000
     cors_origins: str | list[str] = Field(default="http://localhost:5173")
     supabase_url: str | None = None

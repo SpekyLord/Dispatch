@@ -2,6 +2,7 @@
 
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,9 +26,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _apiUrlController = TextEditingController(
-      text: ref.read(sessionControllerProvider.notifier).currentApiBaseUrl,
-    );
+    final currentUrl =
+        ref.read(sessionControllerProvider.notifier).currentApiBaseUrl;
+    _apiUrlController = TextEditingController(text: currentUrl);
+    // Auto-expand server settings on physical Android devices (10.0.2.2 won't
+    // work there — the user must enter their computer's LAN IP).
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        Uri.tryParse(currentUrl)?.host == '10.0.2.2') {
+      _showServerConfig = true;
+    }
   }
 
   @override
@@ -76,9 +84,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     if (mounted) {
+      final currentUrl = controller.currentApiBaseUrl;
+      final isEmulatorAlias =
+          Uri.tryParse(currentUrl)?.host == '10.0.2.2';
+      if (err != null && isEmulatorAlias) {
+        err =
+            'Cannot reach 10.0.2.2 — this address only works on '
+            'Android emulators.\n\n'
+            'On a physical device, open Server Settings below and '
+            'enter your computer\'s local network IP '
+            '(e.g. http://192.168.x.x:5000).\n\n'
+            'Also make sure API_HOST=0.0.0.0 in your backend .env file.';
+      }
       setState(() {
         _loading = false;
         _error = err;
+        if (err != null && isEmulatorAlias) {
+          _showServerConfig = true;
+        }
       });
     }
   }

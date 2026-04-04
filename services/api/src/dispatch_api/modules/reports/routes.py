@@ -102,6 +102,27 @@ def get_report(report_id: str):
         )
 
     client = current_app.extensions["supabase_client"]
+    reporter_id = report.get("reporter_id")
+    if reporter_id:
+        try:
+            reporter_rows = client.db_query(
+                "users",
+                params={
+                    "select": "id,full_name,phone,avatar_url,email",
+                    "id": f"eq.{reporter_id}",
+                },
+                use_service_role=True,
+            )
+            if reporter_rows:
+                reporter = reporter_rows[0]
+                report["reporter_name"] = reporter.get("full_name") or reporter.get("email")
+                report["reporter_phone"] = reporter.get("phone")
+                report["reporter_avatar_url"] = reporter.get("avatar_url")
+        except Exception:
+            current_app.logger.warning(
+                "Failed to load reporter details for report %s", report_id, exc_info=True
+            )
+
     history = client.db_query(
         "report_status_history",
         params={

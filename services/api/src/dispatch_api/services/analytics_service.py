@@ -4,6 +4,8 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from dispatch_api.validation import sanitize_postgrest_value
+
 # threshold (seconds) to consider a report "unattended"
 UNATTENDED_THRESHOLD_SECONDS = 3600
 
@@ -16,20 +18,23 @@ class AnalyticsService:
     def get_municipality_reports(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
 
-        if filters.get("status"):
-            params["status"] = f"eq.{filters['status']}"
-        if filters.get("category"):
-            params["category"] = f"eq.{filters['category']}"
-        date_from = filters.get("date_from")
-        date_to = filters.get("date_to")
+        status = sanitize_postgrest_value(filters.get("status"))
+        if status:
+            params["status"] = f"eq.{status}"
+        category = sanitize_postgrest_value(filters.get("category"))
+        if category:
+            params["category"] = f"eq.{category}"
+        date_from = sanitize_postgrest_value(filters.get("date_from"))
+        date_to = sanitize_postgrest_value(filters.get("date_to"))
         if date_from and date_to:
             params["and"] = f"(created_at.gte.{date_from},created_at.lte.{date_to})"
         elif date_from:
             params["created_at"] = f"gte.{date_from}"
         elif date_to:
             params["created_at"] = f"lte.{date_to}"
-        if filters.get("is_escalated"):
-            params["is_escalated"] = f"eq.{filters['is_escalated']}"
+        is_escalated = sanitize_postgrest_value(filters.get("is_escalated"))
+        if is_escalated:
+            params["is_escalated"] = f"eq.{is_escalated}"
 
         return self.client.db_query("incident_reports", params=params, use_service_role=True)
 
@@ -63,11 +68,15 @@ class AnalyticsService:
         # response time metrics from status history
         response_times = _compute_response_times(history)
 
-        # department activity from responses
-        dept_activity = _compute_department_activity(responses)
+        # department activity from responses (needs name lookup)
+        dept_activity = _compute_department_activity(responses, self.client)
 
         # unattended: pending status + no acceptance after threshold
         unattended = _count_unattended(reports, responses, now)
+
+        # Compute a single avg response time in hours for the dashboard card.
+        # Uses the avg pending→accepted metric as the primary indicator.
+        avg_hours = _avg_response_hours(response_times)
 
         return {
             "total_reports": total,
@@ -76,8 +85,10 @@ class AnalyticsService:
             "last_7_days": last_7,
             "last_30_days": last_30,
             "response_times": response_times,
+            "avg_response_time_hours": avg_hours,
             "department_activity": dept_activity,
-            "unattended_reports": unattended,
+            "unattended_count": unattended,
+            "unattended_reports": unattended,  # compat: mobile reads this key
         }
 
 
@@ -154,16 +165,48 @@ def _safe_avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
 
 
-def _compute_department_activity(responses: list[dict]) -> list[dict[str, Any]]:
-    """Count accepts/declines per department."""
-    activity: dict[str, dict[str, int]] = defaultdict(lambda: {"accepted": 0, "declined": 0})
+def _avg_response_hours(response_times: dict[str, float | None]) -> float | None:
+    """Compute a single average response-time metric in hours.
+
+    Uses the avg pending→accepted time as the primary indicator.  Falls back
+    to accepted→responding, then responding→resolved if the primary is missing.
+    """
+    for key in ("avg_create_to_accept", "avg_accept_to_responding", "avg_responding_to_resolved"):
+        val = response_times.get(key)
+        if val is not None:
+            return round(val / 3600, 1)
+    return None
+
+
+def _compute_department_activity(responses: list[dict], client) -> list[dict[str, Any]]:
+    """Count accepts/declines per department, with name lookup."""
+    activity: dict[str, dict[str, int]] = defaultdict(lambda: {"accepts": 0, "declines": 0})
     for r in responses:
         dept_id = r.get("department_id")
         action = r.get("action") or r.get("response_status") or r.get("status")
         if dept_id and action in ("accepted", "declined"):
-            activity[dept_id][action] += 1
+            key = "accepts" if action == "accepted" else "declines"
+            activity[dept_id][key] += 1
 
-    return [{"department_id": did, **counts} for did, counts in activity.items()]
+    if not activity:
+        return []
+
+    # Batch-fetch department names
+    dept_names: dict[str, str] = {}
+    try:
+        rows = client.db_query(
+            "departments",
+            params={"select": "id,name"},
+            use_service_role=True,
+        )
+        dept_names = {row["id"]: row.get("name", "Unknown") for row in rows}
+    except Exception:
+        pass
+
+    return [
+        {"name": dept_names.get(did, did), **counts}
+        for did, counts in activity.items()
+    ]
 
 
 def _count_unattended(

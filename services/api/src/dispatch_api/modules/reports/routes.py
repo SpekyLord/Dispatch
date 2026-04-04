@@ -7,6 +7,7 @@ from flask import current_app, jsonify, request
 from dispatch_api.auth import get_current_user, require_auth, require_role
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.reports import blueprint
+from dispatch_api.validation import sanitize_postgrest_value
 from dispatch_api.services.department_service import DepartmentService
 from dispatch_api.services.notification_service import NotificationService
 from dispatch_api.services.report_service import ReportService
@@ -66,11 +67,11 @@ def list_reports():
         "order": "created_at.desc",
     }
 
-    status_filter = request.args.get("status")
+    status_filter = sanitize_postgrest_value(request.args.get("status"))
     if status_filter:
         params["status"] = f"eq.{status_filter}"
 
-    category_filter = request.args.get("category")
+    category_filter = sanitize_postgrest_value(request.args.get("category"))
     if category_filter:
         params["category"] = f"eq.{category_filter}"
 

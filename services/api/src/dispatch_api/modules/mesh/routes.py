@@ -51,6 +51,20 @@ def _float_arg(name: str) -> float | None:
         ) from exc
 
 
+def _int_arg(name: str, default: int) -> int:
+    raw_value = request.args.get(name)
+    if raw_value in (None, ""):
+        return default
+    try:
+        return int(raw_value)
+    except ValueError as exc:
+        raise ApiError(
+            f"{name} must be an integer.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        ) from exc
+
+
 def _viewer_department_id(user_id: str) -> str | None:
     rows = current_app.extensions["supabase_client"].db_query(
         "departments",
@@ -225,7 +239,7 @@ def get_device_trail(device_fingerprint: str):
         device_fingerprint,
         time_start=request.args.get("time_start"),
         time_end=request.args.get("time_end"),
-        limit=int(request.args.get("limit", "240")),
+        limit=_int_arg("limit", 240),
     )
     return jsonify(
         {

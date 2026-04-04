@@ -487,7 +487,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
     for (const post of posts) {
       if (parseCoordinateLocation(post.location)) {
-        coordinateLocations.add(post.location.trim());
+        coordinateLocations.add(post.location!.trim());
       }
     }
 
@@ -1420,7 +1420,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                             key={`${post.id}-photo-dot-${index}`}
                                             type="button"
                                             className={`h-2.5 w-2.5 rounded-full transition-all ${
-                                              index === getPhotoIndex(post.id, post.photos.length)
+                                              index === getPhotoIndex(post.id, post.photos!.length)
                                                 ? "bg-white"
                                                 : "bg-white/45 hover:bg-white/70"
                                             }`}
@@ -1881,7 +1881,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                     key={`detail-photo-dot-${index}`}
                                     type="button"
                                     className={`h-2.5 w-2.5 rounded-full transition-all ${
-                                      index === getPhotoIndex(activeCommentPost.id, activeCommentPost.photos.length)
+                                      index === getPhotoIndex(activeCommentPost.id, activeCommentPost.photos!.length)
                                         ? "bg-white"
                                         : "bg-white/45 hover:bg-white/70"
                                     }`}

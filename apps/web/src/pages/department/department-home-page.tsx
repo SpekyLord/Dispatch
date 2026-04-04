@@ -92,12 +92,36 @@ export function DepartmentHomePage() {
 
   return (
     <AppShell hidePageHeading subtitle="Responder operations" title={department.name}>
-      <DepartmentDashboardPlaceholder department={department} />
+      <DepartmentDashboard department={department} />
     </AppShell>
   );
 }
 
-function DepartmentDashboardPlaceholder({ department }: { department: DepartmentInfo }) {
+type ReportSummary = {
+  id: string;
+  title?: string;
+  description?: string;
+  status: string;
+  category?: string;
+  created_at?: string;
+};
+
+function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+
+  useEffect(() => {
+    apiRequest<{ reports: ReportSummary[] }>("/api/departments/reports")
+      .then((res) => setReports(res.reports))
+      .catch(() => {})
+      .finally(() => setReportsLoading(false));
+  }, []);
+
+  const pendingCount = reports.filter((r) => r.status === "pending").length;
+  const activeCount = reports.filter((r) => r.status === "accepted" || r.status === "responding").length;
+  const resolvedCount = reports.filter((r) => r.status === "resolved").length;
+  const recentReports = reports.slice(0, 4);
+
   const dashboardActions = [
     {
       title: "Incident Board",
@@ -129,24 +153,6 @@ function DepartmentDashboardPlaceholder({ department }: { department: Department
     },
   ] as const;
 
-  const activityFeed = [
-    {
-      title: "Equipment maintenance logged",
-      description: "Hydraulic and communications checks verified for the next duty cycle.",
-      age: "18 min ago",
-    },
-    {
-      title: "Civic center drill concluded",
-      description: "Joint responder simulation completed and archived as placeholder activity.",
-      age: "1 hr ago",
-    },
-    {
-      title: "Morning watch briefing",
-      description: "Command summary prepared for shift turnover and operational readiness.",
-      age: "3 hr ago",
-    },
-  ] as const;
-
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-[28px] border border-[#e7d8cd] bg-[#f7efe6] shadow-[0_28px_80px_rgba(101,66,40,0.12)]">
@@ -154,27 +160,24 @@ function DepartmentDashboardPlaceholder({ department }: { department: Department
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(255,242,234,0.1),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0))]" />
           <div className="absolute inset-y-0 right-0 w-[34%] bg-[linear-gradient(90deg,rgba(255,224,204,0.02),rgba(255,244,236,0.09))]" />
           <div className="absolute -right-6 top-0 h-full w-[28%] bg-[linear-gradient(180deg,rgba(255,228,213,0.06),rgba(255,255,255,0.012))] blur-3xl" />
-          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.72fr)_268px] lg:items-end">
-            <div className="max-w-3xl">
-              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-white/62">
-                Department Dashboard Placeholder
-              </p>
-              <h1 className="mt-3 font-headline text-4xl leading-none sm:text-5xl">{department.name}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/74 sm:text-base">
-                Standard readiness protocols maintained for regional dispatch coordination. This section is a visual
-                placeholder while the live dashboard modules are still being wired up.
-              </p>
-            </div>
-
-            <WeatherPreviewCard />
+          <div className="relative max-w-3xl">
+            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-white/62">
+              Department Dashboard
+            </p>
+            <h1 className="mt-3 font-headline text-4xl leading-none sm:text-5xl">{department.name}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/74 sm:text-base">
+              {reports.length > 0
+                ? `${reports.length} total incident${reports.length === 1 ? "" : "s"} assigned — ${pendingCount} pending, ${activeCount} active, ${resolvedCount} resolved.`
+                : "No incidents assigned yet. New reports will appear here."}
+            </p>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_220px]">
+      <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-6">
           <DepartmentProfileRail department={department} />
-          <ReadinessCard />
+          <ReportStatsCard pending={pendingCount} active={activeCount} resolved={resolvedCount} total={reports.length} loading={reportsLoading} />
         </div>
 
         <div className="space-y-6">
@@ -196,37 +199,104 @@ function DepartmentDashboardPlaceholder({ department }: { department: Department
           <Card className="rounded-[24px] border-[#eadfd5] bg-[#fffaf5] p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#b36a47]">Recent Activity Feed</p>
-                <h2 className="mt-2 font-headline text-2xl text-on-surface">Command desk updates</h2>
+                <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#b36a47]">Recent Incidents</p>
+                <h2 className="mt-2 font-headline text-2xl text-on-surface">Assigned reports</h2>
               </div>
-              <span className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#c08564]">Full logs</span>
+              <Link to="/department/reports" className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#c08564] hover:underline">
+                View all
+              </Link>
             </div>
 
             <div className="mt-6 space-y-5">
-              {activityFeed.map((item, index) => (
-                <div key={item.title} className={index < activityFeed.length - 1 ? "border-b border-[#eee2d8] pb-5" : ""}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-medium text-on-surface">{item.title}</h3>
-                      <p className="mt-1 max-w-xl text-sm leading-6 text-on-surface-variant">{item.description}</p>
+              {reportsLoading ? (
+                <div className="py-8 text-center"><LoadingDots sizeClassName="h-4 w-4" /></div>
+              ) : recentReports.length === 0 ? (
+                <p className="py-4 text-center text-sm text-on-surface-variant italic">No incidents assigned yet.</p>
+              ) : (
+                recentReports.map((report, index) => (
+                  <Link key={report.id} to={`/department/reports/${report.id}`} className={`block ${index < recentReports.length - 1 ? "border-b border-[#eee2d8] pb-5" : ""}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-medium text-on-surface">{report.title || report.description || "Untitled report"}</h3>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${statusStyle(report.status)}`}>
+                            {report.status}
+                          </span>
+                          {report.category && (
+                            <span className="text-xs text-on-surface-variant capitalize">{report.category.replace(/_/g, " ")}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.24em] text-[#b7a193]">
+                        {formatTimeAgo(report.created_at)}
+                      </span>
                     </div>
-                    <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.24em] text-[#b7a193]">
-                      {item.age}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                  </Link>
+                ))
+              )}
             </div>
           </Card>
         </div>
-
-        <div className="space-y-6">
-          <DepartmentViewCard />
-          <MapPlaceholderCard />
-          <InsightsPlaceholderCard />
-        </div>
       </section>
     </div>
+  );
+}
+
+function statusStyle(status: string): string {
+  switch (status) {
+    case "pending": return "bg-[#ffdbd0] text-[#89391e]";
+    case "accepted": return "bg-[#d0e4f7] text-[#2c4a6a]";
+    case "responding": return "bg-[#e5e5e0] text-[#52524f]";
+    case "resolved": return "bg-[#d4edda] text-[#155724]";
+    default: return "bg-[#eee] text-[#666]";
+  }
+}
+
+function formatTimeAgo(iso?: string): string {
+  if (!iso) return "";
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  } catch { return ""; }
+}
+
+function ReportStatsCard({ pending, active, resolved, total, loading }: { pending: number; active: number; resolved: number; total: number; loading: boolean }) {
+  if (loading) {
+    return (
+      <Card className="rounded-[24px] border-[#eadfd5] bg-[#f4efe6] p-5">
+        <div className="py-4 text-center"><LoadingDots sizeClassName="h-4 w-4" /></div>
+      </Card>
+    );
+  }
+  const stats = [
+    { label: "Pending", value: pending, color: "#D97757" },
+    { label: "Active", value: active, color: "#3a4e6a" },
+    { label: "Resolved", value: resolved, color: "#155724" },
+    { label: "Total", value: total, color: "#62554c" },
+  ];
+  return (
+    <Card className="rounded-[24px] border-[#eadfd5] bg-[#f4efe6] p-5">
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-[14px] text-[#7c8c64]">monitoring</span>
+        <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#7c8c64]">Incident Overview</p>
+      </div>
+      <div className="mt-5 space-y-4">
+        {stats.map((item) => (
+          <div key={item.label} className="rounded-[18px] border border-[#e7dbcf] bg-[#fffaf5] px-4 py-3">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-[#6f625b]">{item.label}</span>
+              <span className="text-sm font-semibold" style={{ color: item.color }}>{item.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -329,163 +399,7 @@ function DepartmentProfileRail({ department }: { department: DepartmentInfo }) {
   );
 }
 
-function ReadinessCard() {
-  const readiness = [
-    { label: "Water Supply", value: "94%" },
-    { label: "Fleet Availability", value: "08 / 10" },
-  ] as const;
 
-  return (
-    <Card className="rounded-[24px] border-[#eadfd5] bg-[#f4efe6] p-5">
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-[#74b267]" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#7c8c64]">Active Readiness</p>
-      </div>
-
-      <div className="mt-5 space-y-4">
-        {readiness.map((item) => (
-          <div key={item.label} className="rounded-[18px] border border-[#e7dbcf] bg-[#fffaf5] px-4 py-3">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-[#6f625b]">{item.label}</span>
-              <span className="text-sm font-semibold text-on-surface">{item.value}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function DepartmentViewCard() {
-  return (
-    <Card className="rounded-[24px] border-[#a14b2f] bg-[linear-gradient(180deg,#b55a39_0%,#a14b2f_46%,#8b3f26_100%)] p-4 text-white shadow-[0_18px_34px_rgba(98,43,24,0.28)]">
-      <div className="flex justify-center">
-        <span className="rounded-full border border-white/22 bg-[#a14b2f] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white">
-          Department View
-        </span>
-      </div>
-
-      <div className="mt-3 text-center">
-        <h3 className="font-headline text-[1.45rem] leading-[0.95] text-white">
-          Temporary
-          <br />
-          News Desk
-        </h3>
-        <p className="mx-auto mt-2 max-w-[12rem] text-[12px] leading-5 text-white/88">
-          Placeholder advisories and readiness notes for dashboard preview.
-        </p>
-      </div>
-
-      <div className="mt-4 space-y-3">
-        <div className="rounded-[18px] border border-white/14 bg-[rgba(161,75,47,0.34)] px-3 py-3 text-center">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-white/90">Active Advisories</p>
-          <p className="mt-1.5 font-headline text-[2rem] leading-none text-white">02</p>
-          <p className="mt-1.5 text-[12px] leading-4 text-white/85">
-            Live alerts, warnings, and situational reports
-          </p>
-        </div>
-
-        <div className="rounded-[18px] border border-white/14 bg-[rgba(161,75,47,0.34)] px-3 py-3 text-center">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-white/90">Coordination Mode</p>
-          <p className="mt-1.5 font-headline text-[1.5rem] leading-none text-white">Steady Watch</p>
-          <p className="mt-1.5 text-[12px] leading-4 text-white/85">Preparedness bulletin enabled</p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function MapPlaceholderCard() {
-  return (
-    <Card className="overflow-hidden rounded-[24px] border-[#eadfd5] bg-[#f8f2ea] p-0">
-      <div className="border-b border-[#eadfd5] px-5 py-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#b7a193]">Operational Reference</p>
-      </div>
-      <div className="relative h-[220px] overflow-hidden bg-[radial-gradient(circle_at_30%_25%,rgba(206,194,181,0.65),transparent_26%),radial-gradient(circle_at_70%_55%,rgba(214,204,193,0.9),transparent_24%),linear-gradient(180deg,#f2eadf_0%,#ece3d8_100%)]">
-        <div className="absolute inset-6 rounded-[28px] border border-white/50 bg-white/20" />
-        <div className="absolute left-[16%] top-[22%] h-[38%] w-[52%] rounded-[42%_58%_52%_48%/40%_46%_54%_60%] bg-[#d8cec3]/80 blur-[1px]" />
-        <div className="absolute right-[18%] top-[24%] h-[28%] w-[24%] rounded-[44%_56%_60%_40%/52%_40%_60%_48%] bg-[#dfd6cb]/70" />
-        <div className="absolute bottom-[18%] left-[32%] h-[18%] w-[22%] rounded-[58%_42%_46%_54%/52%_52%_48%_48%] bg-[#d0c5b9]/70" />
-        <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between rounded-2xl border border-white/50 bg-white/45 px-4 py-3 backdrop-blur-sm">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#9f8f82]">Sector Focus</p>
-            <p className="mt-1 text-sm font-semibold text-[#62554c]">Sector D - Alpha</p>
-          </div>
-          <span className="material-symbols-outlined text-[22px] text-[#8a6e5c]">map</span>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function InsightsPlaceholderCard() {
-  return (
-    <Card className="rounded-[24px] border-[#eadfd5] bg-[#f8f0e7] p-5">
-      <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-[#7f6c60]">Daily Insights</p>
-      <p className="mt-4 text-sm leading-7 text-[#65584f]">
-        Average response time has improved by placeholder figures this week. This panel is reserved for future
-        readiness and dispatch insights.
-      </p>
-    </Card>
-  );
-}
-
-function WeatherPreviewCard() {
-  return (
-    <div className="overflow-hidden rounded-[24px] shadow-[0_16px_32px_rgba(28,18,12,0.2)]">
-      <div className="relative min-h-[132px] bg-[linear-gradient(90deg,#e97963_0%,#e97963_44%,#ec9d35_44%,#ec9d35_72%,#f1c40f_72%,#f1c40f_100%)] px-4 py-3.5 text-white">
-        <div className="absolute right-[68px] top-[-20px] h-24 w-24 rounded-full bg-[#f4b825]/70" />
-        <div className="absolute right-[-18px] top-[-18px] h-28 w-28 rounded-full bg-[#f9d227]/95" />
-
-        <div className="relative flex h-full flex-col justify-between">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-1.5 text-[0.9rem] font-medium">
-                <span className="material-symbols-outlined text-[16px]">light_mode</span>
-                Sunny
-              </p>
-              <p className="mt-1.5 text-[2.7rem] font-semibold leading-none">36°</p>
-              <p className="mt-1 text-[0.92rem] font-semibold tracking-[0.02em]">42°/28°</p>
-            </div>
-
-            <div className="text-right">
-              <p className="text-[1.7rem] font-medium leading-none">23:56</p>
-              <p className="mt-1 text-[0.88rem] font-medium uppercase">Mon 08-23</p>
-            </div>
-          </div>
-
-          <p className="relative mt-3 text-right text-[1.45rem] font-medium">A Coruña</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 bg-[#ad6679] text-white">
-        {[
-          { day: "Tue", icon: "light_mode" },
-          { day: "Wed", icon: "rainy" },
-          { day: "Thu", icon: "rainy" },
-          { day: "Fri", icon: "light_mode" },
-        ].map((item) => (
-          <div
-            key={item.day}
-            className="flex items-center justify-center gap-1 border-r border-white/10 px-2.5 py-2 last:border-r-0"
-          >
-            <span className="text-[0.82rem] font-semibold uppercase">{item.day}</span>
-            <span className="material-symbols-outlined text-[15px]">{item.icon}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProfileField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[12px] font-extrabold uppercase tracking-[0.08em] text-[#684836]">{label}</p>
-      <p className="mt-2 text-[1.12rem] leading-8 text-[#3f3028]">{value}</p>
-    </div>
-  );
-}
 
 function ProfileInfoRow({
   icon,
@@ -549,9 +463,6 @@ function formatDepartmentType(value?: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatRegistryId(id: string) {
-  return id.replace(/-/g, "").slice(0, 5).toUpperCase() || "00000";
-}
 
 function formatRegistryDisplayId(id: string) {
   const compact = id.replace(/-/g, "").toUpperCase();

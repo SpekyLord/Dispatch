@@ -381,6 +381,10 @@ Deliver the first working end-to-end experience: user auth, department onboardin
 - Date: `2026-03-29`
 - Phase 1 completion: All remaining items implemented. Mobile features: real MediaService (image_picker), real LocationService (geolocator), GPS auto-detect + LocationPicker in report form, image upload with camera/gallery bottom sheet (max 3, JPEG/PNG, 5 MB), LocationMap in report detail. Web tests: 17 tests across 6 files (login, register, verification queue, report form, E2E smoke). Mobile tests: 6 tests across 3 files (report form with mocked providers, report history with mocked AuthService, widget test). Documentation: PHASE1-USER-FLOWS.md, REPORT-INPUTS.md, CATEGORY-SELECTION.md. All verification checklist items confirmed via code review and automated tests.
 
+- Date: `2026-04-04` (bug fix pass)
+- Completed: replaced 7 silent `except Exception: pass` blocks in auth routes (register, login, refresh, /me) with `log.warning()` calls so DB failures are visible in server logs; added error state + retry to citizen home page and department home page instead of silently swallowing fetch failures; added `fetchError` and `actionError` states to municipality verification page so approve/reject failures show visible feedback; added verification_status check to public department profile endpoint to prevent exposing unverified/rejected departments; fixed logout endpoint to check `sign_out()` return value and log on failure.
+- Deviations: none.
+
 ### Exit Criteria
 
 - Auth, verification, citizen reporting, and citizen-side report tracking work on both web and mobile.
@@ -534,6 +538,9 @@ Deliver the core emergency coordination workflow: relevant departments receive r
 - Deviations: the Playwright smoke uses a stateful mocked API with realtime disabled at the browser harness layer, while live update behavior is verified separately through the web/mobile realtime callback tests; municipality still has the intentionally narrow escalations-only view from Phase 2, not the broader Phase 3 analytics dashboard.
 - Blockers: none for Phase 2 exit criteria in this workspace.
 - Carryover: move to Phase 3 scope for municipality-wide analytics, assessment workflows, bilingual UI, and broader dashboard/reporting polish.
+- Date: `2026-04-04` (bug fix pass)
+- Completed: fixed feed delete/update endpoints returning non-standard error JSON (missing `code` field) by replacing inline `jsonify()` with `raise ApiError()`; fixed notifications page optimistic mark-read/mark-all-read to rollback on API failure instead of silently losing state; removed 321 lines of dead `DepartmentReportDetailPageLegacy` code that was causing 5 TypeScript build errors.
+- Deviations: none.
 - Date: `2026-03-29` (feed/profile follow-up)
 - Completed: shipped the temporary role-based News Feed pages for citizen, department, and municipality with the added nav entry; replaced placeholder feed content with Supabase-backed posts, comments, reactions, and attachment/media rendering; finished department-only publishing with dynamic post creation, photo upload, attachment upload, geolocation-based location capture, and the create-post modal flow; added persistent comments through `department_feed_comment`, per-user like/unlike persistence through `department_feed_reactions`, and reaction-count saving; completed the dynamic department profile page, edit-profile modal, uploaded `profile_picture` and `header_photo`, and the new public read-only publisher profile view; polished the feed UX with the attachment redesign, action-row repositioning, fixed modal headers, delayed interactive publisher hover cards, and clickable publisher name/photo navigation; fixed stale-token `403` handling so public feed requests do not crash and fixed text-only post publishing so files are no longer required.
 - Deviations: several News Feed and profile surfaces are still explicitly temporary or placeholder-labeled in UX copy and styling, but the underlying data flow is now database-backed where implemented; some hover-card actions remain presentation-first while broader social or moderation behavior is intentionally deferred.
@@ -659,6 +666,9 @@ Turn the operational MVP into a decision-support product with analytics, post-di
 - Deviations: locale preference remains in-memory only for this pass; user-generated and backend free-text content remains intentionally untranslated.
 - Blockers: none.
 - Carryover: none for core Phase 3.
+- Date: `2026-04-04` (bug fix pass)
+- Completed: fixed municipality reports page where every report card incorrectly linked to `/municipality/reports/escalated` instead of the individual report detail; created `MunicipalityReportDetailPage` with full report view (info, map, evidence images, department responses, timeline) and wired `/municipality/reports/:reportId` route; replaced municipality profile placeholder page (entirely static mock content) with a functional profile showing admin info, department stats, and profile editing; simplified analytics date range filter logic for clarity; added input validation to assessment creation so non-integer `estimated_casualties`/`displaced_persons` returns 400 instead of crashing with 500; wired `/municipality/profile` route.
+- Deviations: none.
 
 ### Exit Criteria
 
@@ -822,6 +832,9 @@ Implement the offline-first mobile mesh system so reports, announcements, distre
 - Deviations: no new Phase 4 packet types, endpoints, or transport contracts were added in this pass.
 - Blockers: physical BLE field execution still requires devices and is not automatable in this workspace.
 - Carryover: physical hardware execution of the prepared field-test procedure remains pending; `4-EXT` carryover stays out of scope for this core completion pass.
+- Date: `2026-04-04` (bug fix pass)
+- Completed: added `@require_auth()` to mesh `/ingest` and `/sync-updates` endpoints which previously had zero authentication, allowing unauthenticated users to submit fake incidents, distress signals, and poison topology data; standardized mesh post filtering to use `is_mesh_origin` consistently instead of checking both `mesh_originated` and `is_mesh_origin` redundantly.
+- Deviations: chose `@require_auth()` (any authenticated user) rather than `@require_role("department")` for mesh ingest, since gateway devices may operate under various authenticated roles and mesh packets already contain their own offline verification tokens for announcements.
 
 ### Exit Criteria
 

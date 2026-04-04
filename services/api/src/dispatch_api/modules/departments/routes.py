@@ -47,6 +47,12 @@ def get_department_profile():
 @blueprint.get("/view/<user_id>")
 def get_public_department_profile(user_id: str):
     department = _department_service().get_department_for_user(user_id)
+    if department.get("verification_status") != "approved":
+        raise ApiError(
+            "Department profile is not publicly available.",
+            code="not_found",
+            status_code=HTTPStatus.NOT_FOUND,
+        )
     return jsonify({"department": department})
 
 
@@ -303,13 +309,21 @@ def create_assessment():
     department_service.require_verified_department(department)
 
     body = request.get_json(silent=True) or {}
+    try:
+        estimated_casualties = int(body.get("estimated_casualties") or 0)
+        displaced_persons = int(body.get("displaced_persons") or 0)
+    except (ValueError, TypeError):
+        raise ApiError(
+            "estimated_casualties and displaced_persons must be integers.",
+            code="validation_error",
+        )
     assessment = _assessment_service().create_assessment(
         department_id=department["id"],
         report_id=(body.get("report_id") or "").strip() or None,
         affected_area=(body.get("affected_area") or "").strip(),
         damage_level=(body.get("damage_level") or "").strip(),
-        estimated_casualties=int(body.get("estimated_casualties") or 0),
-        displaced_persons=int(body.get("displaced_persons") or 0),
+        estimated_casualties=estimated_casualties,
+        displaced_persons=displaced_persons,
         location=(body.get("location") or "").strip(),
         description=(body.get("description") or "").strip(),
         image_urls=body.get("image_urls") or [],

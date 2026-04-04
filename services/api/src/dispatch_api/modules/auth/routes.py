@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 
 from flask import current_app, jsonify, request
@@ -9,6 +10,8 @@ from flask import current_app, jsonify, request
 from dispatch_api.auth import get_current_user, require_auth
 from dispatch_api.errors import ApiError
 from dispatch_api.modules.auth import blueprint
+
+log = logging.getLogger(__name__)
 from dispatch_api.services.offline_token_service import OfflineTokenService
 
 # Municipality accounts are pre-seeded, not self-registered
@@ -131,7 +134,7 @@ def register():
             use_service_role=True,
         )
     except Exception:
-        pass  # Row may already exist via DB trigger
+        log.debug("users row insert skipped (may already exist via DB trigger)", exc_info=True)
 
     # For departments: create a departments row starting as "pending"
     dept_data = None
@@ -164,7 +167,7 @@ def register():
             )
             dept_data = rows[0] if rows else None
         except Exception:
-            pass
+            log.warning("Failed to create department row during registration", exc_info=True)
 
     return (
         jsonify(
@@ -232,7 +235,7 @@ def login():
             profile = rows[0]
             role = role or profile.get("role")
     except Exception:
-        pass
+        log.warning("Failed to fetch user profile during login for %s", user_id, exc_info=True)
 
     # Eagerly load department info so the client has verification status on login
     department = None
@@ -246,7 +249,7 @@ def login():
             if dept_rows:
                 department = dept_rows[0]
         except Exception:
-            pass
+            log.warning("Failed to fetch department during login for %s", user_id, exc_info=True)
 
     return jsonify(
         {
@@ -309,7 +312,7 @@ def refresh():
             profile = rows[0]
             role = role or profile.get("role")
     except Exception:
-        pass
+        log.warning("Failed to fetch user profile during refresh for %s", user_id, exc_info=True)
 
     department = None
     if role == "department":
@@ -322,7 +325,7 @@ def refresh():
             if dept_rows:
                 department = dept_rows[0]
         except Exception:
-            pass
+            log.warning("Failed to fetch department during refresh for %s", user_id, exc_info=True)
 
     return jsonify(
         {
@@ -352,7 +355,8 @@ def logout():
     """Invalidate the Supabase session server-side."""
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
     client = current_app.extensions["supabase_client"]
-    client.sign_out(token)
+    if not client.sign_out(token):
+        log.warning("Server-side sign_out failed for token (session may already be expired)")
     return jsonify({"message": "Logged out successfully."}), HTTPStatus.OK
 
 
@@ -375,7 +379,7 @@ def me():
         if rows:
             profile = rows[0]
     except Exception:
-        pass
+        log.warning("Failed to fetch user profile in /me for %s", user.id, exc_info=True)
 
     # Load department info if applicable
     department = None
@@ -389,7 +393,7 @@ def me():
             if dept_rows:
                 department = dept_rows[0]
         except Exception:
-            pass
+            log.warning("Failed to fetch department in /me for %s", user.id, exc_info=True)
 
     return jsonify(
         {

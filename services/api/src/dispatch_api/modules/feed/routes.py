@@ -5,6 +5,7 @@ from http import HTTPStatus
 from flask import current_app, jsonify, request
 
 from dispatch_api.auth import get_current_user, require_auth
+from dispatch_api.errors import ApiError
 from dispatch_api.modules.feed import blueprint
 from dispatch_api.services.department_service import DepartmentService
 from dispatch_api.services.feed_service import FeedService
@@ -73,9 +74,11 @@ def toggle_feed_reaction(post_id: str):
 def delete_feed_post(post_id: str):
     user = get_current_user()
     if user.role != "department":
-        return jsonify(
-            {"error": {"message": "Only department users can delete posts."}}
-        ), HTTPStatus.FORBIDDEN
+        raise ApiError(
+            "Only department users can delete posts.",
+            code="forbidden",
+            status_code=HTTPStatus.FORBIDDEN,
+        )
 
     department_service = _department_service()
     department = department_service.get_department_for_user(user.id)
@@ -89,9 +92,11 @@ def delete_feed_post(post_id: str):
 def update_feed_post(post_id: str):
     user = get_current_user()
     if user.role != "department":
-        return jsonify(
-            {"error": {"message": "Only department users can edit posts."}}
-        ), HTTPStatus.FORBIDDEN
+        raise ApiError(
+            "Only department users can edit posts.",
+            code="forbidden",
+            status_code=HTTPStatus.FORBIDDEN,
+        )
 
     department_service = _department_service()
     department = department_service.get_department_for_user(user.id)

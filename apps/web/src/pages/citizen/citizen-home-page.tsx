@@ -46,13 +46,18 @@ const categoryIcons: Record<string, string> = {
 export function CitizenHomePage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  function fetchReports() {
+    setLoading(true);
+    setError(null);
     apiRequest<{ reports: Report[] }>("/api/reports")
       .then((res) => setReports(res.reports))
-      .catch(() => {})
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load reports."))
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { fetchReports(); }, []);
 
   return (
     <AppShell subtitle="Citizen dashboard" title="My Reports">
@@ -75,6 +80,12 @@ export function CitizenHomePage() {
         <Card className="py-16 text-center text-on-surface-variant">
           <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
           Loading reports...
+        </Card>
+      ) : error ? (
+        <Card className="py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-error mb-4 block">cloud_off</span>
+          <p className="text-error mb-4">{error}</p>
+          <Button variant="ghost" onClick={fetchReports}>Retry</Button>
         </Card>
       ) : reports.length === 0 ? (
         <Card className="py-16 text-center">

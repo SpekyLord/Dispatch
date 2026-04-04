@@ -70,24 +70,34 @@ export function NotificationsPage() {
     return () => subscription.unsubscribe();
   }, [accessToken]);
 
-  // Mark single notification read — optimistic local update
+  // Mark single notification read — optimistic with rollback
   async function markRead(id: string) {
-    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+    const prev = notifications;
+    const prevCount = unreadCount;
+    setNotifications((ns) => ns.map((n) => n.id === id ? { ...n, is_read: true } : n));
     setUnreadCount((c) => Math.max(0, c - 1));
     try {
       await apiRequest(`/api/notifications/${id}/read`, { method: "PUT" });
       void fetchNotifications(false);
-    } catch { /* ignore */ }
+    } catch {
+      setNotifications(prev);
+      setUnreadCount(prevCount);
+    }
   }
 
-  // Mark all notifications read — optimistic local update
+  // Mark all notifications read — optimistic with rollback
   async function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    const prev = notifications;
+    const prevCount = unreadCount;
+    setNotifications((ns) => ns.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
     try {
       await apiRequest("/api/notifications/read-all", { method: "PUT" });
       void fetchNotifications(false);
-    } catch { /* ignore */ }
+    } catch {
+      setNotifications(prev);
+      setUnreadCount(prevCount);
+    }
   }
 
   return (

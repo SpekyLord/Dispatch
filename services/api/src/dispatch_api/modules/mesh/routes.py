@@ -61,6 +61,7 @@ def _viewer_department_id(user_id: str) -> str | None:
 
 
 @blueprint.post("/ingest")
+@require_auth()
 def ingest_packets():
     body = request.get_json(silent=True)
     if not body:
@@ -124,6 +125,7 @@ def ingest_packets():
 
 
 @blueprint.get("/sync-updates")
+@require_auth()
 def get_sync_updates():
     since = request.args.get("since")
     svc = _mesh_service()

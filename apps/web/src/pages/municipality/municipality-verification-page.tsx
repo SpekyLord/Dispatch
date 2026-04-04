@@ -32,15 +32,18 @@ const typeIcons: Record<string, string> = {
 export function MunicipalityVerificationPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [rejectionInputs, setRejectionInputs] = useState<Record<string, string>>({});
   const [showRejectForm, setShowRejectForm] = useState<string | null>(null);
 
   function fetchPending() {
     setLoading(true);
+    setFetchError(null);
     apiRequest<{ departments: Department[] }>("/api/municipality/departments/pending")
       .then((res) => setDepartments(res.departments))
-      .catch(() => {})
+      .catch((err) => setFetchError(err instanceof Error ? err.message : "Failed to load departments."))
       .finally(() => setLoading(false));
   }
 
@@ -48,32 +51,51 @@ export function MunicipalityVerificationPage() {
 
   async function handleApprove(deptId: string) {
     setActionLoading(deptId);
+    setActionError(null);
     try {
       await apiRequest(`/api/municipality/departments/${deptId}/verify`, {
         method: "PUT", body: JSON.stringify({ action: "approved" }),
       });
       setDepartments((prev) => prev.filter((d) => d.id !== deptId));
-    } catch { /* silent */ } finally { setActionLoading(null); }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to approve department.");
+    } finally { setActionLoading(null); }
   }
 
   async function handleReject(deptId: string) {
     const reason = (rejectionInputs[deptId] || "").trim();
     if (!reason) return;
     setActionLoading(deptId);
+    setActionError(null);
     try {
       await apiRequest(`/api/municipality/departments/${deptId}/verify`, {
         method: "PUT", body: JSON.stringify({ action: "rejected", rejection_reason: reason }),
       });
       setDepartments((prev) => prev.filter((d) => d.id !== deptId));
       setShowRejectForm(null);
-    } catch { /* silent */ } finally { setActionLoading(null); }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to reject department.");
+    } finally { setActionLoading(null); }
   }
 
   return (
     <AppShell subtitle="Department verification" title="Verification Queue">
+      {actionError && (
+        <div className="mb-6 rounded-md bg-error-container/20 border border-error/20 px-4 py-3 text-sm text-error flex items-center gap-2">
+          <span className="material-symbols-outlined text-[16px]">error</span>
+          {actionError}
+        </div>
+      )}
+
       {loading ? (
         <Card className="py-16 text-center text-on-surface-variant">
           <LoadingDots sizeClassName="h-5 w-5" />
+        </Card>
+      ) : fetchError ? (
+        <Card className="py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-error mb-4 block">cloud_off</span>
+          <p className="text-error mb-4">{fetchError}</p>
+          <Button variant="ghost" onClick={fetchPending}>Retry</Button>
         </Card>
       ) : departments.length === 0 ? (
         <Card className="py-16 text-center">

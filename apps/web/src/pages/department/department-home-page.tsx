@@ -22,10 +22,12 @@ export function DepartmentHomePage() {
   const [loading, setLoading] = useState(!department);
   const [editMode, setEditMode] = useState(false);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   useEffect(() => {
     apiRequest<{ department: DepartmentInfo }>("/api/departments/profile")
       .then((res) => setDepartment(res.department))
-      .catch(() => {})
+      .catch((err) => setFetchError(err instanceof Error ? err.message : "Failed to load department profile."))
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -41,9 +43,16 @@ export function DepartmentHomePage() {
 
   if (!department) {
     return (
-      <AppShell subtitle="Department" title="No Department Profile">
-        <Card className="py-16 text-center text-on-surface-variant">
-          No department profile found. Contact the administrator.
+      <AppShell subtitle="Department" title={fetchError ? "Error" : "No Department Profile"}>
+        <Card className="py-16 text-center">
+          {fetchError ? (
+            <>
+              <span className="material-symbols-outlined text-5xl text-error mb-4 block">cloud_off</span>
+              <p className="text-error">{fetchError}</p>
+            </>
+          ) : (
+            <p className="text-on-surface-variant">No department profile found. Contact the administrator.</p>
+          )}
         </Card>
       </AppShell>
     );

@@ -59,10 +59,16 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           .getMeshMessages(includePosts: true);
       ref
           .read(meshTransportProvider)
-          .ingestServerMessages((response['messages'] as List?)?.cast<Map<String, dynamic>>() ?? const []);
+          .ingestServerMessages(
+            (response['messages'] as List?)?.cast<Map<String, dynamic>>() ??
+                const [],
+          );
       ref
           .read(meshTransportProvider)
-          .ingestServerMeshPosts((response['mesh_posts'] as List?)?.cast<Map<String, dynamic>>() ?? const []);
+          .ingestServerMeshPosts(
+            (response['mesh_posts'] as List?)?.cast<Map<String, dynamic>>() ??
+                const [],
+          );
       if (mounted) {
         setState(() {});
       }
@@ -74,19 +80,20 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
     if (session.accessToken == null) {
       return;
     }
-    final transport = ref.read(meshTransportProvider);
-    final queued = transport.drainQueue();
-    if (queued.isEmpty) {
-      return;
-    }
     setState(() => _syncing = true);
     try {
-      final response = await ref.read(authServiceProvider).ingestMeshPackets(
-        queued.map((packet) => packet.toJson()).toList(),
-      );
-      transport.processSyncAcks(
-        (response['acks'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
-      );
+      final syncResult = await ref
+          .read(meshGatewaySyncServiceProvider)
+          .sync(
+            operatorRole: session.role?.name,
+            departmentId: session.department?.id,
+            departmentName: session.department?.name,
+            displayName:
+                session.fullName ?? session.department?.name ?? session.email,
+          );
+      if (!syncResult.didUpload) {
+        return;
+      }
       await _hydrateServerHistory();
     } catch (e) {
       if (mounted) {
@@ -105,9 +112,11 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
       if (segments.length != 3) {
         return true;
       }
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(segments[1]))),
-      ) as Map<String, dynamic>;
+      final payload =
+          jsonDecode(
+                utf8.decode(base64Url.decode(base64Url.normalize(segments[1]))),
+              )
+              as Map<String, dynamic>;
       final exp = payload['exp'];
       if (exp is! int) {
         return true;
@@ -121,7 +130,11 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   Future<void> _submit() async {
     final session = ref.read(sessionControllerProvider);
     final transport = ref.read(meshTransportProvider);
-    final displayName = session.fullName ?? session.department?.name ?? session.email ?? 'Mesh user';
+    final displayName =
+        session.fullName ??
+        session.department?.name ??
+        session.email ??
+        'Mesh user';
     final offlineToken = session.offlineVerificationToken;
     final authenticatedRole = session.role?.name;
     setState(() {
@@ -134,7 +147,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
         if (session.role != AppRole.department || session.department == null) {
           throw Exception('Only verified departments can publish mesh posts.');
         }
-        if (offlineToken == null || offlineToken.isEmpty || _offlineTokenExpired(offlineToken)) {
+        if (offlineToken == null ||
+            offlineToken.isEmpty ||
+            _offlineTokenExpired(offlineToken)) {
           throw Exception('Offline department token is missing or expired.');
         }
         final packet = MeshTransportService.createMeshPostPacket(
@@ -155,8 +170,12 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           throw Exception('Message body is required.');
         }
         if (authenticatedRole != null &&
-            (offlineToken == null || offlineToken.isEmpty || _offlineTokenExpired(offlineToken))) {
-          throw Exception('Offline account token is missing or expired. Sign in again before sending mesh messages.');
+            (offlineToken == null ||
+                offlineToken.isEmpty ||
+                _offlineTokenExpired(offlineToken))) {
+          throw Exception(
+            'Offline account token is missing or expired. Sign in again before sending mesh messages.',
+          );
         }
         final packet = MeshTransportService.createMeshMessagePacket(
           deviceId: transport.localDeviceId,
@@ -164,7 +183,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
               ? MeshTransportService.departmentThreadId(session.department!.id)
               : MeshTransportService.broadcastThreadId(),
           recipientScope: _mode == 'department' ? 'department' : 'broadcast',
-          recipientIdentifier: _mode == 'department' ? session.department?.id : null,
+          recipientIdentifier: _mode == 'department'
+              ? session.department?.id
+              : null,
           body: body,
           authorDisplayName: displayName,
           authorRole: authenticatedRole ?? 'anonymous',
@@ -208,7 +229,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
               alignment: Alignment.center,
               children: [
                 IconButton(
-                  onPressed: _syncing ? null : () => unawaited(_syncPendingPackets()),
+                  onPressed: _syncing
+                      ? null
+                      : () => unawaited(_syncPendingPackets()),
                   icon: const Icon(Icons.sync),
                   tooltip: 'Sync queued packets',
                 ),
@@ -230,7 +253,11 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFA14B2F), Color(0xFF7B3A25), Color(0xFF425E72)],
+                colors: [
+                  Color(0xFFA14B2F),
+                  Color(0xFF7B3A25),
+                  Color(0xFF425E72),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -240,7 +267,10 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(999),
@@ -270,7 +300,10 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   transport.isMeshOnlyState
                       ? 'Mesh-only mode is active, so new messages stay queued for gateway sync while still appearing in the local inbox.'
                       : 'Internet is available, so queued mesh packets can be flushed to the backend while the local inbox keeps the same offline-first view.',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.86), height: 1.45),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.86),
+                    height: 1.45,
+                  ),
                 ),
               ],
             ),
@@ -288,42 +321,80 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
               children: [
                 const Text(
                   'Compose',
-                  style: TextStyle(color: _deepText, fontSize: 20, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: _deepText,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _ModeChip(label: 'Broadcast', active: _mode == 'broadcast', onTap: () => setState(() => _mode = 'broadcast')),
+                    _ModeChip(
+                      label: 'Broadcast',
+                      active: _mode == 'broadcast',
+                      onTap: () => setState(() => _mode = 'broadcast'),
+                    ),
                     if (canDepartmentMessage)
-                      _ModeChip(label: 'Department', active: _mode == 'department', onTap: () => setState(() => _mode = 'department')),
+                      _ModeChip(
+                        label: 'Department',
+                        active: _mode == 'department',
+                        onTap: () => setState(() => _mode = 'department'),
+                      ),
                     if (canDepartmentMessage)
-                      _ModeChip(label: 'Mesh Post', active: _mode == 'post', onTap: () => setState(() => _mode = 'post')),
+                      _ModeChip(
+                        label: 'Mesh Post',
+                        active: _mode == 'post',
+                        onTap: () => setState(() => _mode = 'post'),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 14),
                 if (_mode == 'post') ...[
-                  TextField(controller: _titleCtrl, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder())),
+                  TextField(
+                    controller: _titleCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _postCategory,
-                    decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
                     items: const [
                       DropdownMenuItem(value: 'alert', child: Text('Alert')),
-                      DropdownMenuItem(value: 'warning', child: Text('Warning')),
-                      DropdownMenuItem(value: 'safety_tip', child: Text('Safety Tip')),
+                      DropdownMenuItem(
+                        value: 'warning',
+                        child: Text('Warning'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'safety_tip',
+                        child: Text('Safety Tip'),
+                      ),
                       DropdownMenuItem(value: 'update', child: Text('Update')),
-                      DropdownMenuItem(value: 'situational_report', child: Text('Situational Report')),
+                      DropdownMenuItem(
+                        value: 'situational_report',
+                        child: Text('Situational Report'),
+                      ),
                     ],
-                    onChanged: (value) => setState(() => _postCategory = value ?? 'update'),
+                    onChanged: (value) =>
+                        setState(() => _postCategory = value ?? 'update'),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _postBodyCtrl,
                     maxLength: 1000,
                     maxLines: 5,
-                    decoration: const InputDecoration(labelText: 'Body', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Body',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ] else
                   TextField(
@@ -331,20 +402,34 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                     maxLength: 500,
                     maxLines: 4,
                     decoration: InputDecoration(
-                      labelText: _mode == 'department' ? 'Department message' : 'Broadcast message',
+                      labelText: _mode == 'department'
+                          ? 'Department message'
+                          : 'Broadcast message',
                       border: const OutlineInputBorder(),
                     ),
                   ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
                 ],
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _sending ? null : _submit,
-                  style: FilledButton.styleFrom(backgroundColor: _warmAccent, foregroundColor: Colors.white),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _warmAccent,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: Icon(_mode == 'post' ? Icons.campaign : Icons.send),
-                  label: Text(_sending ? 'Queueing...' : _mode == 'post' ? 'Publish over mesh' : 'Send over mesh'),
+                  label: Text(
+                    _sending
+                        ? 'Queueing...'
+                        : _mode == 'post'
+                        ? 'Publish over mesh'
+                        : 'Send over mesh',
+                  ),
                 ),
               ],
             ),
@@ -371,7 +456,11 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
 }
 
 class _ModeChip extends StatelessWidget {
-  const _ModeChip({required this.label, required this.active, required this.onTap});
+  const _ModeChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
   final String label;
   final bool active;
   final VoidCallback onTap;
@@ -387,7 +476,13 @@ class _ModeChip extends StatelessWidget {
           color: active ? _warmAccent : const Color(0xFFF7EADF),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(label, style: TextStyle(color: active ? Colors.white : _deepText, fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? Colors.white : _deepText,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -406,7 +501,9 @@ class _InboxCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: item.isRead ? _warmPanel : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: item.isRead ? _warmBorder : accent.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: item.isRead ? _warmBorder : accent.withValues(alpha: 0.4),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,23 +513,39 @@ class _InboxCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.title ?? item.authorDisplayName,
-                  style: const TextStyle(color: _deepText, fontSize: 18, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    color: _deepText,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              _Badge(label: item.itemType == 'mesh_post' ? 'Post' : item.recipientScope),
+              _Badge(
+                label: item.itemType == 'mesh_post'
+                    ? 'Post'
+                    : item.recipientScope,
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(item.body, style: const TextStyle(color: _deepText, height: 1.45)),
+          Text(
+            item.body,
+            style: const TextStyle(color: _deepText, height: 1.45),
+          ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               _MetaChip(label: item.authorRole),
-              if (item.category != null) _MetaChip(label: item.category!.replaceAll('_', ' ')),
+              if (item.category != null)
+                _MetaChip(label: item.category!.replaceAll('_', ' ')),
               _MetaChip(label: '${item.hopCount}/${item.maxHops} hops'),
-              _MetaChip(label: item.needsServerSync ? 'Queued for sync' : 'Server synced'),
+              _MetaChip(
+                label: item.needsServerSync
+                    ? 'Queued for sync'
+                    : 'Server synced',
+              ),
             ],
           ),
         ],
@@ -453,7 +566,14 @@ class _MetaChip extends StatelessWidget {
         color: const Color(0xFFF7EADF),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: const TextStyle(color: _mutedText, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: _mutedText,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
@@ -472,9 +592,14 @@ class _Badge extends StatelessWidget {
         color: _warmAccent,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
-
-

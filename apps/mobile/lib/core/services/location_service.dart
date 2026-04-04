@@ -30,6 +30,10 @@ class LocationService {
     if (!hasPermission) {
       return null;
     }
+    final gpsAvailable = await isGpsAvailable();
+    if (!gpsAvailable) {
+      return await getLastKnownPosition();
+    }
 
     try {
       final pos = await Geolocator.getCurrentPosition(
@@ -38,11 +42,23 @@ class LocationService {
           timeLimit: Duration(seconds: 10),
         ),
       );
-      return LocationData(
-        latitude: pos.latitude,
-        longitude: pos.longitude,
-        accuracyMeters: pos.accuracy,
-      );
+      return _toLocationData(pos);
+    } catch (_) {
+      return await getLastKnownPosition();
+    }
+  }
+
+  Future<LocationData?> getLastKnownPosition() async {
+    final hasPermission = await _ensurePermission();
+    if (!hasPermission) {
+      return null;
+    }
+    try {
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos == null) {
+        return null;
+      }
+      return _toLocationData(pos);
     } catch (_) {
       return null;
     }
@@ -59,12 +75,14 @@ class LocationService {
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: 1,
       ),
-    ).map(
-      (position) => LocationData(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracyMeters: position.accuracy,
-      ),
+    ).map(_toLocationData);
+  }
+
+  LocationData _toLocationData(Position position) {
+    return LocationData(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracyMeters: position.accuracy,
     );
   }
 }

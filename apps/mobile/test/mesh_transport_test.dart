@@ -8,13 +8,16 @@ import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeLocationService extends LocationService {
+  _FakeLocationService({this.currentPosition});
+
+  LocationData? currentPosition;
+
   @override
-  Future<LocationData?> getCurrentPosition() async => null;
+  Future<LocationData?> getCurrentPosition() async => currentPosition;
 
   @override
   Stream<LocationData> watchPosition() => const Stream<LocationData>.empty();
 }
-
 
 class _FakeMeshPlatformService implements MeshPlatformService {
   final StreamController<MeshPlatformEvent> _controller =
@@ -173,11 +176,13 @@ void main() {
   group('MeshTransportService', () {
     late MeshTransportService svc;
     late _FakeMeshPlatformService platform;
+    late _FakeLocationService locationService;
 
     setUp(() {
       platform = _FakeMeshPlatformService();
+      locationService = _FakeLocationService();
       svc = MeshTransportService(
-        locationService: _FakeLocationService(),
+        locationService: locationService,
         platform: platform,
       );
     });
@@ -332,17 +337,19 @@ void main() {
       expect(svc.isSosBeaconBroadcasting, false);
     });
 
-    test('location beacon scheduler switches between normal and SOS cadence', () {
-      svc.setConnectivity(false);
-      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
+    test(
+      'location beacon scheduler switches between normal and SOS cadence',
+      () {
+        svc.setConnectivity(false);
+        expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
 
-      svc.startSosBeaconBroadcast(deviceId: 'sos-dev');
-      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 10));
+        svc.startSosBeaconBroadcast(deviceId: 'sos-dev');
+        expect(svc.activeLocationBeaconInterval, const Duration(seconds: 10));
 
-      svc.stopSosBeaconBroadcast();
-      expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
-    });
-
+        svc.stopSosBeaconBroadcast();
+        expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
+      },
+    );
 
     test('enqueue relays packets over connected Wi-Fi Direct peers', () async {
       await svc.initialize();
@@ -379,28 +386,122 @@ void main() {
       expect(svc.transportStatusNote, 'relay ready');
     });
 
-    test('received packets are rebroadcast without echoing to the source peer', () async {
-      await svc.initialize();
-      await svc.startDiscovery();
-      platform.emitTransportState(connectedPeerCount: 2);
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'received packets are rebroadcast without echoing to the source peer',
+      () async {
+        await svc.initialize();
+        await svc.startDiscovery();
+        platform.emitTransportState(connectedPeerCount: 2);
+        await Future<void>.delayed(Duration.zero);
 
-      platform.emitInboundPacket({
-        'messageId': 'relay-inbound',
-        'originDeviceId': 'other-dev',
-        'timestamp': '2026-03-31T00:00:00Z',
-        'hopCount': 0,
-        'maxHops': 7,
-        'payloadType': 'INCIDENT_REPORT',
-        'payload': {'description': 'Relayed warehouse fire'},
-        'signature': '',
-      });
+        platform.emitInboundPacket({
+          'messageId': 'relay-inbound',
+          'originDeviceId': 'other-dev',
+          'timestamp': '2026-03-31T00:00:00Z',
+          'hopCount': 0,
+          'maxHops': 7,
+          'payloadType': 'INCIDENT_REPORT',
+          'payload': {'description': 'Relayed warehouse fire'},
+          'signature': '',
+        });
 
-      await Future<void>.delayed(Duration.zero);
-      expect(platform.sentPackets.last['messageId'], 'relay-inbound');
-      expect(platform.sentPackets.last['hopCount'], 1);
-      expect(platform.exclusionHistory.last, contains('peer-a'));
-    });
+        await Future<void>.delayed(Duration.zero);
+        expect(platform.sentPackets.last['messageId'], 'relay-inbound');
+        expect(platform.sentPackets.last['hopCount'], 1);
+        expect(platform.exclusionHistory.last, contains('peer-a'));
+      },
+    );
+
+    test(
+      'buildTopologySnapshot returns gateway plus fresh beacon nodes only',
+      () async {
+        final localFingerprint =
+            MeshTransportService.anonymizeDeviceFingerprint(svc.localDeviceId);
+        final now = DateTime.now().toUtc();
+        svc.ingestServerLastSeen([
+          {
+            'message_id': 'local-recent',
+            'device_fingerprint': localFingerprint,
+            'location': {'lat': 14.601, 'lng': 120.982, 'accuracyMeters': 4},
+            'recorded_at': now.toIso8601String(),
+            'display_name': 'Gateway Device',
+          },
+          {
+            'message_id': 'peer-recent',
+            'device_fingerprint': 'AA:BB:CC:DD:00:00',
+            'location': {'lat': 14.602, 'lng': 120.983, 'accuracyMeters': 7},
+            'recorded_at': now
+                .subtract(const Duration(minutes: 1))
+                .toIso8601String(),
+            'display_name': 'Responder Relay',
+          },
+          {
+            'message_id': 'peer-stale',
+            'device_fingerprint': 'EE:FF:00:11:00:00',
+            'location': {'lat': 14.7, 'lng': 121.1, 'accuracyMeters': 10},
+            'recorded_at': now
+                .subtract(const Duration(minutes: 45))
+                .toIso8601String(),
+            'display_name': 'Stale Peer',
+          },
+        ]);
+
+        final snapshot = await svc.buildTopologySnapshot(
+          operatorRole: 'department',
+          departmentId: 'dept-1',
+          departmentName: 'Rescue Unit',
+          displayName: 'Gateway Alpha',
+          maxNodes: 1,
+        );
+
+        expect(snapshot, isNotNull);
+        expect(snapshot!['gatewayDeviceId'], svc.localDeviceId);
+        expect(snapshot['gateway'], isA<Map<String, dynamic>>());
+        expect((snapshot['nodes'] as List).length, 1);
+
+        final gateway = snapshot['gateway'] as Map<String, dynamic>;
+        expect(gateway['role'], 'gateway');
+        expect(gateway['departmentId'], 'dept-1');
+        expect(gateway['departmentName'], 'Rescue Unit');
+        expect(gateway['operatorRole'], 'department');
+        expect(gateway['lat'], 14.601);
+        expect(gateway['metadata'], isA<Map<String, dynamic>>());
+
+        final node = (snapshot['nodes'] as List).first as Map<String, dynamic>;
+        expect(node['nodeDeviceId'], 'AA:BB:CC:DD:00:00');
+        expect(node['role'], 'relay');
+      },
+    );
+
+    test(
+      'buildTopologySnapshot falls back to live gps when no local beacon exists',
+      () async {
+        locationService.currentPosition = const LocationData(
+          latitude: 14.55,
+          longitude: 121.01,
+          accuracyMeters: 12,
+        );
+
+        final snapshot = await svc.buildTopologySnapshot(
+          displayName: 'Live GPS Gateway',
+        );
+        expect(snapshot, isNotNull);
+
+        final gateway = snapshot!['gateway'] as Map<String, dynamic>;
+        expect(gateway['lat'], 14.55);
+        expect(gateway['lng'], 121.01);
+        final metadata = gateway['metadata'] as Map<String, dynamic>;
+        expect(metadata['source'], 'live_gps');
+      },
+    );
+
+    test(
+      'buildTopologySnapshot returns null when no gateway location is available',
+      () async {
+        final snapshot = await svc.buildTopologySnapshot();
+        expect(snapshot, isNull);
+      },
+    );
   });
 
   group('Distress packet factory', () {
@@ -455,4 +556,3 @@ void main() {
     });
   });
 }
-

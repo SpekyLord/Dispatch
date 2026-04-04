@@ -33,11 +33,97 @@ class CitizenReportFormScreen extends StatelessWidget {
   const CitizenReportFormScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Submit a Report')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+  ConsumerState<CitizenReportFormScreen> createState() =>
+      _CitizenReportFormScreenState();
+}
+
+class _CitizenReportFormScreenState
+    extends ConsumerState<CitizenReportFormScreen> {
+  final _descController = TextEditingController();
+  final _addressController = TextEditingController();
+  String? _category;
+  String _severity = 'medium';
+  bool _loading = false;
+  String? _error;
+
+  // Location
+  double? _latitude;
+  double? _longitude;
+  bool _gpsLoading = false;
+  String? _gpsStatus;
+  bool _hasUserPinnedLocation = false;
+
+  // Images
+  final List<SelectedMedia> _images = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _detectGps();
+  }
+
+  @override
+  void dispose() {
+    _descController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _detectGps() async {
+    setState(() => _gpsLoading = true);
+    try {
+      final loc = await ref.read(locationServiceProvider).getCurrentPosition();
+      if (loc != null && mounted) {
+        setState(() {
+          if (!_hasUserPinnedLocation) {
+            _latitude = loc.latitude;
+            _longitude = loc.longitude;
+          }
+          _gpsStatus = 'GPS acquired';
+        });
+      } else if (mounted) {
+        setState(
+          () => _gpsStatus =
+              'GPS unavailable. Pick location on map or enter address.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _gpsStatus = 'GPS unavailable.');
+      }
+    } finally {
+      if (mounted) setState(() => _gpsLoading = false);
+    }
+  }
+
+  void _onLocationSelected(LatLng point) {
+    setState(() {
+      _hasUserPinnedLocation = true;
+      _latitude = point.latitude;
+      _longitude = point.longitude;
+    });
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_images.length >= _maxImages) {
+      setState(() => _error = 'Maximum $_maxImages images allowed.');
+      return;
+    }
+    final media = source == ImageSource.camera
+        ? await ref.read(mediaServiceProvider).pickImageFromCamera()
+        : await ref.read(mediaServiceProvider).pickImageFromGallery();
+    if (media != null && mounted) {
+      setState(() {
+        _images.add(media);
+        _error = null;
+      });
+    }
+  }
+
+  void _showImageSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
@@ -21,12 +24,17 @@ class MeshPeopleMapScreen extends ConsumerStatefulWidget {
   final bool allowCompassActions;
 
   @override
-  ConsumerState<MeshPeopleMapScreen> createState() => _MeshPeopleMapScreenState();
+  ConsumerState<MeshPeopleMapScreen> createState() =>
+      _MeshPeopleMapScreenState();
 }
 
 class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
+  final MapController _mapController = MapController();
   bool _loading = true;
+  bool _hasUserInteracted = false;
+  bool _mapReady = false;
   String? _resolvingSignalId;
+  LatLng? _gpsCenter;
   List<Map<String, dynamic>> _nodes = [];
   List<Map<String, dynamic>> _signals = [];
   List<Map<String, dynamic>> _devices = [];
@@ -35,6 +43,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   void initState() {
     super.initState();
     _refresh();
+    unawaited(_detectGpsCenter());
   }
 
   Future<void> _refresh() async {
@@ -55,12 +64,36 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
             .cast<Map<String, dynamic>>();
         _loading = false;
       });
+      _moveCameraToPreferredCenter();
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() => _loading = false);
+    } finally {
+      unawaited(_detectGpsCenter());
     }
+  }
+
+  Future<void> _detectGpsCenter() async {
+    final location = await ref
+        .read(locationServiceProvider)
+        .getCurrentPosition();
+    if (!mounted || location == null) {
+      return;
+    }
+    final point = LatLng(location.latitude, location.longitude);
+    final changed =
+        _gpsCenter == null ||
+        _gpsCenter!.latitude != point.latitude ||
+        _gpsCenter!.longitude != point.longitude;
+    if (!changed) {
+      return;
+    }
+    setState(() {
+      _gpsCenter = point;
+    });
+    _moveCameraToPreferredCenter();
   }
 
   Future<void> _resolveSignal(String signalId) async {
@@ -86,7 +119,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     );
   }
 
-  LatLng _initialCenter() {
+  LatLng _preferredCenter() {
+    final gpsCenter = _gpsCenter;
+    if (gpsCenter != null) {
+      return gpsCenter;
+    }
     for (final row in [..._signals, ..._devices, ..._nodes]) {
       final point = _readPoint(row);
       if (point != null) {
@@ -133,6 +170,33 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     }
 
     return null;
+  }
+
+  void _moveCameraToPreferredCenter() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_mapReady || _hasUserInteracted) {
+        return;
+      }
+      try {
+        _mapController.move(_preferredCenter(), _mapController.camera.zoom);
+      } on StateError {
+        // Map controller may not be attached yet during early rebuilds.
+      }
+    });
+  }
+
+  void _handleMapReady() {
+    _mapReady = true;
+    _moveCameraToPreferredCenter();
+  }
+
+  void _handlePositionChanged(MapCamera camera, bool hasGesture) {
+    if (!hasGesture || _hasUserInteracted) {
+      return;
+    }
+    setState(() {
+      _hasUserInteracted = true;
+    });
   }
 
   List<Marker> _markers() {
@@ -206,8 +270,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final center = _initialCenter();
-    final viewerRole = ref.watch(sessionControllerProvider).role?.name ?? 'citizen';
+    final center = _preferredCenter();
+    final viewerRole =
+        ref.watch(sessionControllerProvider).role?.name ?? 'citizen';
 
     return Scaffold(
       appBar: AppBar(
@@ -248,9 +313,18 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                             spacing: 10,
                             runSpacing: 10,
                             children: [
-                              _StatPill(label: 'Nodes', value: '${_nodes.length}'),
-                              _StatPill(label: 'People', value: '${_devices.length}'),
-                              _StatPill(label: 'Signals', value: '${_signals.length}'),
+                              _StatPill(
+                                label: 'Nodes',
+                                value: '${_nodes.length}',
+                              ),
+                              _StatPill(
+                                label: 'People',
+                                value: '${_devices.length}',
+                              ),
+                              _StatPill(
+                                label: 'Signals',
+                                value: '${_signals.length}',
+                              ),
                             ],
                           ),
                           const SizedBox(height: 14),
@@ -259,9 +333,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                             child: SizedBox(
                               height: 320,
                               child: FlutterMap(
+                                mapController: _mapController,
                                 options: MapOptions(
                                   initialCenter: center,
                                   initialZoom: 13,
+                                  onMapReady: _handleMapReady,
+                                  onPositionChanged: _handlePositionChanged,
                                 ),
                                 children: [
                                   ...buildDispatchMapTileLayers(),
@@ -350,14 +427,16 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                           if (widget.allowResolveActions) ...[
                                             const SizedBox(width: 8),
                                             FilledButton(
-                                              onPressed: _resolvingSignalId ==
+                                              onPressed:
+                                                  _resolvingSignalId ==
                                                       signal['id']
                                                   ? null
                                                   : () => _resolveSignal(
                                                       signal['id'] as String,
                                                     ),
                                               child: Text(
-                                                _resolvingSignalId == signal['id']
+                                                _resolvingSignalId ==
+                                                        signal['id']
                                                     ? 'Resolving...'
                                                     : 'Resolve',
                                               ),
@@ -400,10 +479,7 @@ class _StatPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(width: 8),
           Text(value),
         ],
@@ -442,7 +518,3 @@ class _LegendPill extends StatelessWidget {
     );
   }
 }
-
-
-
-

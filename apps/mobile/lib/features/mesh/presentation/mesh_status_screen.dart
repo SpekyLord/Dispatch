@@ -83,8 +83,32 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
 
   Future<void> _handleRefresh() async {
     final transport = ref.read(meshTransportProvider);
+    final session = ref.read(sessionControllerProvider);
     transport.pruneStalePeers();
     await ref.read(sarModeControllerProvider.notifier).refreshSubsystemStatus();
+    if (session.accessToken != null) {
+      try {
+        await ref
+            .read(meshGatewaySyncServiceProvider)
+            .sync(
+              operatorRole: session.role?.name,
+              departmentId: session.department?.id,
+              departmentName: session.department?.name,
+              displayName:
+                  session.fullName ?? session.department?.name ?? session.email,
+            );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Gateway sync failed. Topology upload will retry on the next sync.',
+              ),
+            ),
+          );
+        }
+      }
+    }
     await _hydrateSignals();
     if (mounted) {
       setState(() {});
@@ -718,7 +742,8 @@ class _SarModePanel extends StatelessWidget {
   final ValueChanged<bool> onToggle;
   final SarModeState sarState;
   final bool sosBeaconBroadcasting;
-  final DeviceLocationTrailPoint? Function(String deviceFingerprint) lastSeenLookup;
+  final DeviceLocationTrailPoint? Function(String deviceFingerprint)
+  lastSeenLookup;
 
   @override
   Widget build(BuildContext context) {
@@ -862,9 +887,7 @@ class _SarModePanel extends StatelessWidget {
                 pinned: signal.messageId == sarState.activeTargetMessageId,
                 canOpenCompass: canOpenCompass,
                 signal: signal,
-                lastSeenBeacon: lastSeenLookup(
-                  signal.detectedDeviceIdentifier,
-                ),
+                lastSeenBeacon: lastSeenLookup(signal.detectedDeviceIdentifier),
                 onOpen: signal.isResolved
                     ? null
                     : () => onOpenSignal(signal.messageId),
@@ -1195,7 +1218,9 @@ class _PeerBoard extends StatelessWidget {
                         Text(
                           peer.isConnected
                               ? 'Connected ${peer.transport ?? 'relay'} peer'
-                              : (peer.isGateway ? 'Gateway peer' : 'Relay peer'),
+                              : (peer.isGateway
+                                    ? 'Gateway peer'
+                                    : 'Relay peer'),
                           style: const TextStyle(color: _mutedText),
                         ),
                       ],
@@ -1274,6 +1299,3 @@ class _EmptyPanel extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -83,7 +83,7 @@ class SessionController extends StateNotifier<SessionState> {
       _applyAuthPayload(result, fallbackEmail: email);
       await _storage.save(state);
       return null;
-    } on Exception catch (e) {
+    } catch (e) {
       return _extractError(e);
     }
   }
@@ -121,7 +121,7 @@ class SessionController extends StateNotifier<SessionState> {
       _applyAuthPayload(result, fallbackEmail: email, fallbackRole: roleValue);
       await _storage.save(state);
       return null;
-    } on Exception catch (e) {
+    } catch (e) {
       return _extractError(e);
     }
   }
@@ -224,8 +224,14 @@ class SessionController extends StateNotifier<SessionState> {
     }
   }
 
-  String _extractError(Exception error) {
+  String _extractError(Object error) {
     if (error is DioException) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError) {
+        return 'Unable to reach the API. Check MOBILE_API_BASE_URL and ensure the backend is running.';
+      }
       final payload = error.response?.data;
       if (payload is Map<String, dynamic>) {
         final data = payload['error'];
@@ -238,6 +244,9 @@ class SessionController extends StateNotifier<SessionState> {
         }
       }
       return error.message ?? 'Request failed.';
+    }
+    if (error is StateError) {
+      return error.message;
     }
     return error.toString();
   }

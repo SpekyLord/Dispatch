@@ -108,6 +108,78 @@ flutter run --dart-define-from-file=.env
 >
 > **Chrome note:** `flutter run -d chrome` uses `MOBILE_WEB_API_BASE_URL` if provided. If you leave it blank, the app falls back to the current browser host on port `5000`. The API now allows localhost and `127.0.0.1` development origins on any port.
 
+### Running on a Physical Android Phone
+
+Use this flow when testing on a real phone instead of emulator/Chrome.
+For full mesh pass/fail execution steps, use [MESH-FIELD-TEST-PROCEDURE.md](MESH-FIELD-TEST-PROCEDURE.md).
+
+1. Set API host so your phone can reach your backend over LAN:
+
+```bash
+# services/api/.env
+API_HOST=0.0.0.0
+API_PORT=5000
+```
+
+2. Set the mobile API base URL to your computer's LAN IP:
+
+```bash
+# apps/mobile/.env
+MOBILE_API_BASE_URL=http://<YOUR_PC_LAN_IP>:5000
+```
+
+Example: `http://192.168.254.119:5000`
+
+3. Start the API:
+
+```bash
+cd services/api
+uv run dispatch-api
+```
+
+4. Connect your Android phone (USB debugging on) and verify Flutter sees it:
+
+```bash
+flutter devices
+```
+
+5. Run the app on that specific device:
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter run -d <DEVICE_ID> --dart-define-from-file=.env --no-pub
+```
+
+6. Grant runtime permissions when prompted (required for mesh and SAR on phone):
+
+- Location (GPS)
+- Nearby Devices / Bluetooth (scan, connect, advertise)
+- Nearby Wi-Fi Devices
+- Microphone
+
+The app now keeps prompting for missing mesh/SAR permissions on resume until all required permissions are approved. If Android marks a permission as "Don't ask again", use **Open App Settings** in the app permission gate.
+
+### Wi-Fi Probe Notes (Mobile)
+
+- Wi-Fi probe detection means passively sniffing nearby device Wi-Fi probe requests to estimate presence.
+- In this mobile build, Wi-Fi probe is intentionally unavailable on standard Android/iOS app sandboxing.
+- Mesh and SAR still work through BLE passive scan, SOS beacon advertising, microphone window summaries, GPS/location beacons, and gateway sync.
+
+Optional (USB-only): route phone localhost to your computer localhost so you can use `http://127.0.0.1:5000` instead of LAN IP:
+
+```bash
+adb reverse tcp:5000 tcp:5000
+```
+
+If `adb` is not in PATH, use Android Studio's terminal or add Android SDK platform-tools to your PATH.
+
+First Android build on a machine can be slow because Gradle/Flutter artifacts are downloaded. To prefetch them once:
+
+```bash
+flutter precache --android
+```
+
 ### Mobile Linting & Tests
 
 ```bash
@@ -178,6 +250,12 @@ Minimum preflight:
 - seeded citizen and approved department accounts
 - confirmed backend URL on the gateway device
 - local mesh reset before each manual run
+
+Topology upload trigger points (gateway-ready mobile sessions):
+
+- Offline Comms `Sync queued packets` now uploads queued packets and a `topologySnapshot` in the same ingest call.
+- Mesh Network pull-to-refresh / refresh button now also performs a gateway sync, allowing topology-only uploads even when no packets are queued.
+- If gateway coordinates are unavailable, packet sync still proceeds and topology upload is skipped for that attempt.
 
 Use the reporting template inside `docs/MESH-FIELD-TEST-PROCEDURE.md` for the final pass/fail log.
 

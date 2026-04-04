@@ -1,7 +1,7 @@
-// Citizen home - report list with pull-to-refresh, FAB for new report.
+// Citizen home — editorial mesh dashboard with bento stats, activity feed,
+// and glassmorphic SOS button. Follows "The Calm Authority" design system.
 
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
-import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
@@ -15,10 +15,9 @@ import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.
 import 'package:dispatch_mobile/features/mesh/presentation/sos_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
-
 
 class CitizenHomeScreen extends ConsumerStatefulWidget {
   const CitizenHomeScreen({super.key});
@@ -69,57 +68,22 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
     setState(() => _selectedIndex = index);
   }
 
-  String _titleForIndex(int index, AppStrings strings) {
-    return switch (index) {
-      0 => strings.myReports,
-      1 => strings.feed,
-      2 => strings.profile,
-      _ => strings.myReports,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
-    final strings = ref.watch(appStringsProvider);
-
     final pages = [
-      _buildHomePage(context),
+      _buildDashboard(context),
+      const MeshPeopleMapScreen(
+        title: 'Mesh Map',
+        subtitle: 'Nodes and signals',
+        allowResolveActions: false,
+      ),
       const CitizenFeedScreen(),
       const CitizenProfileScreen(),
     ];
 
     return Scaffold(
-      backgroundColor: dc.warmBackground,
-      appBar: AppBar(
-        backgroundColor: dc.warmBackground,
-        surfaceTintColor: Colors.transparent,
-        title: Text(_titleForIndex(_selectedIndex, strings)),
-        actions: [
-          const LocaleActionButton(),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            tooltip: strings.notifications,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: strings.signOut,
-            onPressed: () =>
-                ref.read(sessionControllerProvider.notifier).signOut(),
-          ),
-        ],
-      ),
-      floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton.extended(
-              backgroundColor: dc.warmSeed,
-              foregroundColor: Colors.white,
-              onPressed: _openReportForm,
-              icon: const Icon(Icons.add),
-              label: Text(strings.newReport),
-            )
-          : null,
+      backgroundColor: dc.background,
+      extendBody: true,
       body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: AppBottomNavigationBar(
         selectedIndex: _selectedIndex,
@@ -128,74 +92,80 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
     );
   }
 
-  Widget _buildHomePage(BuildContext context) {
+  Widget _buildDashboard(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final transport = ref.watch(meshTransportProvider);
 
-    return RefreshIndicator(
-      color: dc.warmSeed,
-      onRefresh: _fetchReports,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        children: [
-          _CitizenHero(
-            reportCount: _reports.length,
-            queueCount: transport.queueSize,
-            reachCount: transport.estimatedReach,
-          ),
-          const SizedBox(height: 18),
-          _QuickActionRow(
-            unreadCount: transport.unreadMeshMessageCount,
-            onMesh: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          color: dc.primary,
+          onRefresh: _fetchReports,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              MediaQuery.of(context).padding.top + 16,
+              24,
+              180, // room for SOS button + bottom nav
             ),
-            onMap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const MeshPeopleMapScreen(
-                  title: 'Mesh Map',
-                  subtitle: 'Nodes and signals',
-                  allowResolveActions: false,
+            children: [
+              // ── Top App Bar (inline) ────────────────────────────────
+              _DashboardAppBar(
+                onSync: _fetchReports,
+                onNotifications: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationsScreen(),
+                  ),
                 ),
               ),
-            ),
-            onCompass: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const SurvivorCompassScreen(
-                  allowResolve: false,
+              const SizedBox(height: 20),
+
+              // ── Status Banner ───────────────────────────────────────
+              _StatusBanner(
+                isOffline: transport.isMeshOnlyState,
+                isDiscovering: transport.isDiscovering,
+              ),
+              const SizedBox(height: 24),
+
+              // ── Network Health Bento Grid ───────────────────────────
+              _BentoGrid(
+                activeNodes: transport.peerCount,
+                newNodes: transport.connectedRelayPeerCount,
+                recentDispatches: _reports.length,
+                networkRange: transport.estimatedReach,
+              ),
+              const SizedBox(height: 24),
+
+              // ── Quick Actions Row ───────────────────────────────────
+              _QuickActions(
+                unreadCount: transport.unreadMeshMessageCount,
+                onMesh: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const MeshStatusScreen(),
+                  ),
                 ),
+                onCompass: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const SurvivorCompassScreen(
+                      allowResolve: false,
+                    ),
+                  ),
+                ),
+                onOfflineComms: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const OfflineCommsScreen(),
+                  ),
+                ),
+                onNewReport: _openReportForm,
               ),
-            ),
-            onOfflineComms: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
-            ),
-            onSos: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SosScreen()),
-            ),
-          ),
-          const SizedBox(height: 18),
-          _SectionHeader(
-            eyebrow: 'Reports',
-            title: 'Recent reports',
-            body: _reports.isEmpty
-                ? 'Your incident reports will appear here.'
-                : '${_reports.length} report${_reports.length == 1 ? '' : 's'} tracked.',
-          ),
-          const SizedBox(height: 12),
-          if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else if (_reports.isEmpty)
-            _EmptyReportsPanel(onCreateReport: _openReportForm)
-          else
-            ..._reports.map(
-              (report) => _ReportCard(
-                report: report,
+              const SizedBox(height: 32),
+
+              // ── Recent Activity ─────────────────────────────────────
+              _RecentActivitySection(
+                reports: _reports,
+                loading: _loading,
                 strings: strings,
-                onTap: () async {
+                onReportTap: (report) async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => CitizenReportDetailScreen(
@@ -205,81 +175,422 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
                   );
                   _fetchReports();
                 },
+                onViewLog: () {
+                  // Switch to reports tab
+                  _onItemTapped(2);
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // ── Floating SOS Button ─────────────────────────────────────
+        Positioned(
+          bottom: 100,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: _SosButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SosScreen()),
               ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Dashboard App Bar — editorial clean, glassmorphic-style
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DashboardAppBar extends StatelessWidget {
+  const _DashboardAppBar({
+    required this.onSync,
+    required this.onNotifications,
+  });
+
+  final VoidCallback onSync;
+  final VoidCallback onNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Row(
+      children: [
+        Icon(
+          Icons.signal_cellular_alt,
+          color: isDark ? dc.darkPrimaryAccent : dc.primary,
+          size: 24,
+        ),
+        const SizedBox(width: 12),
+        Text(
+          'Mesh Network',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+            color: isDark ? dc.darkInk : dc.onSurface,
+          ),
+        ),
+        const Spacer(),
+        _GlassIconButton(
+          icon: Icons.notifications_outlined,
+          onPressed: onNotifications,
+        ),
+        const SizedBox(width: 8),
+        _GlassIconButton(
+          icon: Icons.sync,
+          onPressed: onSync,
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassIconButton extends StatelessWidget {
+  const _GlassIconButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDark
+                ? dc.darkSurfaceContainer.withValues(alpha: 0.6)
+                : dc.surfaceContainerHigh.withValues(alpha: 0.6),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: isDark
+                ? dc.darkInk.withValues(alpha: 0.6)
+                : dc.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Status Banner — mesh connectivity status with pulse halo
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _StatusBanner extends StatelessWidget {
+  const _StatusBanner({
+    required this.isOffline,
+    required this.isDiscovering,
+  });
+
+  final bool isOffline;
+  final bool isDiscovering;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark
+        ? dc.darkSurfaceContainer
+        : dc.primaryContainer;
+    final textColor = isDark
+        ? dc.darkInk
+        : dc.onPrimaryContainer;
+
+    final String title;
+    final String subtitle;
+    final IconData icon;
+
+    if (isOffline) {
+      title = 'Network Offline';
+      subtitle = 'Mesh Communication Only';
+      icon = Icons.cloud_off;
+    } else if (isDiscovering) {
+      title = 'Discovering Peers';
+      subtitle = 'Scanning for nearby nodes...';
+      icon = Icons.radar;
+    } else {
+      title = 'Network Active';
+      subtitle = 'Connected to mesh network';
+      icon = Icons.cloud_done_outlined;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          // Pulsing halo icon
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isOffline || isDiscovering)
+                  _PulseHalo(
+                    color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                  ),
+                Icon(icon, color: isDark ? dc.darkPrimaryAccent : dc.primary),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    color: textColor.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _CitizenHero extends StatelessWidget {
-  const _CitizenHero({
-    required this.reportCount,
-    required this.queueCount,
-    required this.reachCount,
-  });
+class _PulseHalo extends StatefulWidget {
+  const _PulseHalo({required this.color});
+  final Color color;
 
-  final int reportCount;
-  final int queueCount;
-  final int reachCount;
+  @override
+  State<_PulseHalo> createState() => _PulseHaloState();
+}
+
+class _PulseHaloState extends State<_PulseHalo>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: dc.heroGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26131110),
-            blurRadius: 24,
-            offset: Offset(0, 14),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = _controller.value;
+        final scale = 0.95 + (value < 0.5 ? value : 1 - value) * 0.2;
+        final opacity = 0.5 - (value < 0.5 ? value : 1 - value) * 0.6;
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color.withValues(alpha: opacity.clamp(0.0, 1.0)),
+            ),
           ),
-        ],
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bento Grid — 3-column network health stats
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _BentoGrid extends StatelessWidget {
+  const _BentoGrid({
+    required this.activeNodes,
+    required this.newNodes,
+    required this.recentDispatches,
+    required this.networkRange,
+  });
+
+  final int activeNodes;
+  final int newNodes;
+  final int recentDispatches;
+  final int networkRange;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final spacing = 12.0;
+        final cardWidth = (constraints.maxWidth - spacing * 2) / 3;
+
+        return Row(
+          children: [
+            _BentoCard(
+              width: cardWidth,
+              label: 'ACTIVE NODES',
+              value: '$activeNodes',
+              badge: newNodes > 0 ? '+$newNodes' : null,
+            ),
+            SizedBox(width: spacing),
+            _BentoCard(
+              width: cardWidth,
+              label: 'DISPATCHES',
+              value: '$recentDispatches',
+              icon: Icons.emergency_share,
+              iconColor: dc.error,
+            ),
+            SizedBox(width: spacing),
+            _BentoCard(
+              width: cardWidth,
+              label: 'REACH',
+              value: networkRange > 1000
+                  ? (networkRange / 1000).toStringAsFixed(1)
+                  : '$networkRange',
+              unit: networkRange > 1000 ? 'km' : 'm',
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _BentoCard extends StatelessWidget {
+  const _BentoCard({
+    required this.width,
+    required this.label,
+    required this.value,
+    this.badge,
+    this.unit,
+    this.icon,
+    this.iconColor,
+  });
+
+  final double width;
+  final String label;
+  final String value;
+  final String? badge;
+  final String? unit;
+  final IconData? icon;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? dc.darkSurface : dc.surfaceContainerLow;
+    final textColor = isDark ? dc.darkInk : dc.onSurface;
+    final labelColor = isDark ? dc.darkMutedInk : dc.onSurfaceVariant;
+
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(32),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: const Text(
-              'Dashboard',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.1,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Reports, mesh, and offline comms in one place.',
+          Text(
+            label,
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              height: 1.15,
+              fontFamily: 'Inter',
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+              color: labelColor,
             ),
           ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          const SizedBox(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              _HeroPill(label: 'Reports', value: '$reportCount'),
-              _HeroPill(label: 'Queue', value: '$queueCount'),
-              _HeroPill(label: 'Reached', value: '~$reachCount'),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 40,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -2,
+                      color: textColor,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Text(
+                  badge!,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                  ),
+                ),
+              ],
+              if (unit != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  unit!,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: labelColor,
+                  ),
+                ),
+              ],
+              if (icon != null) ...[
+                const SizedBox(width: 6),
+                Icon(icon, size: 20, color: iconColor ?? dc.error),
+              ],
             ],
           ),
         ],
@@ -288,310 +599,55 @@ class _CitizenHero extends StatelessWidget {
   }
 }
 
-class _HeroPill extends StatelessWidget {
-  const _HeroPill({required this.label, required this.value});
+// ═══════════════════════════════════════════════════════════════════════════
+// Quick Actions — compact horizontal action chips
+// ═══════════════════════════════════════════════════════════════════════════
 
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 116),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.74),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionRow extends StatelessWidget {
-  const _QuickActionRow({
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({
     required this.unreadCount,
     required this.onMesh,
-    required this.onMap,
     required this.onCompass,
     required this.onOfflineComms,
-    required this.onSos,
+    required this.onNewReport,
   });
 
   final int unreadCount;
   final VoidCallback onMesh;
-  final VoidCallback onMap;
   final VoidCallback onCompass;
   final VoidCallback onOfflineComms;
-  final VoidCallback onSos;
+  final VoidCallback onNewReport;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 0.88,
-      children: [
-        _ActionCard(
-          icon: Icons.cell_tower,
-          accent: dc.coolAccent,
-          title: 'Mesh status',
-          body: 'Nodes, relay, and discovery.',
-          onTap: onMesh,
-        ),
-        _ActionCard(
-          icon: Icons.map_outlined,
-          accent: dc.statusResolved,
-          title: 'People map',
-          body: 'Nearby nodes and survivor signals.',
-          onTap: onMap,
-        ),
-        _ActionCard(
-          icon: Icons.explore_outlined,
-          accent: dc.statusPending,
-          title: 'Survivor locator',
-          body: 'Compass to the nearest signal.',
-          onTap: onCompass,
-        ),
-        _ActionCard(
-          icon: Icons.forum_outlined,
-          accent: dc.warmSeed,
-          title: 'Offline comms',
-          body: 'Messages when the network is down.',
-          badgeLabel: unreadCount > 0 ? '$unreadCount' : null,
-          tooltip: 'Offline Comms',
-          onTap: onOfflineComms,
-        ),
-        _ActionCard(
-          icon: Icons.sos,
-          accent: dc.statusError,
-          title: 'Emergency SOS',
-          body: 'Broadcast a distress signal.',
-          onTap: onSos,
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.icon,
-    required this.accent,
-    required this.title,
-    required this.body,
-    required this.onTap,
-    this.badgeLabel,
-    this.tooltip,
-  });
-
-  final IconData icon;
-  final Color accent;
-  final String title;
-  final String body;
-  final String? badgeLabel;
-  final String? tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final card = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: dc.warmSurface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: dc.warmBorder),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14131110),
-              blurRadius: 18,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(icon, color: accent),
-                ),
-                const Spacer(),
-                if (badgeLabel != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: dc.warmSeed,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      badgeLabel!,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: const TextStyle(
-                color: dc.ink,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Flexible(
-              child: Text(
-                body,
-                style: const TextStyle(color: dc.mutedInk, fontSize: 13, height: 1.4),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    if ((tooltip ?? '').isEmpty) {
-      return card;
-    }
-    return Tooltip(message: tooltip!, child: card);
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          eyebrow.toUpperCase(),
-          style: const TextStyle(
-            color: dc.warmSeed,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          title,
-          style: const TextStyle(
-            color: dc.ink,
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(body, style: const TextStyle(color: dc.mutedInk, height: 1.45)),
-      ],
-    );
-  }
-}
-
-class _EmptyReportsPanel extends StatelessWidget {
-  const _EmptyReportsPanel({required this.onCreateReport});
-
-  final VoidCallback onCreateReport;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: dc.chipFill,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Icon(Icons.description_outlined, color: dc.warmSeed),
+          _QuickChip(
+            icon: Icons.cell_tower,
+            label: 'Mesh Status',
+            onTap: onMesh,
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'No reports yet',
-            style: TextStyle(
-              color: dc.ink,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(width: 10),
+          _QuickChip(
+            icon: Icons.explore_outlined,
+            label: 'Locator',
+            onTap: onCompass,
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Create your first incident report to start tracking.',
-            style: TextStyle(color: dc.mutedInk, height: 1.45),
+          const SizedBox(width: 10),
+          _QuickChip(
+            icon: Icons.forum_outlined,
+            label: 'Comms',
+            badge: unreadCount > 0 ? '$unreadCount' : null,
+            onTap: onOfflineComms,
           ),
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: onCreateReport,
-            style: FilledButton.styleFrom(
-              backgroundColor: dc.warmSeed,
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.add),
-            label: const Text('Create report'),
+          const SizedBox(width: 10),
+          _QuickChip(
+            icon: Icons.add,
+            label: 'New Report',
+            isPrimary: true,
+            onTap: onNewReport,
           ),
         ],
       ),
@@ -599,18 +655,182 @@ class _EmptyReportsPanel extends StatelessWidget {
   }
 }
 
-class _ReportCard extends StatelessWidget {
-  const _ReportCard({
+class _QuickChip extends StatelessWidget {
+  const _QuickChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.badge,
+    this.isPrimary = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String? badge;
+  final bool isPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bg = isPrimary
+        ? (isDark ? dc.darkPrimaryAccent.withValues(alpha: 0.15) : dc.primaryContainer)
+        : (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerLow);
+    final fg = isPrimary
+        ? (isDark ? dc.darkPrimaryAccent : dc.primary)
+        : (isDark ? dc.darkInk : dc.onSurface);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: fg,
+                ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? dc.darkBackground : dc.onPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Recent Activity — alternating tonal cards, no dividers
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection({
+    required this.reports,
+    required this.loading,
+    required this.strings,
+    required this.onReportTap,
+    required this.onViewLog,
+  });
+
+  final List<Map<String, dynamic>> reports;
+  final bool loading;
+  final AppStrings strings;
+  final void Function(Map<String, dynamic>) onReportTap;
+  final VoidCallback onViewLog;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Recent Activity',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+                color: isDark ? dc.darkInk : dc.onSurface,
+              ),
+            ),
+            GestureDetector(
+              onTap: onViewLog,
+              child: Text(
+                'View Log',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (loading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(color: dc.primary),
+            ),
+          )
+        else if (reports.isEmpty)
+          _EmptyActivity()
+        else
+          ...reports.take(5).toList().asMap().entries.map((entry) {
+            final index = entry.key;
+            final report = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ActivityItem(
+                report: report,
+                strings: strings,
+                useAltBackground: index.isOdd,
+                onTap: () => onReportTap(report),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _ActivityItem extends StatelessWidget {
+  const _ActivityItem({
     required this.report,
     required this.strings,
+    required this.useAltBackground,
     required this.onTap,
   });
 
   final Map<String, dynamic> report;
   final AppStrings strings;
+  final bool useAltBackground;
   final VoidCallback onTap;
-
-  Color _statusColor(String status) => dc.statusColor(status);
 
   IconData _categoryIcon(String category) {
     return switch (category) {
@@ -619,182 +839,218 @@ class _ReportCard extends StatelessWidget {
       'medical' => Icons.medical_services,
       'road_accident' => Icons.car_crash,
       'earthquake' => Icons.vibration,
-      _ => Icons.crisis_alert,
+      _ => Icons.description_outlined,
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final status = report['status'] as String? ?? 'pending';
     final categoryKey = report['category'] as String? ?? '';
-    final accent = _statusColor(status);
-    final category = strings.categoryLabel(categoryKey);
+    final description = report['description'] as String? ?? 'Report';
+
+    final bg = useAltBackground
+        ? (isDark ? dc.darkSurface : dc.surfaceContainerLow)
+        : (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerLowest);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? dc.darkSurfaceContainerHigh
+                      : dc.surfaceContainerLow,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _categoryIcon(categoryKey),
+                  size: 18,
+                  color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? dc.darkInk : dc.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${strings.statusLabel(status)} • ${_formatTimeAgo(report['created_at'] as String?)}',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: isDark
+                    ? dc.darkMutedInk.withValues(alpha: 0.5)
+                    : dc.outlineVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatTimeAgo(String? raw) {
+    final parsed = DateTime.tryParse(raw ?? '');
+    if (parsed == null) return '';
+    final diff = DateTime.now().difference(parsed.toLocal());
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    final local = parsed.toLocal();
+    return '${_monthLabel(local.month)} ${local.day}';
+  }
+
+  String _monthLabel(int month) {
+    const labels = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return labels[month - 1];
+  }
+}
+
+class _EmptyActivity extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: dc.warmSurface,
+        color: isDark ? dc.darkSurface : dc.surfaceContainerLow,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dc.warmBorder),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14131110),
-            blurRadius: 18,
-            offset: Offset(0, 10),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.inbox_outlined,
+            size: 32,
+            color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No activity yet',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: isDark ? dc.darkInk : dc.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your reports and mesh events will appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SOS Button — fixed floating, xl radius, ambient shadow
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SosButton extends StatelessWidget {
+  const _SosButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: onPressed,
           borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(_categoryIcon(categoryKey), color: accent),
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [dc.primary, dc.primaryDim],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: dc.onSurface.withValues(alpha: 0.06),
+                  blurRadius: 32,
+                  offset: const Offset(0, 8),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              report['description'] as String? ?? '',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: dc.ink,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              strings.statusLabel(status),
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _MetaChip(label: category),
-                          _MetaChip(
-                            label: strings.severityLabel(
-                              report['severity'] as String? ?? 'medium',
-                            ),
-                          ),
-                          if ((report['address'] as String?)?.isNotEmpty == true)
-                            _MetaChip(label: report['address'] as String),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _formatTimestamp(report['created_at'] as String?),
-                        style: const TextStyle(
-                          color: dc.mutedInk,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+                BoxShadow(
+                  color: dc.primary.withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  offset: const Offset(0, 4),
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.chevron_right, color: dc.mutedInk),
               ],
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.sos, color: dc.onPrimary, size: 22),
+                  SizedBox(width: 12),
+                  Text(
+                    'SEND SOS',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      color: dc.onPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
-
-  String _formatTimestamp(String? raw) {
-    final parsed = DateTime.tryParse(raw ?? '');
-    if (parsed == null) {
-      return 'Time unavailable';
-    }
-    final local = parsed.toLocal();
-    final month = _monthLabel(local.month);
-    final minutes = local.minute.toString().padLeft(2, '0');
-    final period = local.hour >= 12 ? 'PM' : 'AM';
-    final hour = local.hour == 0 ? 12 : (local.hour > 12 ? local.hour - 12 : local.hour);
-    return '$month ${local.day} | $hour:$minutes $period';
-  }
-
-  String _monthLabel(int month) {
-    const labels = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return labels[month - 1];
-  }
 }
-
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: dc.chipFill,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: dc.mutedInk,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-

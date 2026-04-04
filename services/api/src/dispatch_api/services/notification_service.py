@@ -15,12 +15,15 @@ class NotificationService:
     def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
         rows = self.client.db_query(
             "notifications",
-            params={"select": "*", "order": "created_at.desc"},
+            params={
+                "select": "*",
+                "user_id": f"eq.{user_id}",
+                "order": "created_at.desc",
+            },
             use_service_role=True,
         )
-        user_rows = [row for row in rows if row.get("user_id") == user_id]
         return sorted(
-            user_rows,
+            rows,
             key=lambda row: (
                 row.get("is_read", False),
                 row.get("created_at") or "",
@@ -180,12 +183,15 @@ class NotificationService:
         self.create_many(notifications)
 
     def list_users_by_role(self, role: str) -> list[dict[str, Any]]:
-        rows = self.client.db_query(
+        return self.client.db_query(
             "users",
-            params={"select": "*", "order": "created_at.asc"},
+            params={
+                "select": "*",
+                "role": f"eq.{role}",
+                "order": "created_at.asc",
+            },
             use_service_role=True,
         )
-        return [row for row in rows if row.get("role") == role]
 
     def _labelize(self, value: str) -> str:
         return value.replace("_", " ").strip().title()

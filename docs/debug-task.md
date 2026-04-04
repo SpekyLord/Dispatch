@@ -101,6 +101,28 @@ Full feature audit conducted on `2026-04-05` across web, mobile, and API.
 
 ---
 
+## Backend-Only Bug Fix Pass — 2026-04-05 (continued)
+
+### HIGH — Security
+
+- [x] **S3**: PostgREST injection in mesh `get_sync_updates` — `since` query param interpolated directly into 4 PostgREST filter strings without sanitization
+  - Applied `sanitize_postgrest_value()` to `since` in `mesh_service.py`
+
+- [x] **S4**: PostgREST injection in mesh `list_messages` — `threadId` query param interpolated into PostgREST filter without sanitization
+  - Applied `sanitize_postgrest_value()` to `thread_id` in `mesh_service.py`
+
+### MEDIUM — Performance / Data Leak
+
+- [x] **P1**: `notification_service.list_for_user()` fetches ALL notifications (no user_id DB filter)
+  - Every call loaded every user's notifications into API memory, filtered in Python
+  - Added `"user_id": f"eq.{user_id}"` to PostgREST query params
+
+- [x] **P2**: `notification_service.list_users_by_role()` fetches ALL users (no role DB filter)
+  - Called on every feed post creation to notify citizens — loaded entire users table
+  - Added `"role": f"eq.{role}"` to PostgREST query params
+
+---
+
 ## TS Build Status
 
 - **Before fixes**: 5 errors (3 null-safety + 2 unused vars)

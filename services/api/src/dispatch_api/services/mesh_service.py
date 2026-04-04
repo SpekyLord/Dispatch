@@ -12,6 +12,7 @@ from uuid import UUID
 
 from dispatch_api.errors import ApiError
 from dispatch_api.services.offline_token_service import OfflineTokenService
+from dispatch_api.validation import sanitize_postgrest_value
 
 log = logging.getLogger(__name__)
 
@@ -121,9 +122,10 @@ class MeshService:
 
     # -- pull server-side updates for gateway rebroadcast --
     def get_sync_updates(self, *, since: str | None = None) -> dict[str, Any]:
+        safe_since = sanitize_postgrest_value(since)
         base_params: dict[str, str] = {"order": "updated_at.desc", "limit": "100"}
-        if since:
-            base_params["updated_at"] = f"gte.{since}"
+        if safe_since:
+            base_params["updated_at"] = f"gte.{safe_since}"
 
         reports = self.client.db_query(
             "incident_reports",
@@ -136,8 +138,8 @@ class MeshService:
             "order": "created_at.desc",
             "limit": "50",
         }
-        if since:
-            distress_params["created_at"] = f"gte.{since}"
+        if safe_since:
+            distress_params["created_at"] = f"gte.{safe_since}"
         distress = self.client.db_query(
             "distress_signals", params=distress_params, use_service_role=True
         )
@@ -147,8 +149,8 @@ class MeshService:
             "order": "created_at.desc",
             "limit": "100",
         }
-        if since:
-            survivor_params["created_at"] = f"gte.{since}"
+        if safe_since:
+            survivor_params["created_at"] = f"gte.{safe_since}"
         survivor_rows = self.client.db_query(
             "survivor_signals", params=survivor_params, use_service_role=True
         )
@@ -158,8 +160,8 @@ class MeshService:
             "order": "created_at.desc",
             "limit": "100",
         }
-        if since:
-            history_params["created_at"] = f"gte.{since}"
+        if safe_since:
+            history_params["created_at"] = f"gte.{safe_since}"
         history = self.client.db_query(
             "report_status_history", params=history_params, use_service_role=True
         )
@@ -327,8 +329,9 @@ class MeshService:
         viewer_department_id: str | None = None,
     ) -> list[dict[str, Any]]:
         params: dict[str, str] = {"select": "*", "order": "created_at.asc", "limit": "200"}
-        if thread_id:
-            params["thread_id"] = f"eq.{thread_id}"
+        safe_thread_id = sanitize_postgrest_value(thread_id)
+        if safe_thread_id:
+            params["thread_id"] = f"eq.{safe_thread_id}"
 
         rows = self.client.db_query(
             "mesh_comms_messages",

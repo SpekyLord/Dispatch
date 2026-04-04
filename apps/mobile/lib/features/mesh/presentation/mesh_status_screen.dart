@@ -131,10 +131,10 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MeshPeopleMapScreen(
-          title: 'People & Mesh Map',
+          title: 'Mesh Map',
           subtitle: session.role == AppRole.citizen
-              ? 'Citizen visibility into live people pins and survivor signals'
-              : 'Responder visibility into live people pins and survivor signals',
+              ? 'Nodes and signals in your area'
+              : 'Nodes, devices, and survivor signals',
           allowResolveActions: session.role != AppRole.citizen,
           allowCompassActions: true,
         ),
@@ -211,7 +211,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: const Text(
-                            'Offline Relay / SAR Bulletin',
+                            'Mesh Network',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -222,7 +222,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Coordinate the local mesh and jump straight into survivor tracking when a strong signal appears.',
+                          'Local mesh relay and survivor tracking.',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -233,8 +233,8 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                         const SizedBox(height: 10),
                         Text(
                           canReviewSignals
-                              ? 'This panel keeps discovery, relay health, and SAR detections in one place so responders do not need to bounce between generic utility screens.'
-                              : 'Citizens can review mesh reach, discovery, and sync state here, while SAR controls remain reserved for verified responder accounts.',
+                              ? 'Discovery, relay health, and SAR signals in one view.'
+                              : 'Enable Bluetooth to relay mesh traffic and assist nearby search and rescue.',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.86),
                             height: 1.45,
@@ -360,7 +360,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                       icon: Icons.bluetooth_searching,
                       title: 'No peers discovered yet',
                       body:
-                          'Start discovery to refresh the local mesh roster and estimate reach before sending a gateway-bound batch.',
+                          'Turn on Bluetooth and start discovery to find nearby nodes.',
                     ),
                 ],
               ),
@@ -644,8 +644,8 @@ class _DiscoveryCard extends StatelessWidget {
             ),
             subtitle: Text(
               discovering
-                  ? 'Scanning for nearby relay and gateway peers.'
-                  : 'Start BLE discovery to refresh the local mesh roster.',
+                  ? 'Scanning for nearby nodes...'
+                  : 'Turn on to find nearby nodes via Bluetooth.',
               style: const TextStyle(color: dc.mutedInk),
             ),
           ),
@@ -686,7 +686,7 @@ class _PeopleMapPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'People & mesh map',
+                  'Mesh map',
                   style: TextStyle(
                     color: dc.ink,
                     fontSize: 18,
@@ -695,7 +695,7 @@ class _PeopleMapPanel extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Open the shared mobile map to see people pins, mesh nodes, and survivor signals in one place.',
+                  'View nodes, devices, and survivor signals on the map.',
                   style: TextStyle(color: dc.mutedInk, height: 1.45),
                 ),
               ],
@@ -799,10 +799,10 @@ class _SarModePanel extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             canEnableSarMode
-                ? 'Enable passive sensing, review relayed survivor signals, and jump into compass guidance from the same responder workflow.'
+                ? 'Detect and track survivor signals from nearby nodes.'
                 : canReviewSignals
-                ? 'Only verified department responders can enable passive sensing, but citizens, departments, and municipalities can still review synced survivor signals here.'
-                : 'SAR controls stay locked for non-responder accounts.',
+                ? 'Review synced survivor signals. Enable Bluetooth to help relay.'
+                : 'Turn on Bluetooth to act as a relay node for search and rescue in your area.',
             style: const TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 12),
@@ -816,8 +816,8 @@ class _SarModePanel extends StatelessWidget {
             ),
             subtitle: Text(
               canEnableSarMode
-                  ? 'BLE and acoustic sensing can run locally, while Wi-Fi probe sniffing stays unavailable on standard mobile app sandboxes.'
-                  : 'Verification approval is required before SAR Mode can be enabled on this device.',
+                  ? 'BLE and acoustic sensing run on this node.'
+                  : 'Requires a verified responder account.',
               style: const TextStyle(color: dc.mutedInk),
             ),
           ),
@@ -850,8 +850,8 @@ class _SarModePanel extends StatelessWidget {
               ),
               child: Text(
                 liveInputs.isEmpty
-                    ? 'Passive sensing is armed, but this device still needs the required Nearby Devices or Microphone permission before live inputs can start. Identifiers stay anonymized and raw audio never leaves the device.'
-                    : '${liveInputs.join(', ')} ${liveInputs.length == 1 ? 'is' : 'are'} active. Identifiers are anonymized before storage, raw audio never leaves the device, and continuous sensing increases battery use during a sweep.',
+                    ? 'Sensing armed — grant Nearby Devices or Microphone permission to start.'
+                    : '${liveInputs.join(', ')} active. All data stays on-device.',
                 style: const TextStyle(color: dc.mutedInk, height: 1.45),
               ),
             ),
@@ -876,9 +876,9 @@ class _SarModePanel extends StatelessWidget {
           if (activeSignals.isEmpty)
             const _EmptyPanel(
               icon: Icons.radar,
-              title: 'No survivor signals yet',
+              title: 'No signals yet',
               body:
-                  'Nearby BLE, acoustic, and SOS beacon detections will appear here once received or synced from the server.',
+                  'Survivor signals will appear here once detected by nearby nodes.',
             )
           else
             ...activeSignals.map(

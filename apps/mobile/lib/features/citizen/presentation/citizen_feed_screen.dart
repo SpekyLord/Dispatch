@@ -264,37 +264,47 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                         ),
                       ),
                     ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.thumb_up_alt, size: 14, color: dc.mutedInk),
-                        SizedBox(width: 6),
-                        Text('Like', style: TextStyle(color: dc.mutedInk)),
-                        Spacer(),
-                        Text('Comments', style: TextStyle(color: dc.mutedInk)),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                     child: Row(
                       children: [
                         _FeedAction(
                           icon: Icons.thumb_up_alt_outlined,
                           label: 'Like',
-                          onTap: () {},
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Reactions coming soon.'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
                         ),
                         _FeedAction(
                           icon: Icons.chat_bubble_outline,
                           label: 'Comment',
-                          onTap: () {},
+                          onTap: () {
+                            if (postId == null || postId.isEmpty) return;
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    CitizenFeedDetailScreen(postId: postId),
+                              ),
+                            );
+                          },
                         ),
                         _FeedAction(
                           icon: Icons.ios_share_outlined,
                           label: 'Share',
-                          onTap: () {},
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Sharing coming soon.'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

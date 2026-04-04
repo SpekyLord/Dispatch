@@ -397,7 +397,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text(
-                      'SAR Mode / Mobile Compass',
+                      'Survivor Compass',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -408,7 +408,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Close in on the strongest survivor trail without leaving the mesh workflow.',
+                    'Track and locate survivor signals.',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -419,8 +419,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
                   const SizedBox(height: 10),
                   Text(
                     target == null
-                        ? 'Pin a survivor signal from the SAR feed to start bearing guidance.'
-                        : 'Compass updates live from device heading, GPS position, and the selected survivor signal.',
+                        ? 'Pin a signal from the feed below to start bearing guidance.'
+                        : 'Live compass — heading, GPS, and signal location.',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.86),
                       height: 1.45,
@@ -456,14 +456,14 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
                 icon: Icons.sensors,
                 title: 'Initializing sensors',
                 body:
-                    'Loading location and heading inputs for the survivor compass.',
+                    'Acquiring GPS and heading data...',
               )
             else if (target == null)
               const _InfoCard(
                 icon: Icons.radar,
-                title: 'No active target selected',
+                title: 'No target selected',
                 body:
-                    'Open the SAR feed, pick the strongest survivor signal, then return here to start bearing guidance.',
+                    'Pin a survivor signal from the feed below to begin tracking.',
               )
             else ...[
               _CompassSummaryCard(
@@ -492,9 +492,9 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
               else
                 const _InfoCard(
                   icon: Icons.explore,
-                  title: 'Locator only',
+                  title: 'Locator mode',
                   body:
-                      'This view keeps the direction arrow, distance estimate, and search inset available without exposing responder-only resolve actions.',
+                      'Direction and distance to the signal. Resolve actions are available to responders.',
                 ),
             ],
             const SizedBox(height: 18),
@@ -900,6 +900,38 @@ class _CompassMapCard extends StatelessWidget {
   final SurvivorSignalEvent target;
   final List<DeviceLocationTrailPoint> trailPoints;
 
+  /// Interpolate points along the great-circle (haversine) path between two
+  /// coordinates so the line curves naturally on a Mercator-projected map.
+  static List<LatLng> _haversineLine(LatLng a, LatLng b, {int segments = 40}) {
+    final lat1 = a.latitudeInRad;
+    final lon1 = a.longitudeInRad;
+    final lat2 = b.latitudeInRad;
+    final lon2 = b.longitudeInRad;
+
+    // Angular distance using haversine formula.
+    final dLat = lat2 - lat1;
+    final dLon = lon2 - lon1;
+    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final d = 2 * math.asin(math.sqrt(h));
+
+    if (d < 1e-10) return [a, b]; // Points are effectively the same.
+
+    final points = <LatLng>[];
+    for (int i = 0; i <= segments; i++) {
+      final f = i / segments;
+      final af = math.sin((1 - f) * d) / math.sin(d);
+      final bf = math.sin(f * d) / math.sin(d);
+      final x = af * math.cos(lat1) * math.cos(lon1) + bf * math.cos(lat2) * math.cos(lon2);
+      final y = af * math.cos(lat1) * math.sin(lon1) + bf * math.cos(lat2) * math.sin(lon2);
+      final z = af * math.sin(lat1) + bf * math.sin(lat2);
+      final lat = math.atan2(z, math.sqrt(x * x + y * y));
+      final lon = math.atan2(y, x);
+      points.add(LatLng(lat * 180 / math.pi, lon * 180 / math.pi));
+    }
+    return points;
+  }
+
   @override
   Widget build(BuildContext context) {
     final mapCenter = LatLng(
@@ -943,6 +975,8 @@ class _CompassMapCard extends StatelessWidget {
           ),
         )
         .toList(growable: false);
+    // Haversine arc from this node to the target signal.
+    final haversineArc = _haversineLine(snapshot.rescuerPoint, snapshot.targetPoint);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -955,7 +989,7 @@ class _CompassMapCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Search map inset',
+            'Search map',
             style: TextStyle(
               color: dc.ink,
               fontSize: 18,
@@ -964,7 +998,7 @@ class _CompassMapCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Peer dots are rendered as a local proximity ring until peer GPS coordinates are added to mesh sync uploads.',
+            'Node positions and survivor trail on the map.',
             style: TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
@@ -997,7 +1031,7 @@ class _CompassMapCard extends StatelessWidget {
                           color: dc.warmSeed.withValues(alpha: 0.72),
                         ),
                       Polyline(
-                        points: [snapshot.rescuerPoint, snapshot.targetPoint],
+                        points: haversineArc,
                         strokeWidth: 4,
                         color: dc.coolAccent.withValues(alpha: 0.85),
                       ),
@@ -1012,7 +1046,7 @@ class _CompassMapCard extends StatelessWidget {
                         child: _MapMarker(
                           color: dc.coolAccent,
                           icon: Icons.navigation,
-                          label: 'You',
+                          label: 'Node',
                         ),
                       ),
                       Marker(
@@ -1174,8 +1208,8 @@ class _ResolveSignalCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             target.isResolutionQueued
-                ? 'A previous resolve action is already queued through the mesh. Updating it here will add a fresh relay packet with the latest note.'
-                : 'Add a short note when the rescuer confirms the location, transfer, or false positive outcome.',
+                ? 'A resolve is already queued. Submitting again will update the note.'
+                : 'Add a note when the survivor is found or the signal is resolved.',
             style: const TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
@@ -1254,7 +1288,7 @@ class _TargetBoard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Active survivor feed',
+            'Survivor signals',
             style: TextStyle(
               color: dc.ink,
               fontSize: 18,
@@ -1263,16 +1297,16 @@ class _TargetBoard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Pin a single signal at a time so the compass can hold a stable target while the rest of the feed continues updating.',
+            'Pin a signal to track it with the compass.',
             style: TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
           if (signals.isEmpty)
             const _InfoCard(
               icon: Icons.wifi_find,
-              title: 'No survivor signals yet',
+              title: 'No signals yet',
               body:
-                  'Passive SAR detections and relayed survivor packets will appear here once the local mesh receives them.',
+                  'Survivor signals will appear here once detected by nearby nodes.',
             )
           else
             ...signals.map((signal) {

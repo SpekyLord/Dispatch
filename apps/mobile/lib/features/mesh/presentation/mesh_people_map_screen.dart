@@ -374,12 +374,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${_nodes.length} mesh nodes, ${_signals.length} survivor signals, and ${_devices.length} live people pins are layered here for $viewerRole.',
+                            '${_nodes.length} nodes · ${_signals.length} signals · ${_devices.length} devices',
                           ),
                           if (!canAccessMeshOperatorFeeds) ...[
                             const SizedBox(height: 10),
                             const Text(
-                              'You are in citizen view. Operator-only mesh feeds (topology and survivor signals) are hidden, but your local GPS pin is still shown for orientation.',
+                              'Citizen view — enable Bluetooth to act as a relay node for nearby search and rescue operations.',
                             ),
                           ],
                           const SizedBox(height: 14),
@@ -400,8 +400,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                 value: '${_signals.length}',
                               ),
                               _StatPill(
-                                label: 'You',
-                                value: _gpsCenter == null ? 'No GPS yet' : '1',
+                                label: 'This node',
+                                value: _gpsCenter == null ? 'No GPS' : 'Active',
                               ),
                             ],
                           ),
@@ -432,22 +432,22 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                             children: const [
                               _LegendPill(
                                 icon: Icons.hub,
-                                label: 'Mesh nodes',
+                                label: 'Nodes',
                                 tone: Color(0xFF1695D3),
                               ),
                               _LegendPill(
                                 icon: Icons.sos,
-                                label: 'Survivor signals',
+                                label: 'Signals',
                                 tone: Color(0xFFA14B2F),
                               ),
                               _LegendPill(
                                 icon: Icons.my_location,
-                                label: 'People last seen',
+                                label: 'Devices',
                                 tone: Color(0xFF397154),
                               ),
                               _LegendPill(
                                 icon: Icons.person_pin_circle,
-                                label: 'Your device',
+                                label: 'This node',
                                 tone: Color(0xFF246B3D),
                               ),
                             ],

@@ -38,12 +38,24 @@ class SessionController extends StateNotifier<SessionState> {
   Future<void> _restore() async {
     final restored = await _storage.load();
     state = restored;
+    if (restored.customApiBaseUrl != null &&
+        restored.customApiBaseUrl!.isNotEmpty) {
+      _authService.setBaseUrl(restored.customApiBaseUrl!);
+    }
     if (restored.accessToken != null) {
       _authService.setToken(restored.accessToken);
     }
     if (restored.refreshToken != null) {
       unawaited(refreshSessionIfNeeded());
     }
+  }
+
+  String get currentApiBaseUrl => _authService.baseUrl;
+
+  Future<void> setCustomApiBaseUrl(String url) async {
+    _authService.setBaseUrl(url);
+    state = state.copyWith(customApiBaseUrl: url);
+    await _storage.save(state);
   }
 
   Future<void> handleAppResumed() async {
@@ -115,7 +127,9 @@ class SessionController extends StateNotifier<SessionState> {
       final token = result['access_token'] as String?;
       final roleValue = AppRole.values.where((r) => r.name == role).firstOrNull;
       if (token == null || roleValue == null) {
-        return null;
+        // Registration succeeded but no session token was returned.
+        // This typically means email confirmation is required.
+        return 'CONFIRM_EMAIL';
       }
 
       _applyAuthPayload(result, fallbackEmail: email, fallbackRole: roleValue);

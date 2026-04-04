@@ -267,7 +267,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Text(
-                    'Mesh-Routed Communications',
+                    'Mesh Comms',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -278,7 +278,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Broadcast updates, department chatter, and mesh-authored advisories keep moving even when the network does not.',
+                  'Stay connected even when the network is down.',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -289,8 +289,8 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 const SizedBox(height: 10),
                 Text(
                   transport.isMeshOnlyState
-                      ? 'Mesh-only mode is active, so new messages stay queued for gateway sync while still appearing in the local inbox.'
-                      : 'Internet is available, so queued mesh packets can be flushed to the backend while the local inbox keeps the same offline-first view.',
+                      ? 'Offline — messages queue locally and sync when a gateway node reconnects.'
+                      : 'Online — queued messages will sync to the server automatically.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.86),
                     height: 1.45,
@@ -353,7 +353,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: _postCategory,
+                    value: _postCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),
@@ -436,7 +436,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 border: Border.all(color: dc.warmBorder),
               ),
               child: const Text(
-                'No mesh-routed messages or posts yet. Compose a broadcast above or wait for nearby mesh traffic to arrive.',
+                'No messages yet. Compose a broadcast above or wait for nearby nodes to relay traffic.',
                 style: TextStyle(color: dc.mutedInk, height: 1.45),
               ),
             ),
@@ -534,8 +534,8 @@ class _InboxCard extends StatelessWidget {
               _MetaChip(label: '${item.hopCount}/${item.maxHops} hops'),
               _MetaChip(
                 label: item.needsServerSync
-                    ? 'Queued for sync'
-                    : 'Server synced',
+                    ? 'Pending sync'
+                    : 'Synced',
               ),
             ],
           ),

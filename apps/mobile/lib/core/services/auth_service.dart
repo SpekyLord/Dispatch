@@ -23,6 +23,12 @@ class AuthService {
 
   Dio get client => _dio;
 
+  String get baseUrl => _dio.options.baseUrl;
+
+  void setBaseUrl(String url) {
+    _dio.options.baseUrl = url;
+  }
+
   void setToken(String? token) {
     if (token != null) {
       _dio.options.headers['Authorization'] = 'Bearer $token';

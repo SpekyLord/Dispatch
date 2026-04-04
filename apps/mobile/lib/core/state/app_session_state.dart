@@ -58,6 +58,7 @@ class SessionState {
     this.fullName,
     this.department,
     this.offlineVerificationToken,
+    this.customApiBaseUrl,
   });
 
   final String? accessToken;
@@ -68,6 +69,7 @@ class SessionState {
   final String? fullName;
   final DepartmentInfo? department;
   final String? offlineVerificationToken;
+  final String? customApiBaseUrl;
 
   bool get isAuthenticated => role != null && accessToken != null;
 
@@ -80,6 +82,7 @@ class SessionState {
     String? fullName,
     DepartmentInfo? department,
     String? offlineVerificationToken,
+    String? customApiBaseUrl,
   }) {
     return SessionState(
       accessToken: accessToken ?? this.accessToken,
@@ -91,6 +94,7 @@ class SessionState {
       department: department ?? this.department,
       offlineVerificationToken:
           offlineVerificationToken ?? this.offlineVerificationToken,
+      customApiBaseUrl: customApiBaseUrl ?? this.customApiBaseUrl,
     );
   }
 
@@ -104,6 +108,7 @@ class SessionState {
       'fullName': fullName,
       'department': department?.toJson(),
       'offlineVerificationToken': offlineVerificationToken,
+      'customApiBaseUrl': customApiBaseUrl,
     };
   }
 
@@ -119,6 +124,7 @@ class SessionState {
       fullName: json['fullName'] as String?,
       department: deptJson != null ? DepartmentInfo.fromJson(deptJson) : null,
       offlineVerificationToken: json['offlineVerificationToken'] as String?,
+      customApiBaseUrl: json['customApiBaseUrl'] as String?,
     );
   }
 }

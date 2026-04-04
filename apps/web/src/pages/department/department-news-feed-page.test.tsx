@@ -80,6 +80,7 @@ describe("DepartmentNewsFeedPage", () => {
     expect(
       screen.getByRole("button", { name: /anything urgent to share/i }),
     ).toBeInTheDocument();
+    await screen.findByText(/you've catched up with the news chu2/i);
 
     await waitFor(() => {
       const readinessPanel = screen.getByText("Active Readiness").closest("section, article, div");

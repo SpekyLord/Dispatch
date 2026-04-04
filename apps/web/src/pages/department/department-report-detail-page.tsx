@@ -136,6 +136,8 @@ function formatCoordinatePair(latitude: number, longitude: number) {
   return `${latLabel}, ${lngLabel}`;
 }
 
+void formatCoordinatePair;
+
 function summarizeResolvedLocation(data: {
   name?: string;
   address?: Record<string, string | undefined>;
@@ -835,8 +837,8 @@ export function DepartmentReportDetailPage() {
         hour: "numeric",
         minute: "2-digit",
       });
-      const isComplete = report.status === "resolved" ? index <= completedTimelineStepIndex : index < currentTimelineStepIndex;
-      const isCurrent = report.status !== "resolved" && index === currentTimelineStepIndex;
+      const isComplete = report?.status === "resolved" ? index <= completedTimelineStepIndex : index < currentTimelineStepIndex;
+      const isCurrent = report?.status !== "resolved" && index === currentTimelineStepIndex;
 
       return (
         <div

@@ -92,7 +92,8 @@ describe("CitizenNewsFeedPage", () => {
     expect(screen.getByText("Read-only access")).toBeInTheDocument();
     expect(screen.getByText(/Only department accounts can create awareness posts/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create Post" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "News Feed" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /news feed/i }).length).toBeGreaterThan(0);
+    await screen.findByText(/you've catched up with the news chu2/i);
 
     await waitFor(() => {
       const readinessPanel = screen.getByText("Active Readiness").closest("section, article, div");

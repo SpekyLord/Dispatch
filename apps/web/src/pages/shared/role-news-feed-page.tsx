@@ -343,10 +343,66 @@ function AnimatedBookmarkIcon({ bookmarked, animate }: { bookmarked: boolean; an
   );
 }
 
+function NewsFeedCaughtUpFooter({
+  isDarkMode,
+  isEmpty,
+}: {
+  isDarkMode: boolean;
+  isEmpty: boolean;
+}) {
+  const hourglassStyle = {
+    "--dispatch-hourglass-shell-bg": isDarkMode ? "#2a2320" : "#8c6a5c",
+    "--dispatch-hourglass-shell-glow": isDarkMode ? "rgba(255, 244, 232, 0.08)" : "rgba(255, 247, 238, 0.42)",
+    "--dispatch-hourglass-frame": isDarkMode ? "#a9978b" : "#9d8b81",
+    "--dispatch-hourglass-core": isDarkMode ? "#201a18" : "#5e4d45",
+    "--dispatch-hourglass-sand": isDarkMode ? "#fff0d1" : "#fffaf0",
+  } as CSSProperties;
+
+  return (
+    <Card
+      className={`overflow-hidden rounded-[34px] border px-6 py-10 text-center shadow-[0_10px_28px_-18px_rgba(120,78,58,0.34)] ${
+        isDarkMode ? "border-[#3a3530] bg-[#221f1d] text-[#f7efe8]" : "border-[#e6d3c8] bg-[#fffaf6] text-[#4e3c33]"
+      }`}
+    >
+      <div className="mx-auto flex max-w-[30rem] flex-col items-center">
+        <span
+          className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] ${
+            isDarkMode
+              ? "border-[#4b433d] bg-[#2a2522] text-[#d8b39f]"
+              : "border-[#ecd4c7] bg-[#fff1e9] text-[#b35b39]"
+          }`}
+        >
+          End of feed
+        </span>
+        <h3 className="mt-4 font-headline text-[2rem] leading-[1.02] sm:text-[2.25rem]">
+          You&apos;ve catched up with the news chu2.
+        </h3>
+        <p className={`mt-3 max-w-[26rem] text-sm leading-relaxed ${isDarkMode ? "text-[#c7b8ae]" : "text-[#7f6a60]"}`}>
+          {isEmpty
+            ? "No published posts are visible yet, but new bulletins will land here as soon as teams publish them."
+            : "That was the latest published bulletin for now. Check back again when new public updates are posted."}
+        </p>
+        <div className="dispatch-hourglass-background mt-5" style={hourglassStyle} aria-hidden="true">
+          <div className="dispatch-hourglass-container">
+            <div className="dispatch-hourglass-cap-top" />
+            <div className="dispatch-hourglass-cap-bottom" />
+            <div className="dispatch-hourglass-glass-top" />
+            <div className="dispatch-hourglass-glass" />
+            <div className="dispatch-hourglass-curves" />
+            <div className="dispatch-hourglass-sand-stream" />
+            <div className="dispatch-hourglass-sand" />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const copy = roleCopy[role];
   const canPost = role === "department";
   const departmentLayout = role === "department";
+  const showCaughtUpFooter = role === "citizen" || role === "department";
   const [searchParams, setSearchParams] = useSearchParams();
   const { isDarkMode } = useAppShellTheme();
   const accessToken = useSessionStore((state) => state.accessToken);
@@ -945,6 +1001,359 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
           animation-delay: 0.3s;
         }
 
+        .dispatch-hourglass-background {
+          position: relative;
+          height: 130px;
+          width: 130px;
+          border-radius: 9999px;
+          background:
+            radial-gradient(circle at 32% 28%, var(--dispatch-hourglass-shell-glow) 0%, transparent 38%),
+            var(--dispatch-hourglass-shell-bg);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            0 14px 26px -18px rgba(45, 28, 20, 0.38);
+        }
+
+        .dispatch-hourglass-container {
+          position: absolute;
+          top: 30px;
+          left: 40px;
+          width: 50px;
+          height: 70px;
+          animation: dispatch-hourglass-rotate 2s ease-in 0s infinite;
+          transform-style: preserve-3d;
+          perspective: 1000px;
+        }
+
+        .dispatch-hourglass-container div,
+        .dispatch-hourglass-container div::before,
+        .dispatch-hourglass-container div::after {
+          transform-style: preserve-3d;
+        }
+
+        .dispatch-hourglass-cap-top,
+        .dispatch-hourglass-cap-bottom {
+          position: absolute;
+          left: 0;
+          width: 50px;
+          height: 10px;
+          background-color: var(--dispatch-hourglass-frame);
+        }
+
+        .dispatch-hourglass-cap-top::before,
+        .dispatch-hourglass-cap-top::after,
+        .dispatch-hourglass-cap-bottom::before,
+        .dispatch-hourglass-cap-bottom::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          width: 50px;
+          height: 5px;
+          border-radius: 9999px;
+          background-color: var(--dispatch-hourglass-frame);
+        }
+
+        .dispatch-hourglass-cap-top {
+          top: 0;
+        }
+
+        .dispatch-hourglass-cap-top::before {
+          top: -7px;
+        }
+
+        .dispatch-hourglass-cap-top::after {
+          top: 12px;
+        }
+
+        .dispatch-hourglass-cap-bottom {
+          bottom: 0;
+        }
+
+        .dispatch-hourglass-cap-bottom::before {
+          bottom: -7px;
+        }
+
+        .dispatch-hourglass-cap-bottom::after {
+          bottom: 12px;
+        }
+
+        .dispatch-hourglass-glass-top {
+          transform: rotateX(90deg);
+          position: absolute;
+          top: -16px;
+          left: 3px;
+          border-radius: 50%;
+          width: 44px;
+          height: 44px;
+          background-color: var(--dispatch-hourglass-frame);
+        }
+
+        .dispatch-hourglass-glass {
+          perspective: 100px;
+          position: absolute;
+          top: 32px;
+          left: 20px;
+          width: 10px;
+          height: 6px;
+          background-color: var(--dispatch-hourglass-frame);
+          opacity: 0.55;
+        }
+
+        .dispatch-hourglass-glass::before,
+        .dispatch-hourglass-glass::after {
+          content: "";
+          display: block;
+          position: absolute;
+          background-color: var(--dispatch-hourglass-frame);
+          left: -17px;
+          width: 44px;
+          height: 28px;
+        }
+
+        .dispatch-hourglass-glass::before {
+          top: -27px;
+          border-radius: 0 0 25px 25px;
+        }
+
+        .dispatch-hourglass-glass::after {
+          bottom: -27px;
+          border-radius: 25px 25px 0 0;
+        }
+
+        .dispatch-hourglass-curves::before,
+        .dispatch-hourglass-curves::after {
+          content: "";
+          display: block;
+          position: absolute;
+          top: 32px;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background-color: var(--dispatch-hourglass-core);
+          animation: dispatch-hourglass-hide-curves 2s ease-in 0s infinite;
+        }
+
+        .dispatch-hourglass-curves::before {
+          left: 15px;
+        }
+
+        .dispatch-hourglass-curves::after {
+          left: 29px;
+        }
+
+        .dispatch-hourglass-sand-stream::before {
+          content: "";
+          display: block;
+          position: absolute;
+          left: 24px;
+          width: 3px;
+          background-color: var(--dispatch-hourglass-sand);
+          animation: dispatch-hourglass-sand-stream-1 2s ease-in 0s infinite;
+        }
+
+        .dispatch-hourglass-sand-stream::after {
+          content: "";
+          display: block;
+          position: absolute;
+          top: 36px;
+          left: 19px;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-bottom: 6px solid var(--dispatch-hourglass-sand);
+          animation: dispatch-hourglass-sand-stream-2 2s ease-in 0s infinite;
+        }
+
+        .dispatch-hourglass-sand::before,
+        .dispatch-hourglass-sand::after {
+          content: "";
+          display: block;
+          position: absolute;
+          left: 6px;
+          background-color: var(--dispatch-hourglass-sand);
+          perspective: 500px;
+        }
+
+        .dispatch-hourglass-sand::before {
+          top: 8px;
+          width: 39px;
+          border-radius: 3px 3px 30px 30px;
+          animation: dispatch-hourglass-sand-fill 2s ease-in 0s infinite;
+        }
+
+        .dispatch-hourglass-sand::after {
+          border-radius: 30px 30px 3px 3px;
+          animation: dispatch-hourglass-sand-deplete 2s ease-in 0s infinite;
+        }
+
+        @keyframes dispatch-hourglass-rotate {
+          0% {
+            transform: rotateX(0deg);
+          }
+
+          50% {
+            transform: rotateX(180deg);
+          }
+
+          100% {
+            transform: rotateX(180deg);
+          }
+        }
+
+        @keyframes dispatch-hourglass-hide-curves {
+          0% {
+            opacity: 1;
+          }
+
+          25% {
+            opacity: 0;
+          }
+
+          30% {
+            opacity: 0;
+          }
+
+          40% {
+            opacity: 1;
+          }
+
+          100% {
+            opacity: 1;
+          }
+        }
+
+        @keyframes dispatch-hourglass-sand-stream-1 {
+          0% {
+            height: 0;
+            top: 35px;
+          }
+
+          50% {
+            height: 0;
+            top: 45px;
+          }
+
+          60% {
+            height: 35px;
+            top: 8px;
+          }
+
+          85% {
+            height: 35px;
+            top: 8px;
+          }
+
+          100% {
+            height: 0;
+            top: 8px;
+          }
+        }
+
+        @keyframes dispatch-hourglass-sand-stream-2 {
+          0% {
+            opacity: 0;
+          }
+
+          50% {
+            opacity: 0;
+          }
+
+          51% {
+            opacity: 1;
+          }
+
+          90% {
+            opacity: 1;
+          }
+
+          91% {
+            opacity: 0;
+          }
+
+          100% {
+            opacity: 0;
+          }
+        }
+
+        @keyframes dispatch-hourglass-sand-fill {
+          0% {
+            opacity: 0;
+            height: 0;
+          }
+
+          60% {
+            opacity: 1;
+            height: 0;
+          }
+
+          100% {
+            opacity: 1;
+            height: 17px;
+          }
+        }
+
+        @keyframes dispatch-hourglass-sand-deplete {
+          0% {
+            opacity: 0;
+            top: 45px;
+            height: 17px;
+            width: 38px;
+            left: 6px;
+          }
+
+          1% {
+            opacity: 1;
+            top: 45px;
+            height: 17px;
+            width: 38px;
+            left: 6px;
+          }
+
+          24% {
+            opacity: 1;
+            top: 45px;
+            height: 17px;
+            width: 38px;
+            left: 6px;
+          }
+
+          25% {
+            opacity: 1;
+            top: 41px;
+            height: 17px;
+            width: 38px;
+            left: 6px;
+          }
+
+          50% {
+            opacity: 1;
+            top: 41px;
+            height: 17px;
+            width: 38px;
+            left: 6px;
+          }
+
+          90% {
+            opacity: 1;
+            top: 41px;
+            height: 0;
+            width: 10px;
+            left: 20px;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .dispatch-hourglass-container,
+          .dispatch-hourglass-curves::before,
+          .dispatch-hourglass-curves::after,
+          .dispatch-hourglass-sand-stream::before,
+          .dispatch-hourglass-sand-stream::after,
+          .dispatch-hourglass-sand::before,
+          .dispatch-hourglass-sand::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+          }
+        }
+
         @keyframes dispatch-comment-overlay-in {
           0% {
             opacity: 0;
@@ -1199,12 +1608,17 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   Loading news feed...
                 </Card>
               ) : posts.length === 0 ? (
-                <Card className={`${warmPanelClassName} py-16 text-center`}>
-                  <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">campaign</span>
-                  <p className="text-on-surface-variant">No department news posts yet.</p>
-                </Card>
+                showCaughtUpFooter ? (
+                  <NewsFeedCaughtUpFooter isDarkMode={isDarkMode} isEmpty />
+                ) : (
+                  <Card className={`${warmPanelClassName} py-16 text-center`}>
+                    <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">campaign</span>
+                    <p className="text-on-surface-variant">No department news posts yet.</p>
+                  </Card>
+                )
               ) : (
-                posts.map((post) => {
+                <>
+                  {posts.map((post) => {
                   const categoryStyle = categoryStyles[post.category] ?? {
                     accentClassName: "bg-[#f0eee5] text-[#5f5e5c]",
                     icon: "article",
@@ -1505,7 +1919,11 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                       </article>
                     </Card>
                   );
-                })
+                  })}
+                  {showCaughtUpFooter ? (
+                    <NewsFeedCaughtUpFooter isDarkMode={isDarkMode} isEmpty={false} />
+                  ) : null}
+                </>
               )}
             </div>
           </div>

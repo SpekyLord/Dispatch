@@ -57,6 +57,13 @@ type Report = {
   updated_at: string;
 };
 
+type NotificationRecord = {
+  id: string;
+  user_id: string;
+  reference_id?: string | null;
+  reference_type?: string | null;
+};
+
 function parseCoordinateLocation(location?: string | null) {
   if (!location) {
     return null;
@@ -288,11 +295,11 @@ function parseEvidenceImageUrls(rawImageUrls?: string[] | string | null) {
 export function CitizenReportDetailPage() {
   const { reportId } = useParams<{ reportId: string }>();
   const accessToken = useSessionStore((state) => state.accessToken);
+  const userId = useSessionStore((state) => state.user?.id ?? null);
   const { isDarkMode } = useAppShellTheme();
   const {
     t,
     getCategoryLabel,
-    getResponseActionLabel,
     getSeverityLabel,
     getStatusLabel,
   } = useLocale();
@@ -301,7 +308,10 @@ export function CitizenReportDetailPage() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timelineProgressValue, setTimelineProgressValue] = useState<number | null>(null);
   const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
+  const progressAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previousTimelineProgressRef = useRef<number | null>(null);
   const resolvingLocationsRef = useRef(new Set<string>());
 
   const fetchReport = useCallback(
@@ -338,7 +348,7 @@ export function CitizenReportDetailPage() {
   );
 
   useEffect(() => {
-    if (!reportId) {
+    if (!reportId || !userId) {
       return;
     }
 
@@ -350,6 +360,29 @@ export function CitizenReportDetailPage() {
       window.clearTimeout(timeoutId);
     };
   }, [fetchReport, reportId]);
+
+  useEffect(() => {
+    previousTimelineProgressRef.current = null;
+    setTimelineProgressValue(null);
+  }, [reportId]);
+
+  useEffect(() => {
+    if (!reportId || loading) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
+      void fetchReport(false);
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchReport, loading, reportId]);
 
   useEffect(() => {
     if (!reportId) {
@@ -370,12 +403,39 @@ export function CitizenReportDetailPage() {
       },
       { accessToken, filter: `report_id=eq.${reportId}` },
     );
+    const responseSubscription = subscribeToTable(
+      "department_responses",
+      () => {
+        void fetchReport(false);
+      },
+      { accessToken, filter: `report_id=eq.${reportId}` },
+    );
+    const notificationSubscription = subscribeToTable(
+      "notifications",
+      (payload) => {
+        const eventPayload = payload as {
+          new?: NotificationRecord | null;
+          old?: NotificationRecord | null;
+        };
+        const notification = eventPayload.new ?? eventPayload.old;
+        if (
+          notification?.user_id === userId &&
+          notification.reference_type === "report" &&
+          notification.reference_id === reportId
+        ) {
+          void fetchReport(false);
+        }
+      },
+      { accessToken, filter: `user_id=eq.${userId}` },
+    );
 
     return () => {
       reportSubscription.unsubscribe();
       historySubscription.unsubscribe();
+      responseSubscription.unsubscribe();
+      notificationSubscription.unsubscribe();
     };
-  }, [accessToken, fetchReport, reportId]);
+  }, [accessToken, fetchReport, reportId, userId]);
 
   useEffect(() => {
     if (!report) {
@@ -434,9 +494,118 @@ export function CitizenReportDetailPage() {
         })
         .finally(() => {
           resolvingLocationsRef.current.delete(location);
-        });
+      });
     });
   }, [report, resolvedLocations]);
+
+  useEffect(() => {
+    if (typeof Audio === "undefined") {
+      return;
+    }
+
+    const audio = new Audio("/sounds/citizen-report-progress.mp3");
+    audio.preload = "auto";
+    progressAudioRef.current = audio;
+
+    return () => {
+      progressAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!report) {
+      previousTimelineProgressRef.current = null;
+      setTimelineProgressValue(null);
+      return;
+    }
+
+    const resolvedTimelineForProgress =
+      timeline.length > 0
+        ? timeline
+        : history.map((entry) => ({
+            type: "status_change" as const,
+            timestamp: entry.created_at,
+            new_status: entry.new_status ?? entry.status,
+            notes: entry.notes ?? entry.note,
+          }));
+    const acceptedTimelineEntryForProgress = resolvedTimelineForProgress.find(
+      (entry) =>
+        (entry.type === "status_change" && (entry.new_status ?? "").toLowerCase() === "accepted") ||
+        (entry.type === "department_response" && (entry.action ?? "").toLowerCase() === "accepted"),
+    );
+    const nextCompletedTimelineStepIndex =
+      report.status === "resolved"
+        ? 3
+        : report.status === "responding"
+          ? 2
+          : acceptedTimelineEntryForProgress || report.status === "accepted"
+            ? 1
+            : 0;
+    const nextTimelineStepIndex =
+      report.status === "resolved" ? 3 : Math.min(nextCompletedTimelineStepIndex + 1, 3);
+    const nextTimelineProgress = nextTimelineStepIndex / 3;
+
+    setTimelineProgressValue((current) => {
+      if (current === null) {
+        return nextTimelineProgress;
+      }
+
+      return current === nextTimelineProgress ? current : nextTimelineProgress;
+    });
+  }, [history, report, timeline]);
+
+  useEffect(() => {
+    if (!report) {
+      previousTimelineProgressRef.current = null;
+      return;
+    }
+
+    const resolvedTimelineForProgress =
+      timeline.length > 0
+        ? timeline
+        : history.map((entry) => ({
+            type: "status_change" as const,
+            timestamp: entry.created_at,
+            new_status: entry.new_status ?? entry.status,
+            notes: entry.notes ?? entry.note,
+          }));
+    const acceptedTimelineEntryForProgress = resolvedTimelineForProgress.find(
+      (entry) =>
+        (entry.type === "status_change" && (entry.new_status ?? "").toLowerCase() === "accepted") ||
+        (entry.type === "department_response" && (entry.action ?? "").toLowerCase() === "accepted"),
+    );
+    const nextCompletedTimelineStepIndex =
+      report.status === "resolved"
+        ? 3
+        : report.status === "responding"
+          ? 2
+          : acceptedTimelineEntryForProgress || report.status === "accepted"
+            ? 1
+            : 0;
+    const nextTimelineStepIndex =
+      report.status === "resolved" ? 3 : Math.min(nextCompletedTimelineStepIndex + 1, 3);
+    const nextTimelineProgress = nextTimelineStepIndex / 3;
+    const previousProgress = previousTimelineProgressRef.current;
+
+    previousTimelineProgressRef.current = nextTimelineProgress;
+
+    if (previousProgress === null || nextTimelineProgress <= previousProgress) {
+      return;
+    }
+
+    const playbackDelay = window.setTimeout(() => {
+      if (!progressAudioRef.current) {
+        return;
+      }
+
+      progressAudioRef.current.currentTime = 0;
+      void progressAudioRef.current.play().catch(() => undefined);
+    }, 140);
+
+    return () => {
+      window.clearTimeout(playbackDelay);
+    };
+  }, [history, report, timeline]);
 
   if (loading) {
     return (
@@ -514,6 +683,170 @@ export function CitizenReportDetailPage() {
     resolvedReportLocation ||
     "Location Pending";
   const evidenceImageUrls = parseEvidenceImageUrls(report.image_urls);
+  const acceptedTimelineEntry = resolvedTimeline.find(
+    (entry) =>
+      (entry.type === "status_change" && (entry.new_status ?? "").toLowerCase() === "accepted") ||
+      (entry.type === "department_response" && (entry.action ?? "").toLowerCase() === "accepted"),
+  );
+  const respondingTimelineEntry = resolvedTimeline.find(
+    (entry) => entry.type === "status_change" && (entry.new_status ?? "").toLowerCase() === "responding",
+  );
+  const resolvedStatusTimelineEntry = resolvedTimeline.find(
+    (entry) => entry.type === "status_change" && (entry.new_status ?? "").toLowerCase() === "resolved",
+  );
+  const timelineMilestones = [
+    {
+      key: "pending",
+      title: getStatusLabel("pending"),
+      description: "Report submitted.",
+      timestamp: report.created_at,
+    },
+    {
+      key: "accepted",
+      title: getStatusLabel("accepted"),
+      description: acceptedTimelineEntry
+        ? "A department has accepted your report."
+        : "Awaiting department acceptance.",
+      timestamp: acceptedTimelineEntry?.timestamp ?? null,
+    },
+    {
+      key: "responding",
+      title: getStatusLabel("responding"),
+      description: respondingTimelineEntry
+        ? "Emergency responders are moving to the incident."
+        : "Response team deployment pending.",
+      timestamp: respondingTimelineEntry?.timestamp ?? null,
+    },
+    {
+      key: "resolved",
+      title: getStatusLabel("resolved"),
+      description: resolvedStatusTimelineEntry
+        ? "This incident has been marked as resolved."
+        : "Awaiting final resolution.",
+      timestamp: resolvedStatusTimelineEntry?.timestamp ?? null,
+    },
+  ] as const;
+  const completedTimelineStepIndex =
+    report.status === "resolved"
+      ? 3
+      : report.status === "responding"
+        ? 2
+        : acceptedTimelineEntry || report.status === "accepted"
+          ? 1
+          : 0;
+  const currentTimelineStepIndex =
+    report.status === "resolved"
+      ? 3
+      : Math.min(completedTimelineStepIndex + 1, timelineMilestones.length - 1);
+  const targetTimelineProgress =
+    timelineMilestones.length > 1 ? currentTimelineStepIndex / (timelineMilestones.length - 1) : 0;
+  const displayedTimelineProgress = timelineProgressValue ?? targetTimelineProgress;
+
+  function renderTimelineStepper() {
+    const baselineMutedClassName = isDarkMode ? "bg-[#4f4038]" : "bg-[#ecd7cd]";
+    const circleSize = 36;
+    const connectorInsetPercent = timelineMilestones.length > 1 ? 50 / timelineMilestones.length : 0;
+
+    return (
+      <div className="relative min-w-[680px] w-full">
+        {timelineMilestones.length > 1 ? (
+          <>
+            <span
+              aria-hidden="true"
+              className={`absolute top-[2.45rem] h-[2px] ${baselineMutedClassName}`}
+              style={{
+                left: `${connectorInsetPercent}%`,
+                right: `${connectorInsetPercent}%`,
+              }}
+            />
+            <span
+              aria-hidden="true"
+              className="absolute top-[2.45rem] h-[2px] bg-[#d97757] transition-transform duration-700 ease-out"
+              style={{
+                left: `${connectorInsetPercent}%`,
+                right: `${connectorInsetPercent}%`,
+                transform: `scaleX(${displayedTimelineProgress})`,
+                transformOrigin: "left center",
+                transitionDuration: "700ms",
+              }}
+            />
+          </>
+        ) : null}
+        <div className="flex w-full items-start">
+          {timelineMilestones.map((milestone, index) => {
+            const timestamp = milestone.timestamp ? new Date(milestone.timestamp) : null;
+            const formattedDate = timestamp?.toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            });
+            const formattedTime = timestamp?.toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+            const isComplete =
+              report?.status === "resolved" ? index <= completedTimelineStepIndex : index < currentTimelineStepIndex;
+            const isCurrent = report?.status !== "resolved" && index === currentTimelineStepIndex;
+
+            return (
+              <div
+                key={milestone.key}
+                className="relative min-w-0 flex-1 px-2"
+              >
+                <p className={`text-center text-[10px] uppercase tracking-[0.18em] ${mutedTextClassName}`}>
+                  {formattedDate && formattedTime ? `${formattedDate}, ${formattedTime}` : "--"}
+                </p>
+                <div className="mt-3 flex items-center justify-center">
+                  <span
+                    className={`relative z-[1] flex items-center justify-center overflow-hidden rounded-full border text-[12px] font-bold transition-all duration-500 ease-out ${
+                      isComplete
+                        ? "border-[#d97757] bg-[#d97757] text-white shadow-[0_0_0_6px_rgba(217,119,87,0.12)]"
+                        : isCurrent
+                          ? "border-[#d97757] bg-white text-[#d97757] shadow-[0_0_0_6px_rgba(217,119,87,0.1)]"
+                          : isDarkMode
+                            ? "border-[#5c4b42] bg-[#26211e] text-[#c2a999]"
+                            : "border-[#ead8cc] bg-white text-[#c3a595]"
+                    }`}
+                    style={{ width: `${circleSize}px`, height: `${circleSize}px` }}
+                  >
+                    <span
+                      className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ease-out ${
+                        isComplete ? "scale-75 opacity-0" : "scale-100 opacity-100"
+                      }`}
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <svg
+                      aria-hidden="true"
+                      className={`h-[16px] w-[16px] transition-opacity duration-300 ease-out ${
+                        isComplete ? "opacity-100" : "opacity-0"
+                      }`}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        className="fill-none stroke-white stroke-[3] [stroke-linecap:round] [stroke-linejoin:round] transition-[stroke-dashoffset] duration-500 ease-out"
+                        d="M6.5 12.5l3.5 3.5 7.5-8"
+                        style={{
+                          strokeDasharray: 22,
+                          strokeDashoffset: isComplete ? 0 : 22,
+                          transitionDelay: isComplete ? "120ms" : "0ms",
+                        }}
+                      />
+                    </svg>
+                  </span>
+                </div>
+                <div className="mt-3 text-center">
+                  <p className={`text-sm font-semibold leading-5 ${strongTextClassName}`}>{milestone.title}</p>
+                  <p className={`mt-1 text-xs leading-5 ${mutedTextClassName}`}>
+                    {milestone.description}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   const overviewCard = (
     <Card className={`${floatingPanelClassName} p-6`}>
@@ -615,68 +948,19 @@ export function CitizenReportDetailPage() {
     </Card>
   );
 
-  const timelineDeskCard = (
-    <Card className={`${floatingPanelClassName} p-6`}>
-      <p className={sectionLabelClassName}>{t("detail.timeline")}</p>
-      <div className="mt-4 space-y-5">
-        {resolvedTimeline.slice(0, 4).map((entry, index) => {
-          if (entry.type === "status_change") {
-            const historyStatus = entry.new_status ?? "pending";
-            const historyStyle = statusStyles[historyStatus] ?? {
-              bg: "bg-surface-container-highest",
-              text: "text-on-surface-variant",
-            };
-            return (
-              <div key={`status-${index}`} className="flex gap-3">
-                <div className="mt-1 h-3 w-3 rounded-full border-2 border-[#a14b2f] bg-[#ffefe6]" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm font-semibold ${strongTextClassName}`}>
-                      {getStatusLabel(historyStatus)}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${historyStyle.bg} ${historyStyle.text}`}
-                    >
-                      {historyStatus}
-                    </span>
-                  </div>
-                  {entry.notes && <p className={`mt-1 text-sm ${mutedTextClassName}`}>{entry.notes}</p>}
-                  <p className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${mutedTextClassName}`}>
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            );
-          }
-
-          const actionColor =
-            entry.action === "accepted"
-              ? "bg-[#d4edda] text-[#155724]"
-              : entry.action === "declined"
-                ? "bg-red-100 text-red-800"
-                : "bg-surface-container-highest text-on-surface-variant";
-          return (
-            <div key={`response-${index}`} className="flex gap-3">
-              <div className="mt-1 h-3 w-3 rounded-full border-2 border-[#d97757] bg-[#fff1e8]" />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-semibold ${strongTextClassName}`}>
-                    {entry.department_name}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${actionColor}`}
-                  >
-                    {getResponseActionLabel(entry.action ?? "")}
-                  </span>
-                </div>
-                {entry.notes && <p className={`mt-1 text-sm ${mutedTextClassName}`}>{entry.notes}</p>}
-                <p className={`mt-1 text-[10px] uppercase tracking-[0.2em] ${mutedTextClassName}`}>
-                  {new Date(entry.timestamp).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          );
-        })}
+  const timelinePanel = (
+    <Card className={`${floatingPanelClassName} p-4 xl:p-4 2xl:p-5`}>
+      <p
+        className={`text-center text-[12px] font-extrabold uppercase tracking-[0.28em] ${
+          isDarkMode ? "text-[#f0b79d]" : "text-[#c8663f]"
+        }`}
+      >
+        {t("detail.timeline")}
+      </p>
+      <div className="-mx-1 mt-3 overflow-x-auto pb-2">
+        <div className="w-full px-2">
+          {renderTimelineStepper()}
+        </div>
       </div>
     </Card>
   );
@@ -688,7 +972,8 @@ export function CitizenReportDetailPage() {
       title={`Report #${report.id.slice(0, 8)}`}
     >
       <div className={pageClassName}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#d97757]">
               Report Details
@@ -706,47 +991,53 @@ export function CitizenReportDetailPage() {
             <span className="material-symbols-outlined text-[16px]">arrow_back</span>
             {t("detail.backToReports")}
           </Link>
-        </div>
+          </div>
 
-        <div className={laneEffectClassName}>
-          {report.latitude && report.longitude ? (
-            <div className={`${mapShellClassName} ${mapMinHeightClassName}`}>
-              <div className="absolute inset-0">
-                <LocationMap
-                  latitude={report.latitude}
-                  longitude={report.longitude}
-                  mapClassName="h-full w-full"
-                  wrapperClassName="h-full w-full rounded-none border-0"
-                />
-              </div>
-              <div className={mapBackdropClassName} />
-              <MapWarningPulse isDarkMode={isDarkMode} />
+          <div className={laneEffectClassName}>
+            {timelinePanel}
+          </div>
 
-              <div className="relative z-[400] flex h-full flex-col xl:hidden">
-                <div className="min-h-[250px] sm:min-h-[300px] lg:min-h-[360px]" />
-                <div className="mt-auto space-y-5 p-4 lg:p-5">
-                  {overviewCard}
-                  {timelineDeskCard}
+          <div className={laneEffectClassName}>
+            {report.latitude !== undefined && report.latitude !== null && report.longitude !== undefined && report.longitude !== null ? (
+              <div className={`${mapShellClassName} ${mapMinHeightClassName}`}>
+                <div className="absolute inset-0">
+                  <LocationMap
+                    latitude={report.latitude}
+                    longitude={report.longitude}
+                    mapClassName="h-full w-full"
+                    wrapperClassName="h-full w-full rounded-none border-0"
+                  />
+                </div>
+                <div className={mapBackdropClassName} />
+                <MapWarningPulse isDarkMode={isDarkMode} />
+
+                <div className="relative z-[400] flex h-full flex-col xl:hidden">
+                  <div className="min-h-[250px] sm:min-h-[300px] lg:min-h-[360px]" />
+                  <div className="mt-auto space-y-5 p-4 lg:p-5">
+                    {overviewCard}
+                  </div>
+                </div>
+
+                <div className="relative hidden h-full xl:block">
+                  <div className="absolute right-6 top-6 z-[400] w-[360px]">
+                    {overviewCard}
+                  </div>
                 </div>
               </div>
-
-              <div className="relative hidden h-full xl:block">
-                <div className="absolute right-6 top-6 z-[400] w-[360px] space-y-5">
-                  {overviewCard}
-                  {timelineDeskCard}
+            ) : (
+              <div className="space-y-5">
+                <div className={`${mapShellClassName} ${mapMinHeightClassName}`}>
+                  <Card
+                    className={`${panelClassName} flex h-full min-h-[560px] flex-col items-center justify-center p-8 text-center`}
+                  >
+                    <span className="material-symbols-outlined mb-3 text-4xl text-[#d97757]">map</span>
+                    <p className={`text-sm ${mutedTextClassName}`}>{t("detail.noGps")}</p>
+                  </Card>
                 </div>
+                {overviewCard}
               </div>
-            </div>
-          ) : (
-            <div className={`${mapShellClassName} ${mapMinHeightClassName}`}>
-              <Card
-                className={`${panelClassName} flex h-full min-h-[560px] flex-col items-center justify-center p-8 text-center`}
-              >
-                <span className="material-symbols-outlined mb-3 text-4xl text-[#d97757]">map</span>
-                <p className={`text-sm ${mutedTextClassName}`}>{t("detail.noGps")}</p>
-              </Card>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </AppShell>

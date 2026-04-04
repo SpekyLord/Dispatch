@@ -67,6 +67,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
 
     if (mounted) {
+      if (err == 'CONFIRM_EMAIL') {
+        // Registration succeeded but email verification is required.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Account created! Check your email to confirm, then sign in.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+        widget.onSwitchToLogin();
+        return;
+      }
       setState(() {
         _loading = false;
         _error = err;
@@ -224,7 +237,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              initialValue: _deptType,
+                              value: _deptType,
                               decoration: const InputDecoration(
                                 labelText: 'Department type',
                               ),

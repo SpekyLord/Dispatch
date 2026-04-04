@@ -152,9 +152,8 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
             onMap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const MeshPeopleMapScreen(
-                  title: 'People & Mesh Map',
-                  subtitle:
-                      'Citizen visibility into people pins and survivor signals',
+                  title: 'Mesh Map',
+                  subtitle: 'Nodes and signals',
                   allowResolveActions: false,
                 ),
               ),
@@ -175,11 +174,11 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           ),
           const SizedBox(height: 18),
           _SectionHeader(
-            eyebrow: 'Citizen dashboard',
+            eyebrow: 'Reports',
             title: 'Recent reports',
             body: _reports.isEmpty
-                ? 'Your incident reports will appear here with the same status-chip rhythm used across the web dashboard.'
-                : '${_reports.length} report${_reports.length == 1 ? '' : 's'} currently tracked from this account.',
+                ? 'Your incident reports will appear here.'
+                : '${_reports.length} report${_reports.length == 1 ? '' : 's'} tracked.',
           ),
           const SizedBox(height: 12),
           if (_loading)
@@ -254,7 +253,7 @@ class _CitizenHero extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: const Text(
-              'Citizen Command View',
+              'Dashboard',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 11,
@@ -265,20 +264,12 @@ class _CitizenHero extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Track reports, open the people map, and keep mesh updates close even when the network drops.',
+            'Reports, mesh, and offline comms in one place.',
             style: TextStyle(
               color: Colors.white,
               fontSize: 28,
               fontWeight: FontWeight.w700,
               height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'The mobile dashboard now mirrors the web rhythm more closely: a warm command header, quick actions up front, and report cards with clear status chips underneath.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.86),
-              height: 1.45,
             ),
           ),
           const SizedBox(height: 18),
@@ -287,8 +278,8 @@ class _CitizenHero extends StatelessWidget {
             runSpacing: 10,
             children: [
               _HeroPill(label: 'Reports', value: '$reportCount'),
-              _HeroPill(label: 'Queued mesh', value: '$queueCount'),
-              _HeroPill(label: 'Reach', value: '~$reachCount'),
+              _HeroPill(label: 'Queue', value: '$queueCount'),
+              _HeroPill(label: 'Reached', value: '~$reachCount'),
             ],
           ),
         ],
@@ -370,28 +361,28 @@ class _QuickActionRow extends StatelessWidget {
           icon: Icons.cell_tower,
           accent: dc.coolAccent,
           title: 'Mesh status',
-          body: 'Review discovery, reach, and relay health.',
+          body: 'Nodes, relay, and discovery.',
           onTap: onMesh,
         ),
         _ActionCard(
           icon: Icons.map_outlined,
           accent: dc.statusResolved,
           title: 'People map',
-          body: 'See nearby people pins, survivor signals, and mesh nodes.',
+          body: 'Nearby nodes and survivor signals.',
           onTap: onMap,
         ),
         _ActionCard(
           icon: Icons.explore_outlined,
           accent: dc.statusPending,
           title: 'Survivor locator',
-          body: 'Open compass guidance with direction and estimated meters.',
+          body: 'Compass to the nearest signal.',
           onTap: onCompass,
         ),
         _ActionCard(
           icon: Icons.forum_outlined,
           accent: dc.warmSeed,
           title: 'Offline comms',
-          body: 'Keep mesh messages and queued updates in one inbox.',
+          body: 'Messages when the network is down.',
           badgeLabel: unreadCount > 0 ? '$unreadCount' : null,
           tooltip: 'Offline Comms',
           onTap: onOfflineComms,
@@ -400,7 +391,7 @@ class _QuickActionRow extends StatelessWidget {
           icon: Icons.sos,
           accent: dc.statusError,
           title: 'Emergency SOS',
-          body: 'Broadcast a distress packet with rapid beacon support.',
+          body: 'Broadcast a distress signal.',
           onTap: onSos,
         ),
       ],
@@ -589,7 +580,7 @@ class _EmptyReportsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Create your first report to start tracking status, response routing, and nearby mesh visibility from the same dashboard.',
+            'Create your first incident report to start tracking.',
             style: TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 18),

@@ -17,14 +17,37 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final TextEditingController _apiUrlController;
   bool _loading = false;
+  bool _showServerConfig = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiUrlController = TextEditingController(
+      text: ref.read(sessionControllerProvider.notifier).currentApiBaseUrl,
+    );
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _apiUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _applyApiUrl() async {
+    final url = _apiUrlController.text.trim();
+    if (url.isEmpty) return;
+    await ref.read(sessionControllerProvider.notifier).setCustomApiBaseUrl(url);
+    if (mounted) {
+      setState(() => _error = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server URL set to $url')),
+      );
+    }
   }
 
   Future<void> _handleLogin() async {
@@ -138,6 +161,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           style: const TextStyle(color: dc.warmSeed),
                         ),
                       ),
+                    InkWell(
+                      onTap: () =>
+                          setState(() => _showServerConfig = !_showServerConfig),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _showServerConfig
+                                  ? Icons.expand_less
+                                  : Icons.dns_outlined,
+                              size: 18,
+                              color: dc.mutedInk,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _showServerConfig
+                                  ? 'Hide server settings'
+                                  : 'Server settings',
+                              style: const TextStyle(
+                                color: dc.mutedInk,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_showServerConfig) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _apiUrlController,
+                        decoration: InputDecoration(
+                          labelText: 'API server URL',
+                          hintText: 'http://192.168.x.x:5000',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            onPressed: _applyApiUrl,
+                            icon: const Icon(Icons.check),
+                            tooltip: 'Apply',
+                          ),
+                        ),
+                        keyboardType: TextInputType.url,
+                        onSubmitted: (_) => _applyApiUrl(),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'For physical devices, use your computer\'s local network IP (e.g. 192.168.x.x:5000).',
+                        style: TextStyle(
+                          color: dc.mutedInk,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: _emailController,
                       decoration: const InputDecoration(

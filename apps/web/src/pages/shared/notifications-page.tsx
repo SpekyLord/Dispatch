@@ -71,6 +71,26 @@ const notificationCardShadowClassName =
   "shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026]";
 const notificationCardHoverShadowClassName =
   "hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
+const filterTabBaseClassName =
+  "rounded-full border px-[18px] py-[0.55rem] text-[12px] font-semibold transition-colors";
+const inactiveFilterTabClassName =
+  "border-[#e3d3c6] bg-[#fff8f3] text-[#6f625b] hover:bg-[#f4ebe3] hover:text-[#584137]";
+const activeFilterTabClassName =
+  "border-[#8f5137] bg-[#8f5137] text-white shadow-[0_10px_22px_-16px_rgba(143,81,55,0.7)]";
+
+const notificationStatusFilterOptions = [
+  { value: "all", label: "All" },
+  { value: "unread", label: "Unread" },
+  { value: "read", label: "Read" },
+] as const;
+
+const notificationCategoryFilterOptions = [
+  { value: "all", label: "Category" },
+  { value: "new_report", label: "New Report" },
+  { value: "report_update", label: "Report Update" },
+  { value: "verification_decision", label: "Verification" },
+  { value: "announcement", label: "Announcement" },
+] as const;
 
 function labelize(value?: string | null) {
   if (!value) {
@@ -239,6 +259,9 @@ export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<(typeof notificationStatusFilterOptions)[number]["value"]>("all");
+  const [categoryFilter, setCategoryFilter] = useState<(typeof notificationCategoryFilterOptions)[number]["value"]>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === "undefined") {
       return true;
@@ -260,6 +283,40 @@ export function NotificationsPage() {
       ) as Record<string, string | null>,
     [notifications, userRole],
   );
+  const visibleNotifications = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return notifications.filter((notification) => {
+      if (statusFilter === "unread" && notification.is_read) {
+        return false;
+      }
+
+      if (statusFilter === "read" && !notification.is_read) {
+        return false;
+      }
+
+      if (categoryFilter !== "all" && notification.type !== categoryFilter) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const typeLabel =
+        notificationTypeLabels[notification.type] ?? labelize(notification.type);
+      const searchText = [
+        notification.title,
+        notification.message,
+        typeLabel,
+        notification.reference_type ? labelize(notification.reference_type) : "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchText.includes(normalizedQuery);
+    });
+  }, [categoryFilter, notifications, searchQuery, statusFilter]);
 
   function fetchNotifications(showLoader = true) {
     if (showLoader) {
@@ -378,19 +435,82 @@ export function NotificationsPage() {
 
       <div className="mb-8 flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-sm text-on-surface-variant">
-          {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}` : "All caught up"}
-          </p>
-          {unreadCount > 0 && (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {notificationStatusFilterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`${filterTabBaseClassName} ${
+                    statusFilter === option.value ? activeFilterTabClassName : inactiveFilterTabClassName
+                  }`}
+                  onClick={() => setStatusFilter(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="relative block">
+              <select
+                className="h-11 min-w-[146px] appearance-none rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-3.5 pr-9 text-[13px] font-medium text-[#6f625b] outline-none transition-colors focus:border-[#c98d71]"
+                onChange={(event) =>
+                  setCategoryFilter(
+                    event.target.value as (typeof notificationCategoryFilterOptions)[number]["value"],
+                  )
+                }
+                value={categoryFilter}
+              >
+                {notificationCategoryFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9b826f]">
+                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+              </span>
+            </label>
+
+            <label className="relative block min-w-0 lg:w-[240px] xl:w-[280px]">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a08373]">
+                <span className="material-symbols-outlined text-[17px]">search</span>
+              </span>
+              <input
+                className="h-11 w-full rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-10 pr-4 text-[14px] text-[#4d2b1e] outline-none transition-colors placeholder:text-[#a08373] focus:border-[#c98d71]"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search notifications"
+                type="search"
+                value={searchQuery}
+              />
+            </label>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+            {unreadCount > 0 && (
+              <Button
+                className="h-11 rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-[18px] text-[#7a6558] hover:bg-[#f3e8de]"
+                onClick={markAllRead}
+                variant="ghost"
+              >
+                <span className="material-symbols-outlined mr-1 text-[16px]">done_all</span>
+                Mark all read
+              </Button>
+            )}
             <Button
               className="h-11 rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-[18px] text-[#7a6558] hover:bg-[#f3e8de]"
-              onClick={markAllRead}
+              onClick={() => {
+                void fetchNotifications();
+              }}
               variant="ghost"
             >
-              <span className="material-symbols-outlined mr-1 text-[16px]">done_all</span>
-              Mark all read
+              <span className="material-symbols-outlined mr-1 text-[16px]">refresh</span>
+              Refresh
             </Button>
-          )}
+            <span className="text-xs font-semibold text-[#8a776b]">
+              Showing {visibleNotifications.length} notification{visibleNotifications.length !== 1 ? "s" : ""}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -404,9 +524,14 @@ export function NotificationsPage() {
           <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">notifications_off</span>
           <p className="text-on-surface-variant">No notifications yet.</p>
         </Card>
+      ) : visibleNotifications.length === 0 ? (
+        <Card className="py-16 text-center">
+          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">search_off</span>
+          <p className="text-on-surface-variant">No notifications match the current filters or search.</p>
+        </Card>
       ) : !isDesktopLayout ? (
         <div className="space-y-3">
-          {notifications.map((notification) => (
+          {visibleNotifications.map((notification) => (
             <NotificationBoardCard
               key={notification.id}
               notification={notification}
@@ -419,7 +544,7 @@ export function NotificationsPage() {
         <div className="grid md:grid-cols-[minmax(0,1fr)_6.5rem] md:gap-5 md:mr-2 xl:mr-4">
           <section className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
             <div className="space-y-3">
-              {notifications.map((notification) => (
+              {visibleNotifications.map((notification) => (
                 <NotificationBoardCard
                   key={notification.id}
                   notification={notification}
@@ -432,7 +557,7 @@ export function NotificationsPage() {
 
           <aside className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
             <div className="space-y-3">
-              {notifications.map((notification) => (
+              {visibleNotifications.map((notification) => (
                 <NotificationTimelineBlock key={notification.id} notification={notification} />
               ))}
             </div>

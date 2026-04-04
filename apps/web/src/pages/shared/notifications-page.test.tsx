@@ -90,12 +90,13 @@ describe("NotificationsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Team dispatched")).toBeInTheDocument();
     });
-    expect(screen.getByText("1 unread notification")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 notification")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unread" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /mark all read/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("All caught up")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /mark all read/i })).not.toBeInTheDocument();
     });
 
     notifications = [
@@ -115,7 +116,74 @@ describe("NotificationsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("New advisory posted")).toBeInTheDocument();
     });
-    expect(screen.getByText("1 unread notification")).toBeInTheDocument();
+    expect(screen.getByText("Showing 2 notifications")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mark all read/i })).toBeInTheDocument();
+  });
+
+  it("filters notifications through the new bar controls", async () => {
+    const notifications = [
+      {
+        id: "notif-1",
+        type: "new_report",
+        title: "New fire report",
+        message: "Citizen report needs response.",
+        is_read: false,
+        created_at: "2026-03-29T03:00:00Z",
+      },
+      {
+        id: "notif-2",
+        type: "announcement",
+        title: "Advisory posted",
+        message: "Fresh public advisory is available.",
+        is_read: true,
+        created_at: "2026-03-29T04:00:00Z",
+      },
+    ];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.endsWith("/api/notifications") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            notifications,
+            unread_count: 1,
+          }),
+          { status: 200 },
+        );
+      }
+
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("New fire report")).toBeInTheDocument();
+      expect(screen.getByText("Advisory posted")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Unread" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("New fire report")).toBeInTheDocument();
+      expect(screen.queryByText("Advisory posted")).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByDisplayValue("Category"), {
+      target: { value: "announcement" },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("No notifications match the current filters or search."),
+      ).toBeInTheDocument();
+    });
   });
 
   it("opens linked report notifications for department users", async () => {

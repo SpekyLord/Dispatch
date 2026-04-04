@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+import json
 
 from flask import current_app, jsonify, request
 
@@ -260,6 +261,8 @@ def create_post():
         content=(body.get("content") or "").strip(),
         category=(body.get("category") or "").strip(),
         location=(body.get("location") or "").strip(),
+        post_kind=(body.get("post_kind") or "standard").strip() or "standard",
+        assessment_details=_parse_assessment_details(body),
     )
 
     photo_urls: list[str] = []
@@ -358,6 +361,31 @@ def _validate_feed_assets(*, files, limit: int, validator_name: str) -> None:
         content_type = file.content_type or "application/octet-stream"
         getattr(storage, validator_name)(content_type=content_type, size_bytes=len(file_data))
         file.seek(0)
+
+
+def _parse_assessment_details(body) -> dict | None:
+    raw_value = body.get("assessment_details") if body else None
+    if raw_value in (None, ""):
+        return None
+
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError as error:
+            raise ApiError(
+                "assessment_details must be valid JSON.",
+                code="validation_error",
+            ) from error
+    else:
+        parsed = raw_value
+
+    if not isinstance(parsed, dict):
+        raise ApiError(
+            "assessment_details must be an object.",
+            code="validation_error",
+        )
+
+    return parsed
 
 
 def _upload_feed_assets(

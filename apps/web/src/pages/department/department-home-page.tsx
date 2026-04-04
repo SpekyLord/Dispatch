@@ -110,7 +110,7 @@ function DepartmentDashboardPlaceholder({ department }: { department: Department
       title: "Create Post",
       description: "Share advisories and public coordination updates.",
       icon: "edit_square",
-      to: "/department/posts/new",
+      to: "/department/news-feed?compose=1",
       accent: "bg-[#ece7df] text-[#62554c]",
     },
     {

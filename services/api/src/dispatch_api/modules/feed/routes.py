@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+import json
 
 from flask import current_app, jsonify, request
 
@@ -110,6 +111,33 @@ def update_feed_post(post_id: str):
         content=(body.get("content") or "").strip(),
         category=(body.get("category") or "").strip(),
         location=(body.get("location") or "").strip(),
+        post_kind=(body.get("post_kind") or "standard").strip() or "standard",
+        assessment_details=_parse_assessment_details(body),
     )
     return jsonify({"post": post}), HTTPStatus.OK
+
+
+def _parse_assessment_details(body) -> dict | None:
+    raw_value = body.get("assessment_details") if body else None
+    if raw_value in (None, ""):
+        return None
+
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError as error:
+            raise ApiError(
+                "assessment_details must be valid JSON.",
+                code="validation_error",
+            ) from error
+    else:
+        parsed = raw_value
+
+    if not isinstance(parsed, dict):
+        raise ApiError(
+            "assessment_details must be an object.",
+            code="validation_error",
+        )
+
+    return parsed
 

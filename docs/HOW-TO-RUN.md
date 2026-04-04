@@ -235,7 +235,8 @@ Before using any app, you need to apply the Supabase migration and run the seed 
 Quick version:
 
 1. Apply `supabase/migrations/20260401000000_consolidated.sql` in the Supabase SQL Editor (idempotent — safe to re-run)
-2. Run the seed: `py -3.12 supabase/seed/bootstrap_seed.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in env)
+2. Apply `supabase/migrations/20260404000000_feed_assessment_posts.sql` so assessment-style feed posts can be saved
+3. Run the seed: `py -3.12 supabase/seed/bootstrap_seed.py` (requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in env)
 
 ---
 

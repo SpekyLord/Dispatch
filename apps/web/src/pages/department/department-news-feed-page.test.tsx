@@ -117,6 +117,25 @@ describe("DepartmentNewsFeedPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens the same command desk when compose is requested from the route", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ posts: [] }), { status: 200 }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/department/news-feed?compose=1"]}>
+        <DepartmentNewsFeedPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Department Command Desk")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /create a public announcement without leaving the feed/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows post actions for the publisher and opens the delete confirmation modal", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

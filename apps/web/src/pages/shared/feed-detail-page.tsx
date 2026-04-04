@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 
+import {
+  AssessmentPostSummary,
+  type FeedAssessmentDetails,
+  isAssessmentPost,
+} from "@/components/feed/assessment-post-summary";
 import type { FeedDepartmentPreview } from "@/components/feed/department-hover-preview";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
@@ -18,6 +23,8 @@ type Post = {
   title: string;
   content: string;
   category: string;
+  post_kind?: "standard" | "assessment";
+  assessment_details?: FeedAssessmentDetails | null;
   location?: string | null;
   is_pinned: boolean;
   created_at: string;
@@ -100,6 +107,7 @@ export function FeedDetailPage() {
   }
 
   const catStyle = categoryStyles[post.category] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
+  const assessmentPost = isAssessmentPost(post);
 
   return (
     <AppShell subtitle="Announcement" title={post.title}>
@@ -149,11 +157,19 @@ export function FeedDetailPage() {
           </div>
         )}
 
-        {post.location && (
+        {post.location && !assessmentPost && (
           <p className="mb-6 text-sm text-on-surface-variant">
             <span className="font-semibold text-on-surface">Location:</span> {post.location}
           </p>
         )}
+
+        {assessmentPost && post.assessment_details ? (
+          <AssessmentPostSummary
+            className="mb-6"
+            details={post.assessment_details}
+            locationLabel={post.location}
+          />
+        ) : null}
 
         <div className="prose prose-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">{post.content}</div>
 

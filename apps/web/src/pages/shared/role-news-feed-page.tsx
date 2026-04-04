@@ -1,7 +1,12 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { AttachmentList } from "@/components/feed/attachment-list";
+import {
+  AssessmentPostSummary,
+  type FeedAssessmentDetails,
+  isAssessmentPost,
+} from "@/components/feed/assessment-post-summary";
 import {
   DepartmentHoverPreview,
   type FeedDepartmentPreview,
@@ -33,6 +38,8 @@ type FeedPost = {
   title: string;
   content: string;
   category: string;
+  post_kind?: "standard" | "assessment";
+  assessment_details?: FeedAssessmentDetails | null;
   location?: string | null;
   created_at: string;
   reaction?: number | null;
@@ -340,6 +347,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const copy = roleCopy[role];
   const canPost = role === "department";
   const departmentLayout = role === "department";
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isDarkMode } = useAppShellTheme();
   const accessToken = useSessionStore((state) => state.accessToken);
   const currentUser = useSessionStore((state) => state.user);
@@ -404,6 +412,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const menuSurfaceClassName = isDarkMode
     ? "absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#3b3732] bg-[#23211f] shadow-[0_16px_30px_rgba(0,0,0,0.34)]"
     : "absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-[#ecd8cf] bg-[#fff8f3] shadow-[0_12px_24px_rgba(56,56,49,0.12)]";
+  const composeRequested = canPost && searchParams.get("compose") === "1";
 
   const fetchPosts = useCallback((showLoader = true) => {
     if (showLoader) {
@@ -640,8 +649,29 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       setCreateModalOrigin({ x: 0, y: 0 });
     }
 
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("compose", "1");
+    setSearchParams(nextParams, { replace: true });
     setIsCreatePostOpen(true);
   }
+
+  function closeCreatePostModal() {
+    setIsCreatePostOpen(false);
+    if (!composeRequested) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("compose");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  useEffect(() => {
+    if (composeRequested) {
+      setIsCreatePostOpen(true);
+      return;
+    }
+    setIsCreatePostOpen(false);
+  }, [composeRequested]);
 
   function handlePostCardActivate(
     event: {
@@ -1185,6 +1215,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   const locationLabel = post.location
                     ? resolvedLocations[post.location.trim()] ?? formatCoordinateFallback(post.location)
                     : null;
+                  const assessmentPost = isAssessmentPost(post);
 
                   return (
                     <Card key={post.id} className={`dispatch-news-feed-card dispatch-news-feed-published-card ${warmPanelClassName} ${publishedFeedCardShadowClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
@@ -1236,7 +1267,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                             </DepartmentHoverPreview>
                           </div>
                           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            {locationLabel ? (
+                            {locationLabel && !assessmentPost ? (
                               <span className={`inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}>
                                 <span className="material-symbols-outlined text-[14px]">location_on</span>
                                 <span className="truncate normal-case tracking-normal">{locationLabel}</span>
@@ -1298,6 +1329,14 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                           <div>
                             <h3 className="text-2xl text-on-surface">{post.title}</h3>
                           </div>
+
+                          {assessmentPost && post.assessment_details ? (
+                            <AssessmentPostSummary
+                              className="mt-1"
+                              details={post.assessment_details}
+                              locationLabel={locationLabel}
+                            />
+                          ) : null}
 
                           <p className="text-base leading-relaxed text-on-surface-variant whitespace-pre-wrap">
                             {post.content}
@@ -1984,21 +2023,21 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               } as CSSProperties
             }
           >
-            <div className={`flex items-center gap-4 px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
+            <div className="flex items-center gap-4 border-b border-white/12 bg-gradient-to-r from-[#d98d63] via-[#bf6e49] to-[#a86446] px-8 py-6 text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-white/14 text-white shadow-[0_10px_22px_-16px_rgba(69,32,17,0.45)]">
                   <span className="material-symbols-outlined">edit_square</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base font-semibold text-on-surface">Department Command Desk</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                  <p className="text-base font-semibold text-white">Department Command Desk</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">
                     Publish from the temporary news feed
                   </p>
                 </div>
                 <button
                   aria-label="Close create post modal"
-                  className={`ml-auto rounded-full p-2 text-on-surface-variant transition-colors hover:text-on-surface ${warmTabClassName}`}
+                  className="ml-auto rounded-full border border-white/18 bg-white/10 p-2 text-white/88 transition-colors hover:bg-white/18 hover:text-white"
                   type="button"
-                  onClick={() => setIsCreatePostOpen(false)}
+                  onClick={closeCreatePostModal}
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
@@ -2013,12 +2052,28 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
                     This keeps the same publishing flow, uploads, and location checks, but places the form in the temporary modal layout from the supplied reference.
                   </p>
+                  <div className="mt-5 border-t border-[#ead0c3] pt-5">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">campaign</span>
+                        Public bulletin
+                      </span>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">pin_drop</span>
+                        Location required
+                      </span>
+                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">perm_media</span>
+                        Media ready
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <DepartmentCreatePostForm
-                  onCancel={() => setIsCreatePostOpen(false)}
+                  onCancel={closeCreatePostModal}
                   onSuccess={async () => {
-                    setIsCreatePostOpen(false);
+                    closeCreatePostModal();
                     await fetchPosts(false);
                   }}
                 />
@@ -2098,6 +2153,8 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   content: editPost.content,
                   category: editPost.category,
                   location: editPost.location ?? "",
+                  post_kind: editPost.post_kind ?? "standard",
+                  assessment_details: editPost.assessment_details ?? null,
                 }}
                 submitLabel="Save changes"
                 onCancel={() => setEditPost(null)}

@@ -170,7 +170,7 @@ class MeshService:
                 params={"select": "*", "order": "created_at.desc", "limit": "50"},
                 use_service_role=True,
             )
-            if row.get("mesh_originated") or row.get("is_mesh_origin")
+            if row.get("is_mesh_origin")
         ]
 
         return {
@@ -352,7 +352,7 @@ class MeshService:
             params={"select": "*", "order": "created_at.desc", "limit": "50"},
             use_service_role=True,
         )
-        return [row for row in rows if row.get("mesh_originated") or row.get("is_mesh_origin")]
+        return [row for row in rows if row.get("is_mesh_origin")]
 
     def _viewer_can_access_message(
         self,

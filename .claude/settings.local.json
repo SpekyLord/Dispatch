@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"def.*return.*\\\\{\\\\}|^[[:space:]]*pass[[:space:]]*$\")",
+      "Bash(corepack pnpm:*)",
+      "Bash(uv run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''C:/Users/Jorge Acidre/Documents/GitHub/hackathon/Dispatch/services/api/src/dispatch_api/services/analytics_service.py''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(grep -r \"apiRequest.*\\\\`/api\" \"C:\\\\Users\\\\Jorge Acidre\\\\Documents\\\\GitHub\\\\hackathon\\\\Dispatch\\\\apps\\\\web\\\\src\" --include=\"*.tsx\")"
+    ]
+  }
+}

@@ -127,7 +127,7 @@ export function MunicipalityReportsPage() {
             const sevStyle = severityColors[r.severity] ?? "text-on-surface-variant bg-surface-container";
 
             return (
-              <Link key={r.id} to={`/municipality/reports/escalated`}>
+              <Link key={r.id} to={`/municipality/reports/${r.id}`}>
                 <Card className="hover:shadow-glass transition-all hover:-translate-y-0.5 cursor-pointer">
                   <div className="flex gap-4">
                     {/* Category icon */}

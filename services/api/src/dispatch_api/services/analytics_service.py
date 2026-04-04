@@ -20,17 +20,14 @@ class AnalyticsService:
             params["status"] = f"eq.{filters['status']}"
         if filters.get("category"):
             params["category"] = f"eq.{filters['category']}"
-        if filters.get("date_from"):
-            params["created_at"] = f"gte.{filters['date_from']}"
-        if filters.get("date_to"):
-            # combine with existing gte filter if present
-            if "created_at" in params:
-                params["and"] = (
-                    f"(created_at.gte.{filters['date_from']},created_at.lte.{filters['date_to']})"
-                )
-                del params["created_at"]
-            else:
-                params["created_at"] = f"lte.{filters['date_to']}"
+        date_from = filters.get("date_from")
+        date_to = filters.get("date_to")
+        if date_from and date_to:
+            params["and"] = f"(created_at.gte.{date_from},created_at.lte.{date_to})"
+        elif date_from:
+            params["created_at"] = f"gte.{date_from}"
+        elif date_to:
+            params["created_at"] = f"lte.{date_to}"
         if filters.get("is_escalated"):
             params["is_escalated"] = f"eq.{filters['is_escalated']}"
 

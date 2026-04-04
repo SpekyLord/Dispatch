@@ -21,10 +21,12 @@ import { MunicipalityNewsFeedPage } from "@/pages/municipality/municipality-news
 import { MunicipalityVerificationPage } from "@/pages/municipality/municipality-verification-page";
 import { MunicipalityDepartmentsPage } from "@/pages/municipality/municipality-departments-page";
 import { MunicipalityEscalatedReportsPage } from "@/pages/municipality/municipality-escalated-reports-page";
+import { MunicipalityReportDetailPage } from "@/pages/municipality/municipality-report-detail-page";
 import { MunicipalityReportsPage } from "@/pages/municipality/municipality-reports-page";
 import { MunicipalityAnalyticsPage } from "@/pages/municipality/municipality-analytics-page";
 import { MunicipalityAssessmentsPage } from "@/pages/municipality/municipality-assessments-page";
 import { MunicipalityMeshPage } from "@/pages/municipality/municipality-mesh-page";
+import { MunicipalityProfilePage } from "@/pages/municipality/municipality-profile-page";
 import { DepartmentViewPage } from "@/pages/shared/department-view-page";
 import { FeedPage } from "@/pages/shared/feed-page";
 import { FeedDetailPage } from "@/pages/shared/feed-detail-page";
@@ -63,6 +65,7 @@ export function AppRouter() {
         <Route element={<ProtectedRoute allowedRoles={["municipality"]} />}>
           <Route element={<MunicipalityHomePage />} path="/municipality" />
           <Route element={<MunicipalityReportsPage />} path="/municipality/reports" />
+          <Route element={<MunicipalityReportDetailPage />} path="/municipality/reports/:reportId" />
           <Route element={<MunicipalityAnalyticsPage />} path="/municipality/analytics" />
           <Route element={<MunicipalityAssessmentsPage />} path="/municipality/assessments" />
           <Route element={<MunicipalityEscalatedReportsPage />} path="/municipality/reports/escalated" />
@@ -70,6 +73,7 @@ export function AppRouter() {
           <Route element={<MunicipalityDepartmentsPage />} path="/municipality/departments" />
           <Route element={<MunicipalityMeshPage />} path="/municipality/mesh" />
           <Route element={<MunicipalityNewsFeedPage />} path="/municipality/news-feed" />
+          <Route element={<MunicipalityProfilePage />} path="/municipality/profile" />
         </Route>
 
         <Route element={<ProtectedRoute />}>

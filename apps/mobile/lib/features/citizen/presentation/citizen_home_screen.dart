@@ -146,9 +146,6 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
           const SizedBox(height: 18),
           _QuickActionRow(
             unreadCount: transport.unreadMeshMessageCount,
-            onFeed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CitizenFeedScreen()),
-            ),
             onMesh: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const MeshStatusScreen()),
             ),
@@ -345,7 +342,6 @@ class _HeroPill extends StatelessWidget {
 class _QuickActionRow extends StatelessWidget {
   const _QuickActionRow({
     required this.unreadCount,
-    required this.onFeed,
     required this.onMesh,
     required this.onMap,
     required this.onCompass,
@@ -354,7 +350,6 @@ class _QuickActionRow extends StatelessWidget {
   });
 
   final int unreadCount;
-  final VoidCallback onFeed;
   final VoidCallback onMesh;
   final VoidCallback onMap;
   final VoidCallback onCompass;
@@ -400,13 +395,6 @@ class _QuickActionRow extends StatelessWidget {
           badgeLabel: unreadCount > 0 ? '$unreadCount' : null,
           tooltip: 'Offline Comms',
           onTap: onOfflineComms,
-        ),
-        _ActionCard(
-          icon: Icons.newspaper_outlined,
-          accent: dc.statusResponding,
-          title: 'Community feed',
-          body: 'Browse public response updates and advisories.',
-          onTap: onFeed,
         ),
         _ActionCard(
           icon: Icons.sos,

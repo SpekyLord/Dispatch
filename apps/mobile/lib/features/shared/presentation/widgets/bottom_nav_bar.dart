@@ -12,6 +12,9 @@ class AppBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final navTheme = theme.bottomNavigationBarTheme;
+
     return BottomNavigationBar(
       currentIndex: selectedIndex,
       onTap: onItemTapped,
@@ -29,10 +32,13 @@ class AppBottomNavigationBar extends StatelessWidget {
           label: 'Profile',
         ),
       ],
-      // These properties improve responsiveness and appearance
-      type: BottomNavigationBarType.fixed, // Good for 3-5 items
-      selectedItemColor: Theme.of(context).colorScheme.primary,
-      unselectedItemColor: Colors.grey,
+      type: navTheme.type ?? BottomNavigationBarType.fixed,
+      backgroundColor: navTheme.backgroundColor,
+      selectedItemColor: navTheme.selectedItemColor ?? theme.colorScheme.primary,
+      unselectedItemColor: navTheme.unselectedItemColor,
+      selectedLabelStyle: navTheme.selectedLabelStyle,
+      unselectedLabelStyle: navTheme.unselectedLabelStyle,
+      showUnselectedLabels: navTheme.showUnselectedLabels ?? true,
     );
   }
 }

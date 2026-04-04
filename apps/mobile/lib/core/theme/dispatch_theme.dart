@@ -68,6 +68,12 @@ ThemeData buildDispatchLightTheme() {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: warmSeed,
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: ink,
@@ -75,6 +81,21 @@ ThemeData buildDispatchLightTheme() {
         minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: warmSurface,
+      selectedItemColor: warmSeed,
+      unselectedItemColor: ink.withValues(alpha: 0.78),
+      selectedLabelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+      ),
+      showUnselectedLabels: true,
+      type: BottomNavigationBarType.fixed,
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: warmSeed,
@@ -182,6 +203,12 @@ ThemeData buildDispatchDarkTheme() {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: const Color(0xFFD38A68),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: darkInk,
@@ -189,6 +216,21 @@ ThemeData buildDispatchDarkTheme() {
         minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: darkSurface,
+      selectedItemColor: const Color(0xFFD38A68),
+      unselectedItemColor: darkInk.withValues(alpha: 0.72),
+      selectedLabelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+      ),
+      showUnselectedLabels: true,
+      type: BottomNavigationBarType.fixed,
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: warmSeed,

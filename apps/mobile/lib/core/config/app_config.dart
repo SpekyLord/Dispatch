@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 // App config can be injected via --dart-define / --dart-define-from-file.
-// Android defaults to the emulator loopback alias; web defaults to the
-// current browser host on port 5000 so Chrome can reach the local API.
+// Android emulator defaults to 10.0.2.2 (the emulator's host alias); other
+// native platforms (Windows, macOS, Linux, iOS) default to 127.0.0.1; web
+// derives the host from the current browser URI so Chrome always resolves
+// correctly without any explicit configuration.
 class AppConfig {
   const AppConfig({
     required this.apiBaseUrl,
@@ -34,6 +36,7 @@ class AppConfig {
   static final current = AppConfig(
     apiBaseUrl: resolveApiBaseUrl(
       isWeb: kIsWeb,
+      isAndroid: defaultTargetPlatform == TargetPlatform.android,
       configuredApiBaseUrl: _configuredApiBaseUrl,
       configuredWebApiBaseUrl: _configuredWebApiBaseUrl,
       currentUri: Uri.base,
@@ -45,6 +48,7 @@ class AppConfig {
 
 String resolveApiBaseUrl({
   required bool isWeb,
+  required bool isAndroid,
   required String configuredApiBaseUrl,
   required String configuredWebApiBaseUrl,
   required Uri currentUri,
@@ -70,7 +74,10 @@ String resolveApiBaseUrl({
     return apiOverride;
   }
 
-  return 'http://10.0.2.2:5000';
+  // 10.0.2.2 is the Android emulator's loopback alias for the host machine.
+  // Physical Android devices, Windows, macOS, Linux, and iOS all use the
+  // standard loopback address instead.
+  return isAndroid ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
 }
 
 bool _isAndroidEmulatorAlias(String url) {

@@ -10,19 +10,12 @@ import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-
-const _warmBackground = Color(0xFFFDF7F2);
-const _warmPanel = Color(0xFFFFF8F3);
-const _warmBorder = Color(0xFFE7D1C6);
-const _warmAccent = Color(0xFFA14B2F);
-const _coolAccent = Color(0xFF1695D3);
-const _deepText = Color(0xFF4E433D);
-const _mutedText = Color(0xFF7A6B63);
 
 class SurvivorCompassScreen extends ConsumerStatefulWidget {
   const SurvivorCompassScreen({
@@ -353,10 +346,10 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         : transport.trailForDevice(target.detectedDeviceIdentifier);
 
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: dc.warmBackground,
       appBar: AppBar(
         title: const Text('Survivor Compass'),
-        backgroundColor: _warmBackground,
+        backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
@@ -367,7 +360,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         ],
       ),
       body: RefreshIndicator(
-        color: _warmAccent,
+        color: dc.warmSeed,
         onRefresh: _handleRefresh,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -377,9 +370,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFFA14B2F),
-                    Color(0xFF7B3A25),
-                    Color(0xFF425E72),
+                    ...dc.heroGradient,
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -579,9 +570,9 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -590,10 +581,10 @@ class _InfoCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7EADF),
+              color: dc.chipFill,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: _warmAccent),
+            child: Icon(icon, color: dc.warmSeed),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -603,7 +594,7 @@ class _InfoCard extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -611,7 +602,7 @@ class _InfoCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   body,
-                  style: const TextStyle(color: _mutedText, height: 1.5),
+                  style: const TextStyle(color: dc.mutedInk, height: 1.5),
                 ),
               ],
             ),
@@ -649,9 +640,9 @@ class _CompassSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         children: [
@@ -666,11 +657,11 @@ class _CompassSummaryCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFFFF4EB), Color(0xFFF2E7DE)],
+                      colors: [dc.chipFill, dc.warmBorder],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
-                    border: Border.all(color: _warmBorder, width: 1.5),
+                    border: Border.all(color: dc.warmBorder, width: 1.5),
                   ),
                 ),
                 if (pulseActive)
@@ -686,7 +677,7 @@ class _CompassSummaryCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: _warmAccent.withValues(
+                              color: dc.warmSeed.withValues(
                                 alpha: 0.28 - pulseController.value * 0.12,
                               ),
                               width: 3,
@@ -705,14 +696,14 @@ class _CompassSummaryCard extends StatelessWidget {
                   child: Icon(
                     Icons.navigation,
                     size: 122,
-                    color: pulseActive ? _warmAccent : _coolAccent,
+                    color: pulseActive ? dc.warmSeed : dc.coolAccent,
                   ),
                 ),
                 Container(
                   width: 16,
                   height: 16,
                   decoration: const BoxDecoration(
-                    color: _deepText,
+                    color: dc.ink,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -725,7 +716,7 @@ class _CompassSummaryCard extends StatelessWidget {
                 ? 'Waiting for survivor location'
                 : '${snapshot!.distanceToDetectionNodeMeters.toStringAsFixed(1)} m',
             style: const TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 34,
               fontWeight: FontWeight.w800,
             ),
@@ -736,7 +727,7 @@ class _CompassSummaryCard extends StatelessWidget {
                 ? 'Proximity pulse active'
                 : 'Distance to detection node',
             style: const TextStyle(
-              color: _mutedText,
+              color: dc.mutedInk,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -771,7 +762,7 @@ class _CompassSummaryCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF7EADF),
+              color: dc.chipFill,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
@@ -780,7 +771,7 @@ class _CompassSummaryCard extends StatelessWidget {
                 Text(
                   SurvivorCompassService.confidenceBandLabel(band),
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -788,7 +779,7 @@ class _CompassSummaryCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   SurvivorCompassService.confidenceBandBody(band),
-                  style: const TextStyle(color: _mutedText, height: 1.5),
+                  style: const TextStyle(color: dc.mutedInk, height: 1.5),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -859,7 +850,7 @@ class _DialLabel extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(color: _deepText, fontWeight: FontWeight.w700),
+        style: const TextStyle(color: dc.ink, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -878,17 +869,17 @@ class _MetricChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: _warmAccent),
+          Icon(icon, size: 16, color: dc.warmSeed),
           const SizedBox(width: 8),
           Text(
             label,
             style: const TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -924,7 +915,7 @@ class _CompassMapCard extends StatelessWidget {
             height: 18,
             child: Container(
               decoration: BoxDecoration(
-                color: _deepText.withValues(alpha: 0.75),
+                color: dc.ink.withValues(alpha: 0.75),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
               ),
@@ -956,9 +947,9 @@ class _CompassMapCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -966,7 +957,7 @@ class _CompassMapCard extends StatelessWidget {
           const Text(
             'Search map inset',
             style: TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -974,7 +965,7 @@ class _CompassMapCard extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'Peer dots are rendered as a local proximity ring until peer GPS coordinates are added to mesh sync uploads.',
-            style: TextStyle(color: _mutedText, height: 1.45),
+            style: TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
           ClipRRect(
@@ -997,18 +988,18 @@ class _CompassMapCard extends StatelessWidget {
                         Polyline(
                           points: trailLatLngs,
                           strokeWidth: 5,
-                          color: _warmAccent.withValues(alpha: 0.18),
+                          color: dc.warmSeed.withValues(alpha: 0.18),
                         ),
                       if (recentTrail.length >= 2)
                         Polyline(
                           points: recentTrail,
                           strokeWidth: 4,
-                          color: _warmAccent.withValues(alpha: 0.72),
+                          color: dc.warmSeed.withValues(alpha: 0.72),
                         ),
                       Polyline(
                         points: [snapshot.rescuerPoint, snapshot.targetPoint],
                         strokeWidth: 4,
-                        color: _coolAccent.withValues(alpha: 0.85),
+                        color: dc.coolAccent.withValues(alpha: 0.85),
                       ),
                     ],
                   ),
@@ -1019,7 +1010,7 @@ class _CompassMapCard extends StatelessWidget {
                         width: 54,
                         height: 54,
                         child: _MapMarker(
-                          color: _coolAccent,
+                          color: dc.coolAccent,
                           icon: Icons.navigation,
                           label: 'You',
                         ),
@@ -1029,7 +1020,7 @@ class _CompassMapCard extends StatelessWidget {
                         width: 54,
                         height: 54,
                         child: _MapMarker(
-                          color: _warmAccent,
+                          color: dc.warmSeed,
                           icon: Icons.sos,
                           label: 'Target',
                         ),
@@ -1085,8 +1076,8 @@ class _TrailDot extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: faded
-            ? _warmAccent.withValues(alpha: 0.28)
-            : _warmAccent.withValues(alpha: 0.82),
+            ? dc.warmSeed.withValues(alpha: 0.28)
+            : dc.warmSeed.withValues(alpha: 0.82),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 1.5),
       ),
@@ -1136,7 +1127,7 @@ class _MapMarker extends StatelessWidget {
           child: Text(
             label,
             style: const TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -1165,9 +1156,9 @@ class _ResolveSignalCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1175,7 +1166,7 @@ class _ResolveSignalCard extends StatelessWidget {
           const Text(
             'Resolve this survivor signal',
             style: TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -1185,7 +1176,7 @@ class _ResolveSignalCard extends StatelessWidget {
             target.isResolutionQueued
                 ? 'A previous resolve action is already queued through the mesh. Updating it here will add a fresh relay packet with the latest note.'
                 : 'Add a short note when the rescuer confirms the location, transfer, or false positive outcome.',
-            style: const TextStyle(color: _mutedText, height: 1.45),
+            style: const TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
           TextField(
@@ -1208,7 +1199,7 @@ class _ResolveSignalCard extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: onResolve,
               style: FilledButton.styleFrom(
-                backgroundColor: _warmAccent,
+                backgroundColor: dc.warmSeed,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -1255,9 +1246,9 @@ class _TargetBoard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1265,7 +1256,7 @@ class _TargetBoard extends StatelessWidget {
           const Text(
             'Active survivor feed',
             style: TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -1273,7 +1264,7 @@ class _TargetBoard extends StatelessWidget {
           const SizedBox(height: 6),
           const Text(
             'Pin a single signal at a time so the compass can hold a stable target while the rest of the feed continues updating.',
-            style: TextStyle(color: _mutedText, height: 1.45),
+            style: TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 14),
           if (signals.isEmpty)
@@ -1294,10 +1285,10 @@ class _TargetBoard extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: isPinned ? const Color(0xFFF7EADF) : Colors.white,
+                  color: isPinned ? dc.chipFill : Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isPinned ? _warmAccent : _warmBorder,
+                    color: isPinned ? dc.warmSeed : dc.warmBorder,
                   ),
                 ),
                 child: Column(
@@ -1311,8 +1302,8 @@ class _TargetBoard extends StatelessWidget {
                           height: 42,
                           decoration: BoxDecoration(
                             color: resolved
-                                ? const Color(0xFFE6F1E8)
-                                : const Color(0xFFDCE8F3),
+                                ? dc.statusResolved.withValues(alpha: 0.15)
+                                : dc.coolAccent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Icon(
@@ -1325,8 +1316,8 @@ class _TargetBoard extends StatelessWidget {
                               SarDetectionMethod.sosBeacon => Icons.sos,
                             },
                             color: resolved
-                                ? const Color(0xFF397154)
-                                : _coolAccent,
+                                ? dc.statusResolved
+                                : dc.coolAccent,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1337,7 +1328,7 @@ class _TargetBoard extends StatelessWidget {
                               Text(
                                 signal.detectedDeviceIdentifier,
                                 style: const TextStyle(
-                                  color: _deepText,
+                                  color: dc.ink,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1346,7 +1337,7 @@ class _TargetBoard extends StatelessWidget {
                               Text(
                                 '${_CompassSummaryCard._signalMethodLabel(signal.detectionMethod)} | ${signal.estimatedDistanceMeters.toStringAsFixed(1)} m search radius | ${_formatLastSeen(signal.lastSeenTimestamp)}',
                                 style: const TextStyle(
-                                  color: _mutedText,
+                                  color: dc.mutedInk,
                                   height: 1.4,
                                 ),
                               ),
@@ -1359,8 +1350,8 @@ class _TargetBoard extends StatelessWidget {
                               : () => onPinTarget(signal.messageId),
                           style: FilledButton.styleFrom(
                             backgroundColor: isPinned
-                                ? _warmAccent
-                                : _coolAccent,
+                                ? dc.warmSeed
+                                : dc.coolAccent,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
@@ -1404,7 +1395,7 @@ class _TargetBoard extends StatelessWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF7EADF),
+                          color: dc.chipFill,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Column(
@@ -1413,19 +1404,19 @@ class _TargetBoard extends StatelessWidget {
                             Text(
                               'Last Seen beacon ${_formatLastSeen(lastSeenBeacon.recordedAt)}',
                               style: const TextStyle(
-                                color: _deepText,
+                                color: dc.ink,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '${lastSeenBeacon.lat.toStringAsFixed(4)}, ${lastSeenBeacon.lng.toStringAsFixed(4)}',
-                              style: const TextStyle(color: _mutedText),
+                              style: const TextStyle(color: dc.mutedInk),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               "State ${lastSeenBeacon.appState.replaceAll('_', ' ')}${lastSeenBeacon.batteryPct == null ? '' : ' | Battery ${lastSeenBeacon.batteryPct}%'}",
-                              style: const TextStyle(color: _mutedText),
+                              style: const TextStyle(color: dc.mutedInk),
                             ),
                           ],
                         ),
@@ -1435,7 +1426,7 @@ class _TargetBoard extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         signal.resolutionNote!,
-                        style: const TextStyle(color: _mutedText, height: 1.45),
+                        style: const TextStyle(color: dc.mutedInk, height: 1.45),
                       ),
                     ],
                   ],

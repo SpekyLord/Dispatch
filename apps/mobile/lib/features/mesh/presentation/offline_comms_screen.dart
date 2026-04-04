@@ -4,16 +4,9 @@ import 'dart:convert';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-const _warmBackground = Color(0xFFFDF7F2);
-const _warmPanel = Color(0xFFFFF8F3);
-const _warmBorder = Color(0xFFE7D1C6);
-const _warmAccent = Color(0xFFA14B2F);
-const _coolAccent = Color(0xFF1695D3);
-const _deepText = Color(0xFF4E433D);
-const _mutedText = Color(0xFF7A6B63);
 
 class OfflineCommsScreen extends ConsumerStatefulWidget {
   const OfflineCommsScreen({super.key});
@@ -217,10 +210,10 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
         session.role == AppRole.department && session.department != null;
 
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: dc.warmBackground,
       appBar: AppBar(
         title: const Text('Offline Comms'),
-        backgroundColor: _warmBackground,
+        backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
           Padding(
@@ -254,9 +247,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [
-                  Color(0xFFA14B2F),
-                  Color(0xFF7B3A25),
-                  Color(0xFF425E72),
+                  ...dc.heroGradient,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -312,9 +303,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: _warmPanel,
+              color: dc.warmSurface,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: _warmBorder),
+              border: Border.all(color: dc.warmBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +313,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 const Text(
                   'Compose',
                   style: TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -419,7 +410,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 FilledButton.icon(
                   onPressed: _sending ? null : _submit,
                   style: FilledButton.styleFrom(
-                    backgroundColor: _warmAccent,
+                    backgroundColor: dc.warmSeed,
                     foregroundColor: Colors.white,
                   ),
                   icon: Icon(_mode == 'post' ? Icons.campaign : Icons.send),
@@ -440,13 +431,13 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: _warmPanel,
+                color: dc.warmSurface,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: _warmBorder),
+                border: Border.all(color: dc.warmBorder),
               ),
               child: const Text(
                 'No mesh-routed messages or posts yet. Compose a broadcast above or wait for nearby mesh traffic to arrive.',
-                style: TextStyle(color: _mutedText, height: 1.45),
+                style: TextStyle(color: dc.mutedInk, height: 1.45),
               ),
             ),
         ],
@@ -473,13 +464,13 @@ class _ModeChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? _warmAccent : const Color(0xFFF7EADF),
+          color: active ? dc.warmSeed : dc.chipFill,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: active ? Colors.white : _deepText,
+            color: active ? Colors.white : dc.ink,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -494,15 +485,15 @@ class _InboxCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = item.itemType == 'mesh_post' ? _warmAccent : _coolAccent;
+    final accent = item.itemType == 'mesh_post' ? dc.warmSeed : dc.coolAccent;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: item.isRead ? _warmPanel : Colors.white,
+        color: item.isRead ? dc.warmSurface : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: item.isRead ? _warmBorder : accent.withValues(alpha: 0.4),
+          color: item.isRead ? dc.warmBorder : accent.withValues(alpha: 0.4),
         ),
       ),
       child: Column(
@@ -514,7 +505,7 @@ class _InboxCard extends StatelessWidget {
                 child: Text(
                   item.title ?? item.authorDisplayName,
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -530,7 +521,7 @@ class _InboxCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             item.body,
-            style: const TextStyle(color: _deepText, height: 1.45),
+            style: const TextStyle(color: dc.ink, height: 1.45),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -563,13 +554,13 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7EADF),
+        color: dc.chipFill,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          color: _mutedText,
+          color: dc.mutedInk,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -589,7 +580,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: _warmAccent,
+        color: dc.warmSeed,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

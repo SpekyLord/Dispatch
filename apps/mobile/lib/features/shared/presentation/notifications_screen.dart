@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -131,19 +132,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: isRead ? null : Colors.orange.shade50,
+                    color: isRead ? null : dc.statusPending.withValues(alpha: 0.08),
                     child: ListTile(
                       onTap: isRead
                           ? null
                           : () => _markRead(notification['id'] as String),
                       leading: CircleAvatar(
                         backgroundColor: isRead
-                            ? Colors.grey.shade200
-                            : Colors.orange.shade100,
+                            ? dc.warmBorder
+                            : dc.statusPending.withValues(alpha: 0.2),
                         child: Icon(
                           _typeIcon(type),
                           size: 20,
-                          color: isRead ? Colors.grey : Colors.orange.shade800,
+                          color: isRead ? Colors.grey : dc.statusPending,
                         ),
                       ),
                       title: Text(
@@ -180,7 +181,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                               height: 8,
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Color(0xFFD97757),
+                                color: dc.statusPending,
                               ),
                             ),
                     ),

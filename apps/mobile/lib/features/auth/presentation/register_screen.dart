@@ -2,6 +2,7 @@
 // Department fields remain conditional when role = 'department'.
 
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -88,9 +89,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFFA14B2F),
-                    Color(0xFF7B3A25),
-                    Color(0xFF425E72),
+                    ...dc.heroGradient,
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -122,7 +121,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   SizedBox(height: 10),
                   Text(
                     'Citizens can report emergencies immediately, while departments can submit their verification profile from the same mobile flow.',
-                    style: TextStyle(color: Color(0xFFF9EEE9), height: 1.45),
+                    style: TextStyle(color: dc.chipFill, height: 1.45),
                   ),
                 ],
               ),
@@ -150,12 +149,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF1EB),
+                          color: dc.warmSeed.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Text(
                           _error!,
-                          style: const TextStyle(color: Color(0xFFA14B2F)),
+                          style: const TextStyle(color: dc.warmSeed),
                         ),
                       ),
                     Row(
@@ -203,7 +202,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF7EADF),
+                          color: dc.chipFill,
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Column(

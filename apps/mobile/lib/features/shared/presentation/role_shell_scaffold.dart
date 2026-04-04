@@ -1,5 +1,6 @@
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,7 +37,7 @@ class RoleShellScaffold extends ConsumerWidget {
             Text(
               kicker,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: const Color(0xFFE05A2B),
+                color: dc.warmSeed,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.2,
               ),

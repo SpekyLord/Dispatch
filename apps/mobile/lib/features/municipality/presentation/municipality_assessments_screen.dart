@@ -1,4 +1,5 @@
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -86,7 +87,7 @@ class _MunicipalityAssessmentsScreenState
                                 const Icon(
                                   Icons.location_on_outlined,
                                   size: 16,
-                                  color: Color(0xFFA14B2F),
+                                  color: dc.warmSeed,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(

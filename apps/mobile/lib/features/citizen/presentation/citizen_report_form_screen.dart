@@ -1,8 +1,11 @@
 // Report form -- submit a new incident with photos, GPS, and map pin.
 
+import 'dart:async';
+
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/shared/presentation/location_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +56,7 @@ class _CitizenReportFormScreenState
   bool _gpsLoading = false;
   String? _gpsStatus;
   bool _hasUserPinnedLocation = false;
+  StreamSubscription<LocationData>? _gpsSubscription;
 
   // Images
   final List<SelectedMedia> _images = [];
@@ -60,15 +64,36 @@ class _CitizenReportFormScreenState
   @override
   void initState() {
     super.initState();
+    _startGpsWatch();
     _detectGps();
   }
 
   @override
   void dispose() {
+    _gpsSubscription?.cancel();
     _titleController.dispose();
     _descController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  void _startGpsWatch() {
+    _gpsSubscription = ref
+        .read(locationServiceProvider)
+        .watchPosition()
+        .listen((location) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            if (!_hasUserPinnedLocation) {
+              _latitude = location.latitude;
+              _longitude = location.longitude;
+            }
+            _gpsStatus = 'GPS acquired';
+          });
+        });
   }
 
   Future<void> _detectGps() async {
@@ -264,12 +289,12 @@ class _CitizenReportFormScreenState
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: dc.statusError.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 _error!,
-                style: TextStyle(color: Colors.red.shade700),
+                style: TextStyle(color: dc.statusError),
               ),
             ),
           TextField(

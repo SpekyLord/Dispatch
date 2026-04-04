@@ -3,13 +3,9 @@ import 'dart:async';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_detail_screen.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-const _feedBackground = Color(0xFFFDF7F2);
-const _feedCard = Color(0xFFFFF8F3);
-const _feedBorder = Color(0xFFE7D1C6);
-const _feedText = Color(0xFF4E433D);
-const _feedMuted = Color(0xFF7A6B63);
 
 class CitizenFeedScreen extends ConsumerStatefulWidget {
   const CitizenFeedScreen({super.key});
@@ -80,12 +76,12 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
 
   Color _categoryColor(String category) {
     return switch (category) {
-      'alert' => Colors.red,
-      'warning' => Colors.orange,
-      'safety_tip' => Colors.blue,
-      'update' => Colors.green,
-      'situational_report' => Colors.purple,
-      _ => Colors.grey,
+      'alert' => dc.statusError,
+      'warning' => dc.statusPending,
+      'safety_tip' => dc.coolAccent,
+      'update' => dc.statusResolved,
+      'situational_report' => dc.statusResponding,
+      _ => dc.mutedInk,
     };
   }
 
@@ -120,9 +116,9 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: _feedCard,
+              color: dc.warmSurface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: _feedBorder),
+              border: Border.all(color: dc.warmBorder),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x14131110),
@@ -177,7 +173,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        color: _feedText,
+                                        color: dc.ink,
                                       ),
                                     ),
                                   ),
@@ -192,7 +188,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                                       child: Icon(
                                         Icons.push_pin,
                                         size: 14,
-                                        color: Colors.orange.shade700,
+                                        color: dc.statusPending,
                                       ),
                                     ),
                                 ],
@@ -202,7 +198,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                                 _formatTime(createdAt),
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: _feedMuted,
+                                  color: dc.mutedInk,
                                 ),
                               ),
                             ],
@@ -237,7 +233,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: _feedText,
+                          color: dc.ink,
                         ),
                       ),
                     ),
@@ -246,7 +242,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: Text(
                         content,
-                        style: const TextStyle(color: _feedText, height: 1.4),
+                        style: const TextStyle(color: dc.ink, height: 1.4),
                       ),
                     ),
                   if (imageUrls.isNotEmpty)
@@ -272,11 +268,11 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                     child: Row(
                       children: const [
-                        Icon(Icons.thumb_up_alt, size: 14, color: _feedMuted),
+                        Icon(Icons.thumb_up_alt, size: 14, color: dc.mutedInk),
                         SizedBox(width: 6),
-                        Text('Like', style: TextStyle(color: _feedMuted)),
+                        Text('Like', style: TextStyle(color: dc.mutedInk)),
                         Spacer(),
-                        Text('Comments', style: TextStyle(color: _feedMuted)),
+                        Text('Comments', style: TextStyle(color: dc.mutedInk)),
                       ],
                     ),
                   ),
@@ -343,8 +339,8 @@ class _FeedAction extends StatelessWidget {
     return Expanded(
       child: TextButton.icon(
         onPressed: onTap,
-        icon: Icon(icon, size: 18, color: _feedMuted),
-        label: Text(label, style: const TextStyle(color: _feedMuted)),
+        icon: Icon(icon, size: 18, color: dc.mutedInk),
+        label: Text(label, style: const TextStyle(color: dc.mutedInk)),
       ),
     );
   }

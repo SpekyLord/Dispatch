@@ -30,6 +30,7 @@ class MeshPeopleMapScreen extends ConsumerStatefulWidget {
 
 class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   final MapController _mapController = MapController();
+  StreamSubscription<LocationData>? _gpsSubscription;
   bool _loading = true;
   bool _hasUserInteracted = false;
   bool _mapReady = false;
@@ -44,10 +45,28 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     super.initState();
     _refresh();
     unawaited(_detectGpsCenter());
+    _startGpsWatch();
   }
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
+    final role = ref.read(sessionControllerProvider).role;
+    final canAccessMeshOperatorFeeds =
+        role == AppRole.department || role == AppRole.municipality;
+
+    if (!canAccessMeshOperatorFeeds) {
+      if (mounted) {
+        setState(() {
+          _nodes = const [];
+          _signals = const [];
+          _devices = const [];
+          _loading = false;
+        });
+      }
+      unawaited(_detectGpsCenter());
+      return;
+    }
+
     try {
       final auth = ref.read(authServiceProvider);
       final topology = await auth.getMeshTopology();
@@ -94,6 +113,31 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
       _gpsCenter = point;
     });
     _moveCameraToPreferredCenter();
+  }
+
+  void _startGpsWatch() {
+    _gpsSubscription = ref
+        .read(locationServiceProvider)
+        .watchPosition()
+        .listen((location) {
+          if (!mounted) {
+            return;
+          }
+
+          final nextCenter = LatLng(location.latitude, location.longitude);
+          final currentCenter = _gpsCenter;
+          if (currentCenter != null &&
+              (currentCenter.latitude - nextCenter.latitude).abs() < 0.00005 &&
+              (currentCenter.longitude - nextCenter.longitude).abs() <
+                  0.00005) {
+            return;
+          }
+
+          setState(() {
+            _gpsCenter = nextCenter;
+          });
+          _moveCameraToPreferredCenter();
+        });
   }
 
   Future<void> _resolveSignal(String signalId) async {
@@ -201,6 +245,22 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   List<Marker> _markers() {
     final markers = <Marker>[];
+    final gpsCenter = _gpsCenter;
+    if (gpsCenter != null) {
+      markers.add(
+        Marker(
+          point: gpsCenter,
+          width: 40,
+          height: 40,
+          child: const Icon(
+            Icons.person_pin_circle,
+            color: Color(0xFF246B3D),
+            size: 34,
+          ),
+        ),
+      );
+    }
+
     for (final node in _nodes) {
       final point = _readPoint(node);
       if (point == null) continue;
@@ -269,10 +329,18 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   }
 
   @override
+  void dispose() {
+    _gpsSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final center = _preferredCenter();
-    final viewerRole =
-        ref.watch(sessionControllerProvider).role?.name ?? 'citizen';
+    final role = ref.watch(sessionControllerProvider).role;
+    final viewerRole = role?.name ?? 'citizen';
+    final canAccessMeshOperatorFeeds =
+        role == AppRole.department || role == AppRole.municipality;
 
     return Scaffold(
       appBar: AppBar(
@@ -308,6 +376,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                           Text(
                             '${_nodes.length} mesh nodes, ${_signals.length} survivor signals, and ${_devices.length} live people pins are layered here for $viewerRole.',
                           ),
+                          if (!canAccessMeshOperatorFeeds) ...[
+                            const SizedBox(height: 10),
+                            const Text(
+                              'You are in citizen view. Operator-only mesh feeds (topology and survivor signals) are hidden, but your local GPS pin is still shown for orientation.',
+                            ),
+                          ],
                           const SizedBox(height: 14),
                           Wrap(
                             spacing: 10,
@@ -324,6 +398,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                               _StatPill(
                                 label: 'Signals',
                                 value: '${_signals.length}',
+                              ),
+                              _StatPill(
+                                label: 'You',
+                                value: _gpsCenter == null ? 'No GPS yet' : '1',
                               ),
                             ],
                           ),
@@ -366,6 +444,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                 icon: Icons.my_location,
                                 label: 'People last seen',
                                 tone: Color(0xFF397154),
+                              ),
+                              _LegendPill(
+                                icon: Icons.person_pin_circle,
+                                label: 'Your device',
+                                tone: Color(0xFF246B3D),
                               ),
                             ],
                           ),
@@ -422,6 +505,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                               onPressed: () => _openCompass(
                                                 signal['message_id'] as String?,
                                               ),
+                                              style: FilledButton.styleFrom(
+                                                minimumSize: const Size(0, 40),
+                                              ),
                                               child: const Text('Locator'),
                                             ),
                                           if (widget.allowResolveActions) ...[
@@ -434,6 +520,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                                   : () => _resolveSignal(
                                                       signal['id'] as String,
                                                     ),
+                                              style: FilledButton.styleFrom(
+                                                minimumSize: const Size(0, 40),
+                                              ),
                                               child: Text(
                                                 _resolvingSignalId ==
                                                         signal['id']

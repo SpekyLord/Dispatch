@@ -1,5 +1,7 @@
 // Report form -- submit a new incident with photos, GPS, and map pin.
 
+import 'dart:async';
+
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
@@ -54,6 +56,7 @@ class _CitizenReportFormScreenState
   bool _gpsLoading = false;
   String? _gpsStatus;
   bool _hasUserPinnedLocation = false;
+  StreamSubscription<LocationData>? _gpsSubscription;
 
   // Images
   final List<SelectedMedia> _images = [];
@@ -61,15 +64,36 @@ class _CitizenReportFormScreenState
   @override
   void initState() {
     super.initState();
+    _startGpsWatch();
     _detectGps();
   }
 
   @override
   void dispose() {
+    _gpsSubscription?.cancel();
     _titleController.dispose();
     _descController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  void _startGpsWatch() {
+    _gpsSubscription = ref
+        .read(locationServiceProvider)
+        .watchPosition()
+        .listen((location) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            if (!_hasUserPinnedLocation) {
+              _latitude = location.latitude;
+              _longitude = location.longitude;
+            }
+            _gpsStatus = 'GPS acquired';
+          });
+        });
   }
 
   Future<void> _detectGps() async {

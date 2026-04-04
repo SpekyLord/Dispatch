@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -26,6 +29,10 @@ class LocationPicker extends StatefulWidget {
 }
 
 class _LocationPickerState extends State<LocationPicker> {
+  static const _fallbackLatitude = 14.5995;
+  static const _fallbackLongitude = 120.9842;
+
+  final LocationService _locationService = LocationService();
   final MapController _mapController = MapController();
   late LatLng _selected;
   bool _hasUserInteracted = false;
@@ -35,6 +42,7 @@ class _LocationPickerState extends State<LocationPicker> {
   void initState() {
     super.initState();
     _selected = LatLng(widget.initialLatitude, widget.initialLongitude);
+    unawaited(_tryUseDeviceLocationAsInitialCenter());
   }
 
   @override
@@ -86,6 +94,42 @@ class _LocationPickerState extends State<LocationPicker> {
   void _handleMapReady() {
     _mapReady = true;
     _moveCameraToSelected();
+  }
+
+  Future<void> _tryUseDeviceLocationAsInitialCenter() async {
+    if (!_isFallbackCenter(
+          widget.initialLatitude,
+          widget.initialLongitude,
+        ) ||
+        _hasUserInteracted) {
+      return;
+    }
+
+    final location = await _locationService.getCurrentPosition();
+    if (!mounted || location == null || _hasUserInteracted) {
+      return;
+    }
+
+    final gpsPoint = LatLng(location.latitude, location.longitude);
+    if (_isSamePoint(_selected, gpsPoint)) {
+      return;
+    }
+
+    setState(() {
+      _selected = gpsPoint;
+    });
+    widget.onLocationSelected?.call(gpsPoint);
+    _moveCameraToSelected();
+  }
+
+  bool _isFallbackCenter(double latitude, double longitude) {
+    return (latitude - _fallbackLatitude).abs() < 0.0001 &&
+        (longitude - _fallbackLongitude).abs() < 0.0001;
+  }
+
+  bool _isSamePoint(LatLng a, LatLng b) {
+    return (a.latitude - b.latitude).abs() < 0.000001 &&
+        (a.longitude - b.longitude).abs() < 0.000001;
   }
 
   @override

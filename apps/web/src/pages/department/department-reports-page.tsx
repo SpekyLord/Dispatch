@@ -63,7 +63,7 @@ const incidentStatusFilterOptions = [
 ] as const;
 
 const incidentCategoryFilterOptions = [
-  { value: "", label: "All" },
+  { value: "", label: "Category" },
   { value: "fire", label: "Fire" },
   { value: "flood", label: "Flood" },
   { value: "earthquake", label: "Earthquake" },
@@ -418,7 +418,7 @@ function IncidentBoardCard({
 
   return (
     <Link className="block" to={`/department/reports/${report.id}`}>
-      <Card className="cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-glass">
+      <Card className="cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]">
         <article className="relative flex min-h-[196px] flex-col overflow-hidden md:min-h-[154px]">
           <IncidentBoardMapPreview isDarkMode={isDarkMode} report={report} />
 
@@ -719,7 +719,7 @@ export function DepartmentReportsPage() {
   });
 
   const filterTabBaseClassName =
-    "rounded-full border px-4 py-1.5 text-[12px] font-semibold transition-colors";
+    "rounded-full border px-[18px] py-[0.55rem] text-[12px] font-semibold transition-colors";
   const inactiveFilterTabClassName =
     "border-[#e3d3c6] bg-[#fff8f3] text-[#6f625b] hover:bg-[#f4ebe3] hover:text-[#584137]";
   const activeFilterTabClassName =
@@ -727,9 +727,11 @@ export function DepartmentReportsPage() {
 
   return (
     <AppShell subtitle="Incident response" title="Incident Board">
+      <div className="-mt-6 mb-4 border-b border-[#ead8cc]" />
+
       <div className="mb-8 flex flex-col gap-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {incidentStatusFilterOptions.map((option) => (
                 <button
@@ -745,40 +747,40 @@ export function DepartmentReportsPage() {
               ))}
             </div>
 
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="flex flex-wrap items-center gap-2">
+            <label className="relative block">
+              <select
+                className="h-11 min-w-[140px] appearance-none rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-3.5 pr-9 text-[13px] font-medium text-[#6f625b] outline-none transition-colors focus:border-[#c98d71]"
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                value={categoryFilter}
+              >
                 {incidentCategoryFilterOptions.map((option) => (
-                  <button
-                    className={`${filterTabBaseClassName} ${
-                      categoryFilter === option.value ? activeFilterTabClassName : inactiveFilterTabClassName
-                    }`}
-                    key={option.value || "all-categories"}
-                    onClick={() => setCategoryFilter(option.value)}
-                    type="button"
-                  >
+                  <option key={option.value || "all-categories"} value={option.value}>
                     {option.label}
-                  </button>
+                  </option>
                 ))}
-              </div>
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9b826f]">
+                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+              </span>
+            </label>
 
-              <label className="relative block min-w-0 lg:w-[240px] xl:w-[280px]">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a08373]">
-                  <span className="material-symbols-outlined text-[16px]">search</span>
-                </span>
-                <input
-                  className="h-10 w-full rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-10 pr-4 text-sm text-[#4d2b1e] outline-none transition-colors placeholder:text-[#a08373] focus:border-[#c98d71]"
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search reports"
-                  type="search"
-                  value={searchQuery}
-                />
-              </label>
-            </div>
+            <label className="relative block min-w-0 lg:w-[220px] xl:w-[260px]">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a08373]">
+                <span className="material-symbols-outlined text-[17px]">search</span>
+              </span>
+              <input
+                className="h-11 w-full rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-10 pr-4 text-[14px] text-[#4d2b1e] outline-none transition-colors placeholder:text-[#a08373] focus:border-[#c98d71]"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search reports"
+                type="search"
+                value={searchQuery}
+              />
+            </label>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          <div className="flex shrink-0 items-center gap-3">
             <Button
-              className="rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-4 text-[#7a6558] hover:bg-[#f3e8de]"
+              className="h-11 rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-[18px] text-[#7a6558] hover:bg-[#f3e8de]"
               onClick={() => { void fetchReports(); }}
               variant="ghost"
             >
@@ -820,7 +822,7 @@ export function DepartmentReportsPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-[minmax(0,1fr)_6.5rem] md:gap-5 md:mr-2 xl:mr-4">
-          <section className="overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+          <section className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
             <div className="space-y-6">
               {visibleReports.map((report) => (
                 <IncidentBoardCard
@@ -833,7 +835,7 @@ export function DepartmentReportsPage() {
             </div>
           </section>
 
-          <aside className="overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+          <aside className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
             <div className="space-y-6">
               {visibleReports.map((report) => (
                 <IncidentTimelineBlock key={report.id} report={report} />

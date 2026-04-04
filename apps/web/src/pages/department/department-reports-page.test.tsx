@@ -97,7 +97,7 @@ describe("DepartmentReportsPage", () => {
     });
     expect(screen.getAllByTestId("report-map-preview-rep-1").length).toBeGreaterThan(0);
     expect(screen.getByTestId("report-map-overlay-tab-rep-1")).toBeInTheDocument();
-    expect(screen.getByText("1 report")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 report")).toBeInTheDocument();
     expect(realtimeMock.subscriptions.map((subscription) => subscription.table)).toEqual([
       "incident_reports",
       "department_responses",
@@ -126,7 +126,7 @@ describe("DepartmentReportsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Clinic Fire")).toBeInTheDocument();
     });
-    expect(screen.getByText("2 reports")).toBeInTheDocument();
+    expect(screen.getByText("Showing 2 reports")).toBeInTheDocument();
   });
 
   it("does not repeat the same report copy when title and description match", async () => {

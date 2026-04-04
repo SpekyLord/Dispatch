@@ -30,6 +30,208 @@ const typeIcons: Record<string, string> = {
   announcement: "campaign",
 };
 
+const notificationTypeLabels: Record<string, string> = {
+  new_report: "New report",
+  report_update: "Report update",
+  verification_decision: "Verification",
+  announcement: "Announcement",
+};
+
+const notificationTypeStyles: Record<
+  string,
+  {
+    pillClassName: string;
+    iconSurfaceClassName: string;
+    iconClassName: string;
+  }
+> = {
+  new_report: {
+    pillClassName: "bg-[#ffdbd0] text-[#89391e]",
+    iconSurfaceClassName: "bg-[#f2e2d7]",
+    iconClassName: "text-[#b25e39]",
+  },
+  report_update: {
+    pillClassName: "bg-[#dfeaf5] text-[#456b86]",
+    iconSurfaceClassName: "bg-[#e7eef7]",
+    iconClassName: "text-[#4b6e90]",
+  },
+  verification_decision: {
+    pillClassName: "bg-[#ece3f5] text-[#6e4c91]",
+    iconSurfaceClassName: "bg-[#f1e9f8]",
+    iconClassName: "text-[#7d5ea1]",
+  },
+  announcement: {
+    pillClassName: "bg-[#ffe7cf] text-[#a14b2f]",
+    iconSurfaceClassName: "bg-[#ffefe1]",
+    iconClassName: "text-[#b35e38]",
+  },
+};
+
+const notificationCardShadowClassName =
+  "shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026]";
+const notificationCardHoverShadowClassName =
+  "hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
+
+function labelize(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .replace(/_/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatInlineTimestamp(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatTimelineTimestamp(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return { dateLabel: value, timeLabel: "" };
+  }
+
+  return {
+    dateLabel: parsed
+      .toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      })
+      .toUpperCase(),
+    timeLabel: parsed.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
+}
+
+function NotificationBoardCard({
+  notification,
+  onOpen,
+  target,
+}: {
+  notification: Notification;
+  onOpen: (notification: Notification) => void;
+  target: string | null;
+}) {
+  const typeStyle = notificationTypeStyles[notification.type] ?? {
+    pillClassName: "bg-[#f1e4da] text-[#85563f]",
+    iconSurfaceClassName: "bg-[#f5ebe3]",
+    iconClassName: "text-[#9c684f]",
+  };
+  const typeLabel =
+    notificationTypeLabels[notification.type] ?? (labelize(notification.type) || "Notification");
+  const compactTitle = notification.title?.trim() || typeLabel;
+  const compactMessage = notification.message?.trim() || "Tap to review this notification.";
+  const compactContextLabel =
+    notification.reference_type === "report" && notification.reference_id
+      ? `Report #${String(notification.reference_id).slice(0, 8)}`
+      : notification.reference_type
+        ? labelize(notification.reference_type)
+        : "Dispatch";
+
+  return (
+    <button
+      className="block w-full text-left"
+      onClick={() => void onOpen(notification)}
+      type="button"
+    >
+      <Card className={`cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 ${notificationCardShadowClassName} transition-all duration-200 hover:-translate-y-0.5 ${notificationCardHoverShadowClassName}`}>
+        <article className="relative flex min-h-[98px] items-center overflow-hidden px-4 py-3 md:min-h-[88px] md:px-5">
+          {!notification.is_read ? (
+            <span className="absolute inset-y-0 left-0 w-1.5 bg-[linear-gradient(180deg,#d97757,#b35e38)]" />
+          ) : null}
+
+          <div className="relative z-[3] flex min-w-0 items-center gap-3 pl-1">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-[0_10px_22px_-18px_rgba(166,92,58,0.55)] ${typeStyle.iconSurfaceClassName} ${typeStyle.iconClassName}`}
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                {typeIcons[notification.type] ?? "notifications"}
+              </span>
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#a56a50]">
+                <span className={`rounded-full px-2 py-1 ${typeStyle.pillClassName}`}>
+                  {typeLabel}
+                </span>
+                <span className="rounded-full border border-[#e8d8cb] bg-[#fbf4ee] px-2 py-1 text-[#9f7b65]">
+                  {compactContextLabel}
+                </span>
+                {!notification.is_read ? (
+                  <span className="rounded-full border border-[#e9cdb9] bg-[#fff3e6] px-2 py-1 text-[#b1683d]">
+                    New
+                  </span>
+                ) : null}
+                <span className="rounded-full border border-[#ead7c7] bg-white/75 px-2 py-1 text-[#9f6a4e] md:hidden">
+                  {formatInlineTimestamp(notification.created_at)}
+                </span>
+              </div>
+
+              <div className="mt-2 flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2">
+                <h3 className="truncate text-[15px] font-semibold leading-none text-[#4d2b1e]">
+                  {compactTitle}
+                </h3>
+                <span className="hidden text-[#c9a893] md:inline">-</span>
+                <p className="truncate text-[12.5px] leading-4 text-[#705d52]">
+                  {compactMessage}
+                </p>
+              </div>
+            </div>
+
+            <div className="ml-2 flex shrink-0 items-center gap-2">
+              {!notification.is_read ? (
+                <span className="h-2.5 w-2.5 rounded-full bg-[#d97757] shadow-[0_0_0_4px_rgba(255,219,208,0.65)]" />
+              ) : null}
+              {target ? (
+                <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#ead7c7] bg-[#fffaf6] text-[#b35e38] md:inline-flex">
+                  <span className="material-symbols-outlined text-[16px]">arrow_outward</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </article>
+      </Card>
+    </button>
+  );
+}
+
+function NotificationTimelineBlock({ notification }: { notification: Notification }) {
+  const timelineTimestamp = formatTimelineTimestamp(notification.created_at);
+
+  return (
+    <div className="pointer-events-none relative flex min-h-[88px] items-stretch">
+      <div className="relative flex w-full justify-start py-3">
+        <div className="absolute bottom-3 left-[1.1rem] top-3 w-px bg-[linear-gradient(180deg,rgba(214,160,132,0.08),rgba(214,160,132,0.55)_18%,rgba(214,160,132,0.55)_82%,rgba(214,160,132,0.08))]" />
+        <span className="absolute left-[0.83rem] top-5 h-2.5 w-2.5 rounded-full border border-[#dba788] bg-[#fff8f3] shadow-[0_0_0_3px_rgba(255,248,243,0.88)]" />
+        <div className="relative z-10 ml-7 flex max-w-[4.5rem] flex-col text-left">
+          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#b16f52]">
+            {timelineTimestamp.dateLabel}
+          </span>
+          {timelineTimestamp.timeLabel ? (
+            <span className="mt-1 text-[10px] font-semibold tracking-[0.04em] text-[#8b644f]">
+              {timelineTimestamp.timeLabel}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function NotificationsPage() {
   const navigate = useNavigate();
   const accessToken = useSessionStore((state) => state.accessToken);
@@ -37,6 +239,17 @@ export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+
+    if (typeof window.matchMedia === "function") {
+      return window.matchMedia("(min-width: 768px)").matches;
+    }
+
+    return window.innerWidth >= 768;
+  });
   const notificationTargets = useMemo(
     () =>
       Object.fromEntries(
@@ -83,6 +296,41 @@ export function NotificationsPage() {
     return () => subscription.unsubscribe();
   }, [accessToken]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateLayout = () => {
+      if (typeof window.matchMedia === "function") {
+        setIsDesktopLayout(window.matchMedia("(min-width: 768px)").matches);
+        return;
+      }
+
+      setIsDesktopLayout(window.innerWidth >= 768);
+    };
+
+    updateLayout();
+
+    if (typeof window.matchMedia === "function") {
+      const mediaQuery = window.matchMedia("(min-width: 768px)");
+      const handleChange = (event: MediaQueryListEvent) => {
+        setIsDesktopLayout(event.matches);
+      };
+
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", handleChange);
+        return () => mediaQuery.removeEventListener("change", handleChange);
+      }
+
+      mediaQuery.addListener(handleChange);
+      return () => mediaQuery.removeListener(handleChange);
+    }
+
+    window.addEventListener("resize", updateLayout);
+    return () => window.removeEventListener("resize", updateLayout);
+  }, []);
+
   // Mark single notification read — optimistic with rollback
   async function markRead(id: string) {
     const prev = notifications;
@@ -126,16 +374,24 @@ export function NotificationsPage() {
 
   return (
     <AppShell subtitle="Stay informed" title="Notifications">
-      <div className="flex items-center justify-between mb-8">
-        <p className="text-sm text-on-surface-variant">
+      <div className="-mt-6 mb-4 border-b border-[#ead8cc]" />
+
+      <div className="mb-8 flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <p className="text-sm text-on-surface-variant">
           {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}` : "All caught up"}
-        </p>
-        {unreadCount > 0 && (
-          <Button variant="ghost" onClick={markAllRead}>
-            <span className="material-symbols-outlined text-[16px] mr-1">done_all</span>
-            Mark all read
-          </Button>
-        )}
+          </p>
+          {unreadCount > 0 && (
+            <Button
+              className="h-11 rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-[18px] text-[#7a6558] hover:bg-[#f3e8de]"
+              onClick={markAllRead}
+              variant="ghost"
+            >
+              <span className="material-symbols-outlined mr-1 text-[16px]">done_all</span>
+              Mark all read
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -148,31 +404,39 @@ export function NotificationsPage() {
           <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">notifications_off</span>
           <p className="text-on-surface-variant">No notifications yet.</p>
         </Card>
-      ) : (
+      ) : !isDesktopLayout ? (
         <div className="space-y-3">
-          {notifications.map((n) => (
-            <Card
-              key={n.id}
-              className={`cursor-pointer transition-all hover:shadow-glass ${!n.is_read ? "border-l-4 border-l-[#D97757]" : "opacity-70"}`}
-              onClick={() => void handleNotificationClick(n)}
-            >
-              <div className="flex items-start gap-3">
-                <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${!n.is_read ? "bg-[#ffdbd0] text-secondary" : "bg-surface-container text-on-surface-variant"}`}>
-                  <span className="material-symbols-outlined text-[18px]">{typeIcons[n.type] ?? "notifications"}</span>
-                </div>
-                <div className="flex-grow min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className={`text-sm ${!n.is_read ? "font-semibold text-on-surface" : "text-on-surface-variant"}`}>{n.title}</h3>
-                    <span className="text-[10px] text-outline shrink-0">{new Date(n.created_at).toLocaleString()}</span>
-                  </div>
-                  <p className="text-xs text-on-surface-variant mt-0.5">{n.message}</p>
-                </div>
-                {!n.is_read && (
-                  <div className="w-2 h-2 rounded-full bg-[#D97757] shrink-0 mt-1.5" />
-                )}
-              </div>
-            </Card>
+          {notifications.map((notification) => (
+            <NotificationBoardCard
+              key={notification.id}
+              notification={notification}
+              onOpen={handleNotificationClick}
+              target={notificationTargets[notification.id]}
+            />
           ))}
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-[minmax(0,1fr)_6.5rem] md:gap-5 md:mr-2 xl:mr-4">
+          <section className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+            <div className="space-y-3">
+              {notifications.map((notification) => (
+                <NotificationBoardCard
+                  key={notification.id}
+                  notification={notification}
+                  onOpen={handleNotificationClick}
+                  target={notificationTargets[notification.id]}
+                />
+              ))}
+            </div>
+          </section>
+
+          <aside className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+            <div className="space-y-3">
+              {notifications.map((notification) => (
+                <NotificationTimelineBlock key={notification.id} notification={notification} />
+              ))}
+            </div>
+          </aside>
         </div>
       )}
     </AppShell>

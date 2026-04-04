@@ -122,10 +122,12 @@ const basePopupPanelShadowClassName =
   "shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]";
 const baseRaisedFeedCardClassName =
   "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
+const publishedFeedCardShadowClassName =
+  "shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026]";
 const basePublishLaneEffectClassName =
-  "dispatch-news-feed-publish-lane space-y-5 overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
+  "dispatch-news-feed-publish-lane space-y-5 overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
 const basePublishedTabHighlightClassName =
-  "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6]";
+  "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6] hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
 const heartOutlinePath =
   "M17.5,1.917a6.4,6.4,0,0,0-5.5,3.3,6.4,6.4,0,0,0-5.5-3.3A6.8,6.8,0,0,0,0,8.967c0,4.547,4.786,9.513,8.8,12.88a4.974,4.974,0,0,0,6.4,0C19.214,18.48,24,13.514,24,8.967A6.8,6.8,0,0,0,17.5,1.917Zm-3.585,18.4a2.973,2.973,0,0,1-3.83,0C4.947,16.006,2,11.87,2,8.967a4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,11,8.967a1,1,0,0,0,2,0,4.8,4.8,0,0,1,4.5-5.05A4.8,4.8,0,0,1,22,8.967C22,11.87,19.053,16.006,13.915,20.313Z";
 const heartFilledPath =
@@ -382,10 +384,10 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     ? "shadow-[14px_14px_28px_rgba(0,0,0,0.34),-10px_-10px_22px_rgba(255,255,255,0.02)]"
     : baseRaisedFeedCardClassName;
   const publishLaneEffectClassName = isDarkMode
-    ? "space-y-5 overflow-x-clip rounded-[34px] bg-[#1d1b1a] p-3 shadow-[rgba(255,255,255,0.04)_0px_1px_0px_inset,rgba(0,0,0,0.48)_0px_24px_48px_-18px_inset] md:mr-2 xl:mr-4"
+    ? "space-y-5 overflow-visible rounded-[34px] bg-[#1d1b1a] p-3 shadow-[rgba(255,255,255,0.04)_0px_1px_0px_inset,rgba(0,0,0,0.48)_0px_24px_48px_-18px_inset] md:mr-2 xl:mr-4"
     : basePublishLaneEffectClassName;
   const publishedTabHighlightClassName = isDarkMode
-    ? "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#4a433d] hover:bg-[#292624]"
+    ? "transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#4a433d] hover:bg-[#292624] hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]"
     : basePublishedTabHighlightClassName;
   const composerInnerPanelClassName = isDarkMode
     ? "dispatch-news-feed-composer-inner rounded-[28px] border border-[#3b3732] bg-[#262321] px-4 py-4"
@@ -969,9 +971,15 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               14px 14px 28px rgba(0,0,0,0.34),
               -10px -10px 22px rgba(255,255,255,0.02) !important;
           }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-published-card {
+            box-shadow: 0 8px 18px -12px rgba(120,78,58,0.42), 0 5px 15px 0 #00000026 !important;
+          }
           .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-card:hover {
             background: #292624 !important;
             border-color: #4a433d !important;
+          }
+          .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-published-card:hover {
+            box-shadow: 0 10px 22px -12px rgba(120,78,58,0.48), 0 5px 5px 0 #00000026 !important;
           }
           .dispatch-shell-dark .dispatch-news-feed-page .dispatch-news-feed-composer-inner {
             background: #262321 !important;
@@ -1179,7 +1187,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                     : null;
 
                   return (
-                    <Card key={post.id} className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
+                    <Card key={post.id} className={`dispatch-news-feed-card dispatch-news-feed-published-card ${warmPanelClassName} ${publishedFeedCardShadowClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
                       <article
                         className="cursor-pointer space-y-5"
                         role="button"

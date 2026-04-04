@@ -17,9 +17,9 @@ const profileLaneEffectClassName =
   "dispatch-profile-publish-lane space-y-5 overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]";
 const profileSurfaceClassName = "dispatch-profile-surface border-[#e2d1c7] bg-[#fff8f3]";
 const profileRaisedCardClassName =
-  "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
+  "shadow-[0_5px_15px_0_#00000026]";
 const profileCardHoverClassName =
-  "dispatch-profile-card transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6]";
+  "dispatch-profile-card transform-gpu transition-all duration-200 ease-out hover:scale-[1.004] hover:border-[#e7c7b8] hover:bg-[#fffaf6] hover:shadow-[0_5px_5px_0_#00000026]";
 const profilePillClassName =
   "dispatch-profile-pill border border-[#e2d1c7] bg-[#f7efe7] text-[#6f625b]";
 const headerPlaceholderImage =
@@ -183,13 +183,12 @@ export function DepartmentViewPage() {
             border-color: #34302b !important;
           }
           .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-card {
-            box-shadow:
-              14px 14px 28px rgba(0,0,0,0.34),
-              -10px -10px 22px rgba(255,255,255,0.02) !important;
+            box-shadow: 0 5px 15px 0 #00000026 !important;
           }
           .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-card:hover {
             background: #292624 !important;
             border-color: #4a433d !important;
+            box-shadow: 0 5px 5px 0 #00000026 !important;
           }
           .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-pill,
           .dispatch-shell-dark .dispatch-profile-page .dispatch-profile-tab-trigger {

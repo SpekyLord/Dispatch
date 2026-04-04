@@ -1,4 +1,5 @@
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
 import 'package:dispatch_mobile/features/municipality/presentation/municipality_analytics_screen.dart';
@@ -93,9 +94,7 @@ class _MunicipalityHomeScreenState
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFFA14B2F),
-                    Color(0xFF7B3A25),
-                    Color(0xFF425E72),
+                    ...dc.heroGradient,
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -136,7 +135,7 @@ class _MunicipalityHomeScreenState
                   const SizedBox(height: 10),
                   const Text(
                     'Review department approvals, escalations, assessments, mesh activity, and public alerts from the same mobile command surface.',
-                    style: TextStyle(color: Color(0xFFF9EEE9), height: 1.45),
+                    style: TextStyle(color: dc.chipFill, height: 1.45),
                   ),
                 ],
               ),
@@ -154,21 +153,21 @@ class _MunicipalityHomeScreenState
                   icon: Icons.pending_actions,
                   label: 'Pending verification',
                   value: _loading ? '...' : '$_pendingDepartments',
-                  tone: const Color(0xFFD97757),
+                  tone: dc.statusPending,
                   onTap: () => _open(const MunicipalityVerificationScreen()),
                 ),
                 _MetricCard(
                   icon: Icons.domain,
                   label: 'Departments',
                   value: _loading ? '...' : '$_totalDepartments',
-                  tone: const Color(0xFF1695D3),
+                  tone: dc.coolAccent,
                   onTap: () => _open(const MunicipalityDepartmentsScreen()),
                 ),
                 _MetricCard(
                   icon: Icons.crisis_alert,
                   label: 'Unattended reports',
                   value: _loading ? '...' : '$_unattendedReports',
-                  tone: const Color(0xFFA14B2F),
+                  tone: dc.warmSeed,
                   onTap: () =>
                       _open(const MunicipalityEscalatedReportsScreen()),
                 ),
@@ -176,7 +175,7 @@ class _MunicipalityHomeScreenState
                   icon: Icons.analytics,
                   label: 'Reports in 7 days',
                   value: _loading ? '...' : '$_last7Days',
-                  tone: const Color(0xFF397154),
+                  tone: dc.statusResolved,
                   onTap: () => _open(const MunicipalityAnalyticsScreen()),
                 ),
               ],
@@ -326,10 +325,10 @@ class _ActionTile extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: const Color(0xFFF7EADF),
+            color: dc.chipFill,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(icon, color: const Color(0xFFA14B2F)),
+          child: Icon(icon, color: dc.warmSeed),
         ),
         title: Text(title),
         subtitle: Text(subtitle),

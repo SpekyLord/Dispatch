@@ -48,6 +48,23 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
+    final role = ref.read(sessionControllerProvider).role;
+    final canAccessMeshOperatorFeeds =
+        role == AppRole.department || role == AppRole.municipality;
+
+    if (!canAccessMeshOperatorFeeds) {
+      if (mounted) {
+        setState(() {
+          _nodes = const [];
+          _signals = const [];
+          _devices = const [];
+          _loading = false;
+        });
+      }
+      unawaited(_detectGpsCenter());
+      return;
+    }
+
     try {
       final auth = ref.read(authServiceProvider);
       final topology = await auth.getMeshTopology();
@@ -422,6 +439,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                               onPressed: () => _openCompass(
                                                 signal['message_id'] as String?,
                                               ),
+                                              style: FilledButton.styleFrom(
+                                                minimumSize: const Size(0, 40),
+                                              ),
                                               child: const Text('Locator'),
                                             ),
                                           if (widget.allowResolveActions) ...[
@@ -434,6 +454,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                                                   : () => _resolveSignal(
                                                       signal['id'] as String,
                                                     ),
+                                              style: FilledButton.styleFrom(
+                                                minimumSize: const Size(0, 40),
+                                              ),
                                               child: Text(
                                                 _resolvingSignalId ==
                                                         signal['id']

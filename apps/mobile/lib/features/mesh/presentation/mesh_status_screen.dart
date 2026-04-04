@@ -6,16 +6,9 @@ import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-const _warmBackground = Color(0xFFFDF7F2);
-const _warmPanel = Color(0xFFFFF8F3);
-const _warmBorder = Color(0xFFE7D1C6);
-const _warmAccent = Color(0xFFA14B2F);
-const _coolAccent = Color(0xFF1695D3);
-const _deepText = Color(0xFF4E433D);
-const _mutedText = Color(0xFF7A6B63);
 
 class MeshStatusScreen extends ConsumerStatefulWidget {
   const MeshStatusScreen({super.key});
@@ -46,7 +39,12 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
 
   Future<void> _hydrateSignals({bool silent = false}) async {
     final session = ref.read(sessionControllerProvider);
-    if (session.accessToken == null) {
+    final canFetchSarSignals =
+        session.accessToken != null &&
+        session.role != AppRole.citizen &&
+        session.role != null;
+
+    if (!canFetchSarSignals) {
       return;
     }
 
@@ -152,15 +150,16 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
     final canEnableSarMode =
         session.role == AppRole.department &&
         session.department?.verificationStatus == 'approved';
-    final canReviewSignals = session.accessToken != null;
+    final canReviewSignals =
+        session.accessToken != null && session.role != AppRole.citizen;
     final canOpenCompass =
         canReviewSignals && sarState.activeSignals.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: dc.warmBackground,
       appBar: AppBar(
         title: const Text('Mesh Network'),
-        backgroundColor: _warmBackground,
+        backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
@@ -175,7 +174,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
       body: !_initialized
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              color: _warmAccent,
+              color: dc.warmSeed,
               onRefresh: _handleRefresh,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -185,9 +184,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [
-                          Color(0xFFA14B2F),
-                          Color(0xFF7B3A25),
-                          Color(0xFF425E72),
+                          ...dc.heroGradient,
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -273,7 +270,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                           icon: Icons.people_outline,
                           value: '${transport.peerCount}',
                           label: 'Peers',
-                          accent: _coolAccent,
+                          accent: dc.coolAccent,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -282,7 +279,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                           icon: Icons.outbox,
                           value: '${transport.queueSize}',
                           label: 'Queue',
-                          accent: _warmAccent,
+                          accent: dc.warmSeed,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -291,7 +288,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                           icon: Icons.radar,
                           value: '~${transport.estimatedReach}',
                           label: 'Reach',
-                          accent: const Color(0xFF397154),
+                          accent: dc.statusResolved,
                         ),
                       ),
                     ],
@@ -458,9 +455,9 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         children: [
@@ -477,7 +474,7 @@ class _StatCard extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 24,
               fontWeight: FontWeight.w700,
             ),
@@ -485,7 +482,7 @@ class _StatCard extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: _mutedText,
+              color: dc.mutedInk,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -514,9 +511,9 @@ class _InfoStrip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         children: [
@@ -524,10 +521,10 @@ class _InfoStrip extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7EADF),
+              color: dc.chipFill,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: _warmAccent),
+            child: Icon(icon, color: dc.warmSeed),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -537,12 +534,12 @@ class _InfoStrip extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(body, style: const TextStyle(color: _mutedText)),
+                Text(body, style: const TextStyle(color: dc.mutedInk)),
               ],
             ),
           ),
@@ -567,17 +564,17 @@ class _RoleCard extends StatelessWidget {
       MeshNodeRole.gateway => Icons.cloud_done,
     };
     final accent = switch (transport.role) {
-      MeshNodeRole.origin => _coolAccent,
-      MeshNodeRole.relay => _warmAccent,
-      MeshNodeRole.gateway => const Color(0xFF397154),
+      MeshNodeRole.origin => dc.coolAccent,
+      MeshNodeRole.relay => dc.warmSeed,
+      MeshNodeRole.gateway => dc.statusResolved,
     };
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         children: [
@@ -598,7 +595,7 @@ class _RoleCard extends StatelessWidget {
                 const Text(
                   'Current node role',
                   style: TextStyle(
-                    color: _mutedText,
+                    color: dc.mutedInk,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -606,7 +603,7 @@ class _RoleCard extends StatelessWidget {
                 Text(
                   roleLabel,
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -631,9 +628,9 @@ class _DiscoveryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         children: [
@@ -643,13 +640,13 @@ class _DiscoveryCard extends StatelessWidget {
             onChanged: onChanged,
             title: const Text(
               'Device discovery',
-              style: TextStyle(color: _deepText, fontWeight: FontWeight.w700),
+              style: TextStyle(color: dc.ink, fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
               discovering
                   ? 'Scanning for nearby relay and gateway peers.'
                   : 'Start BLE discovery to refresh the local mesh roster.',
-              style: const TextStyle(color: _mutedText),
+              style: const TextStyle(color: dc.mutedInk),
             ),
           ),
         ],
@@ -668,9 +665,9 @@ class _PeopleMapPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         children: [
@@ -678,10 +675,10 @@ class _PeopleMapPanel extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7EADF),
+              color: dc.chipFill,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.map_outlined, color: _warmAccent),
+            child: const Icon(Icons.map_outlined, color: dc.warmSeed),
           ),
           const SizedBox(width: 14),
           const Expanded(
@@ -691,7 +688,7 @@ class _PeopleMapPanel extends StatelessWidget {
                 Text(
                   'People & mesh map',
                   style: TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -699,7 +696,7 @@ class _PeopleMapPanel extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'Open the shared mobile map to see people pins, mesh nodes, and survivor signals in one place.',
-                  style: TextStyle(color: _mutedText, height: 1.45),
+                  style: TextStyle(color: dc.mutedInk, height: 1.45),
                 ),
               ],
             ),
@@ -707,8 +704,9 @@ class _PeopleMapPanel extends StatelessWidget {
           FilledButton.icon(
             onPressed: onOpenMap,
             style: FilledButton.styleFrom(
-              backgroundColor: _warmAccent,
+              backgroundColor: dc.warmSeed,
               foregroundColor: Colors.white,
+              minimumSize: const Size(0, 44),
             ),
             icon: const Icon(Icons.open_in_new),
             label: const Text('Open'),
@@ -766,9 +764,9 @@ class _SarModePanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -779,7 +777,7 @@ class _SarModePanel extends StatelessWidget {
                 child: Text(
                   'SAR mode',
                   style: TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -789,8 +787,9 @@ class _SarModePanel extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onCompassPressed,
                   style: FilledButton.styleFrom(
-                    backgroundColor: _warmAccent,
+                    backgroundColor: dc.warmSeed,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 44),
                   ),
                   icon: const Icon(Icons.explore),
                   label: const Text('Open compass'),
@@ -804,7 +803,7 @@ class _SarModePanel extends StatelessWidget {
                 : canReviewSignals
                 ? 'Only verified department responders can enable passive sensing, but citizens, departments, and municipalities can still review synced survivor signals here.'
                 : 'SAR controls stay locked for non-responder accounts.',
-            style: const TextStyle(color: _mutedText, height: 1.45),
+            style: const TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 12),
           SwitchListTile(
@@ -813,13 +812,13 @@ class _SarModePanel extends StatelessWidget {
             onChanged: canEnableSarMode ? onToggle : null,
             title: const Text(
               'Passive survivor detection',
-              style: TextStyle(color: _deepText, fontWeight: FontWeight.w700),
+              style: TextStyle(color: dc.ink, fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
               canEnableSarMode
                   ? 'BLE and acoustic sensing can run locally, while Wi-Fi probe sniffing stays unavailable on standard mobile app sandboxes.'
                   : 'Verification approval is required before SAR Mode can be enabled on this device.',
-              style: const TextStyle(color: _mutedText),
+              style: const TextStyle(color: dc.mutedInk),
             ),
           ),
           const SizedBox(height: 8),
@@ -846,14 +845,14 @@ class _SarModePanel extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF7EADF),
+                color: dc.chipFill,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Text(
                 liveInputs.isEmpty
                     ? 'Passive sensing is armed, but this device still needs the required Nearby Devices or Microphone permission before live inputs can start. Identifiers stay anonymized and raw audio never leaves the device.'
                     : '${liveInputs.join(', ')} ${liveInputs.length == 1 ? 'is' : 'are'} active. Identifiers are anonymized before storage, raw audio never leaves the device, and continuous sensing increases battery use during a sweep.',
-                style: const TextStyle(color: _mutedText, height: 1.45),
+                style: const TextStyle(color: dc.mutedInk, height: 1.45),
               ),
             ),
           ],
@@ -868,7 +867,7 @@ class _SarModePanel extends StatelessWidget {
           const Text(
             'Survivor signal feed',
             style: TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -915,10 +914,10 @@ class _SubsystemStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = !supported
-        ? const Color(0xFF8A7F79)
+        ? dc.mutedInk
         : active
-        ? const Color(0xFF397154)
-        : _coolAccent;
+        ? dc.statusResolved
+        : dc.coolAccent;
     final status = !supported
         ? 'Unavailable'
         : active
@@ -932,7 +931,7 @@ class _SubsystemStatusCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: active ? const Color(0xFFD4E6D8) : _warmBorder,
+          color: active ? dc.statusResolved.withValues(alpha: 0.2) : dc.warmBorder,
         ),
       ),
       child: Row(
@@ -965,7 +964,7 @@ class _SubsystemStatusCard extends StatelessWidget {
                       child: Text(
                         label,
                         style: const TextStyle(
-                          color: _deepText,
+                          color: dc.ink,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -994,7 +993,7 @@ class _SubsystemStatusCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     note!,
-                    style: const TextStyle(color: _mutedText, height: 1.4),
+                    style: const TextStyle(color: dc.mutedInk, height: 1.4),
                   ),
                 ],
               ],
@@ -1018,18 +1017,18 @@ class _ActiveTargetCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFDCE8F3),
+        color: dc.coolAccent.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         children: [
-          const Icon(Icons.explore, color: _coolAccent),
+          const Icon(Icons.explore, color: dc.coolAccent),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Pinned target: ${signal.detectedDeviceIdentifier}',
               style: const TextStyle(
-                color: _deepText,
+                color: dc.ink,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1069,9 +1068,9 @@ class _SignalCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: pinned ? const Color(0xFFF7EADF) : Colors.white,
+        color: pinned ? dc.chipFill : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: pinned ? _warmAccent : _warmBorder),
+        border: Border.all(color: pinned ? dc.warmSeed : dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1082,7 +1081,7 @@ class _SignalCard extends StatelessWidget {
                 child: Text(
                   '$title | ${signal.estimatedDistanceMeters.toStringAsFixed(1)} m',
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1093,8 +1092,9 @@ class _SignalCard extends StatelessWidget {
                 FilledButton(
                   onPressed: onOpen,
                   style: FilledButton.styleFrom(
-                    backgroundColor: pinned ? _warmAccent : _coolAccent,
+                    backgroundColor: pinned ? dc.warmSeed : dc.coolAccent,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 40),
                   ),
                   child: Text(pinned ? 'Compass' : 'Track'),
                 ),
@@ -1103,12 +1103,12 @@ class _SignalCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '${signal.detectedDeviceIdentifier} | Confidence ${(signal.confidence * 100).round()}% | ${signal.isRelayed ? 'relayed ${signal.hopCount}/${signal.maxHops}' : 'local'}',
-            style: const TextStyle(color: _mutedText, height: 1.45),
+            style: const TextStyle(color: dc.mutedInk, height: 1.45),
           ),
           const SizedBox(height: 8),
           Text(
             _MeshStatusScreenState._formatTime(signal.lastSeenTimestamp),
-            style: const TextStyle(color: _mutedText, fontSize: 12),
+            style: const TextStyle(color: dc.mutedInk, fontSize: 12),
           ),
           if (lastSeenBeacon != null) ...[
             const SizedBox(height: 10),
@@ -1116,7 +1116,7 @@ class _SignalCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF7EADF),
+                color: dc.chipFill,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -1125,7 +1125,7 @@ class _SignalCard extends StatelessWidget {
                   Text(
                     'Last Seen beacon ${_MeshStatusScreenState._formatTime(lastSeenBeacon!.recordedAt)}',
                     style: const TextStyle(
-                      color: _deepText,
+                      color: dc.ink,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1135,12 +1135,12 @@ class _SignalCard extends StatelessWidget {
                       lastSeenBeacon!.lat,
                       lastSeenBeacon!.lng,
                     ),
-                    style: const TextStyle(color: _mutedText),
+                    style: const TextStyle(color: dc.mutedInk),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'State ${_MeshStatusScreenState._appStateLabel(lastSeenBeacon!.appState)}${lastSeenBeacon!.batteryPct == null ? '' : ' | Battery ${lastSeenBeacon!.batteryPct}%'}',
-                    style: const TextStyle(color: _mutedText),
+                    style: const TextStyle(color: dc.mutedInk),
                   ),
                 ],
               ),
@@ -1162,9 +1162,9 @@ class _PeerBoard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1172,7 +1172,7 @@ class _PeerBoard extends StatelessWidget {
           const Text(
             'Nearby peers',
             style: TextStyle(
-              color: _deepText,
+              color: dc.ink,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -1185,19 +1185,19 @@ class _PeerBoard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _warmBorder),
+                border: Border.all(color: dc.warmBorder),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: peer.isGateway
-                        ? const Color(0xFFE6F1E8)
-                        : const Color(0xFFDCE8F3),
+                        ? dc.statusResolved.withValues(alpha: 0.15)
+                        : dc.coolAccent.withValues(alpha: 0.15),
                     child: Icon(
                       peer.isGateway ? Icons.cloud_done : Icons.phone_android,
                       color: peer.isGateway
-                          ? const Color(0xFF397154)
-                          : _coolAccent,
+                          ? dc.statusResolved
+                          : dc.coolAccent,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1210,7 +1210,7 @@ class _PeerBoard extends StatelessWidget {
                               ? peer.deviceName
                               : peer.endpointId.substring(0, 8),
                           style: const TextStyle(
-                            color: _deepText,
+                            color: dc.ink,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1221,14 +1221,14 @@ class _PeerBoard extends StatelessWidget {
                               : (peer.isGateway
                                     ? 'Gateway peer'
                                     : 'Relay peer'),
-                          style: const TextStyle(color: _mutedText),
+                          style: const TextStyle(color: dc.mutedInk),
                         ),
                       ],
                     ),
                   ),
                   Text(
                     _MeshStatusScreenState._formatTime(peer.lastSeen),
-                    style: const TextStyle(color: _mutedText, fontSize: 12),
+                    style: const TextStyle(color: dc.mutedInk, fontSize: 12),
                   ),
                 ],
               ),
@@ -1257,9 +1257,9 @@ class _EmptyPanel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _warmPanel,
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _warmBorder),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,10 +1268,10 @@ class _EmptyPanel extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFF7EADF),
+              color: dc.chipFill,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: _warmAccent),
+            child: Icon(icon, color: dc.warmSeed),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1281,7 +1281,7 @@ class _EmptyPanel extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    color: _deepText,
+                    color: dc.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1289,7 +1289,7 @@ class _EmptyPanel extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   body,
-                  style: const TextStyle(color: _mutedText, height: 1.45),
+                  style: const TextStyle(color: dc.mutedInk, height: 1.45),
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_assessment_screen.dart';
 import 'package:dispatch_mobile/features/department/presentation/department_create_post_screen.dart';
@@ -15,15 +16,7 @@ import 'package:dispatch_mobile/features/shared/presentation/notifications_scree
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
-import 'package:dispatch_mobile/features/shared/presentation/widgets/card.dart';
 
-const _warmBackground = Color(0xFFFDF7F2);
-const _warmPanel = Color(0xFFFFF8F3);
-const _warmBorder = Color(0xFFE7D1C6);
-const _warmAccent = Color(0xFFA14B2F);
-const _coolAccent = Color(0xFF1695D3);
-const _deepText = Color(0xFF4E433D);
-const _mutedText = Color(0xFF7A6B63);
 
 class DepartmentHomeScreen extends ConsumerStatefulWidget {
   const DepartmentHomeScreen({super.key});
@@ -50,9 +43,9 @@ class _DepartmentHomeScreenState extends ConsumerState<DepartmentHomeScreen> {
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      backgroundColor: _warmBackground,
+      backgroundColor: dc.warmBackground,
       appBar: AppBar(
-        backgroundColor: _warmBackground,
+        backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         title: Text(strings.departmentTitle),
         actions: [
@@ -109,7 +102,7 @@ class _PendingView extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Colors.orange.shade100,
+                color: dc.statusPending.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -222,7 +215,7 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: Colors.red.shade100,
+            color: dc.statusError.withValues(alpha: 0.15),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.close, size: 32, color: Colors.red),
@@ -239,13 +232,13 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
+              color: dc.statusError.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade200),
+              border: Border.all(color: dc.statusError.withValues(alpha: 0.3)),
             ),
             child: Text(
               strings.rejectionReason(widget.dept.rejectionReason!),
-              style: TextStyle(color: Colors.red.shade700),
+              style: TextStyle(color: dc.statusError),
             ),
           ),
         ],
@@ -266,12 +259,12 @@ class _RejectedViewState extends ConsumerState<_RejectedView> {
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: dc.statusError.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 _error!,
-                style: TextStyle(color: Colors.red.shade700),
+                style: TextStyle(color: dc.statusError),
               ),
             ),
           TextField(
@@ -346,7 +339,7 @@ class _ApprovedView extends ConsumerWidget {
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFA14B2F), Color(0xFF7B3A25), Color(0xFF425E72)],
+              colors: dc.heroGradient,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -413,9 +406,9 @@ class _ApprovedView extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: _warmPanel,
+            color: dc.warmSurface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: _warmBorder),
+            border: Border.all(color: dc.warmBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,7 +416,7 @@ class _ApprovedView extends ConsumerWidget {
               const Text(
                 'Department profile',
                 style: TextStyle(
-                  color: _deepText,
+                  color: dc.ink,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
@@ -437,7 +430,7 @@ class _ApprovedView extends ConsumerWidget {
         const Text(
           'Quick actions',
           style: TextStyle(
-            color: _deepText,
+            color: dc.ink,
             fontSize: 24,
             fontWeight: FontWeight.w700,
           ),
@@ -445,7 +438,7 @@ class _ApprovedView extends ConsumerWidget {
         const SizedBox(height: 8),
         const Text(
           'These cards follow the same quick-action rhythm as the web dashboard, but stay tuned for thumb-first mobile use.',
-          style: TextStyle(color: _mutedText, height: 1.45),
+          style: TextStyle(color: dc.mutedInk, height: 1.45),
         ),
         const SizedBox(height: 12),
         GridView.count(
@@ -458,7 +451,7 @@ class _ApprovedView extends ConsumerWidget {
           children: [
             _DepartmentActionCard(
               icon: Icons.assignment,
-              accent: _coolAccent,
+              accent: dc.coolAccent,
               title: strings.incidentBoard,
               body: strings.incidentBoardSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -469,7 +462,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.campaign,
-              accent: _warmAccent,
+              accent: dc.warmSeed,
               title: strings.createPost,
               body: strings.createPostSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -480,7 +473,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.assessment,
-              accent: const Color(0xFF397154),
+              accent: dc.statusResolved,
               title: strings.damageAssessment,
               body: strings.damageAssessmentSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -491,7 +484,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.newspaper_outlined,
-              accent: const Color(0xFF7B5E57),
+              accent: dc.statusResponding,
               title: strings.communityFeed,
               body: strings.communityFeedSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -500,7 +493,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.forum_outlined,
-              accent: _warmAccent,
+              accent: dc.warmSeed,
               title: strings.offlineComms,
               body: transport.unreadMeshMessageCount > 0
                   ? strings.unreadMeshMessages(transport.unreadMeshMessageCount)
@@ -514,7 +507,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.cell_tower,
-              accent: _coolAccent,
+              accent: dc.coolAccent,
               title: strings.meshSar,
               body: transport.transportStatusNote ?? strings.meshSarSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -523,7 +516,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.map_outlined,
-              accent: const Color(0xFF397154),
+              accent: dc.statusResolved,
               title: 'People & Mesh Map',
               body: 'See live people pins, mesh nodes, and survivor signals.',
               onTap: () => Navigator.of(context).push(
@@ -539,7 +532,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.explore,
-              accent: const Color(0xFFD97757),
+              accent: dc.statusPending,
               title: 'Survivor Locator',
               body: 'Track direction and estimated distance to a selected signal.',
               onTap: () => Navigator.of(context).push(
@@ -550,7 +543,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.notifications_outlined,
-              accent: const Color(0xFF7B5E57),
+              accent: dc.statusResponding,
               title: strings.notifications,
               body: strings.notificationsSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -559,7 +552,7 @@ class _ApprovedView extends ConsumerWidget {
             ),
             _DepartmentActionCard(
               icon: Icons.sos,
-              accent: const Color(0xFFB3261E),
+              accent: dc.statusError,
               title: strings.emergencySos,
               body: strings.emergencySosSubtitle,
               onTap: () => Navigator.of(context).push(
@@ -640,9 +633,9 @@ class _DepartmentActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: _warmPanel,
+          color: dc.warmSurface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _warmBorder),
+          border: Border.all(color: dc.warmBorder),
           boxShadow: const [
             BoxShadow(
               color: Color(0x14131110),
@@ -670,7 +663,7 @@ class _DepartmentActionCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: _warmAccent,
+                      color: dc.warmSeed,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -688,7 +681,7 @@ class _DepartmentActionCard extends StatelessWidget {
             Text(
               title,
               style: const TextStyle(
-                color: _deepText,
+                color: dc.ink,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -697,7 +690,7 @@ class _DepartmentActionCard extends StatelessWidget {
             Expanded(
               child: Text(
                 body,
-                style: const TextStyle(color: _mutedText, height: 1.4),
+                style: const TextStyle(color: dc.mutedInk, height: 1.4),
               ),
             ),
           ],
@@ -718,7 +711,7 @@ class _DeptDetails extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: dc.chipFill,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

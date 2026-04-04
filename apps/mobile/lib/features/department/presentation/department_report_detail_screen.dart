@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -456,7 +457,7 @@ class _DepartmentReportDetailScreenState
                       const TextSpan(
                         text: ' (you)',
                         style: TextStyle(
-                          color: Color(0xFFD97757),
+                          color: dc.statusPending,
                           fontSize: 11,
                         ),
                       ),

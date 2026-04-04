@@ -1,6 +1,7 @@
 // Profile screen -- edit full name and phone number.
 
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -85,8 +86,8 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFA14B2F), Color(0xFF7B3A25)],
+            gradient: LinearGradient(
+              colors: [dc.heroGradient[0], dc.heroGradient[1]],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -176,12 +177,12 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
+              color: dc.statusError.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               _error!,
-              style: TextStyle(color: Colors.red.shade700),
+              style: TextStyle(color: dc.statusError),
             ),
           ),
         if (_success)
@@ -189,12 +190,12 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
+              color: dc.statusResolved.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               'Profile updated.',
-              style: TextStyle(color: Colors.green.shade700),
+              style: TextStyle(color: dc.statusResolved),
             ),
           ),
         TextField(
@@ -264,9 +265,9 @@ class _StatTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF8F3),
+          color: dc.warmSurface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE7D1C6)),
+          border: Border.all(color: dc.warmBorder),
         ),
         child: Column(
           children: [
@@ -291,10 +292,10 @@ class _ReportRow extends StatelessWidget {
 
   Color _statusColor(String status) {
     return switch (status.toLowerCase()) {
-      'pending' => const Color(0xFFD97757),
-      'accepted' => const Color(0xFF1695D3),
-      'responding' => const Color(0xFF7B5E57),
-      'resolved' => const Color(0xFF397154),
+      'pending' => dc.statusPending,
+      'accepted' => dc.statusAccepted,
+      'responding' => dc.statusResponding,
+      'resolved' => dc.statusResolved,
       _ => Colors.grey,
     };
   }
@@ -306,9 +307,9 @@ class _ReportRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8F3),
+        color: dc.warmSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE7D1C6)),
+        border: Border.all(color: dc.warmBorder),
       ),
       child: Row(
         children: [

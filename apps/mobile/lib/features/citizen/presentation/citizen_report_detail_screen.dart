@@ -4,6 +4,7 @@ import 'package:dispatch_mobile/core/i18n/app_strings.dart';
 import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/shared/presentation/location_map.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,10 +94,10 @@ class _CitizenReportDetailScreenState
 
   Color _statusColor(String status) {
     return switch (status) {
-      'pending' => Colors.orange,
-      'accepted' => Colors.blue,
-      'responding' => Colors.purple,
-      'resolved' => Colors.green,
+      'pending' => dc.statusPending,
+      'accepted' => dc.statusAccepted,
+      'responding' => dc.statusResponding,
+      'resolved' => dc.statusResolved,
       _ => Colors.grey,
     };
   }
@@ -336,10 +337,10 @@ class _CitizenReportDetailScreenState
                                   item['department_name'] as String? ??
                                       strings.unknownDepartment;
                               final actionColor = action == 'accepted'
-                                  ? Colors.green
+                                  ? dc.statusResolved
                                   : action == 'declined'
-                                      ? Colors.red
-                                      : Colors.orange;
+                                      ? dc.statusError
+                                      : dc.statusPending;
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 8),

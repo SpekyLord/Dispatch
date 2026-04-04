@@ -68,11 +68,15 @@ class AnalyticsService:
         # response time metrics from status history
         response_times = _compute_response_times(history)
 
-        # department activity from responses
-        dept_activity = _compute_department_activity(responses)
+        # department activity from responses (needs name lookup)
+        dept_activity = _compute_department_activity(responses, self.client)
 
         # unattended: pending status + no acceptance after threshold
         unattended = _count_unattended(reports, responses, now)
+
+        # Compute a single avg response time in hours for the dashboard card.
+        # Uses the avg pending→accepted metric as the primary indicator.
+        avg_hours = _avg_response_hours(response_times)
 
         return {
             "total_reports": total,
@@ -81,8 +85,10 @@ class AnalyticsService:
             "last_7_days": last_7,
             "last_30_days": last_30,
             "response_times": response_times,
+            "avg_response_time_hours": avg_hours,
             "department_activity": dept_activity,
-            "unattended_reports": unattended,
+            "unattended_count": unattended,
+            "unattended_reports": unattended,  # compat: mobile reads this key
         }
 
 
@@ -159,16 +165,48 @@ def _safe_avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
 
 
-def _compute_department_activity(responses: list[dict]) -> list[dict[str, Any]]:
-    """Count accepts/declines per department."""
-    activity: dict[str, dict[str, int]] = defaultdict(lambda: {"accepted": 0, "declined": 0})
+def _avg_response_hours(response_times: dict[str, float | None]) -> float | None:
+    """Compute a single average response-time metric in hours.
+
+    Uses the avg pending→accepted time as the primary indicator.  Falls back
+    to accepted→responding, then responding→resolved if the primary is missing.
+    """
+    for key in ("avg_create_to_accept", "avg_accept_to_responding", "avg_responding_to_resolved"):
+        val = response_times.get(key)
+        if val is not None:
+            return round(val / 3600, 1)
+    return None
+
+
+def _compute_department_activity(responses: list[dict], client) -> list[dict[str, Any]]:
+    """Count accepts/declines per department, with name lookup."""
+    activity: dict[str, dict[str, int]] = defaultdict(lambda: {"accepts": 0, "declines": 0})
     for r in responses:
         dept_id = r.get("department_id")
         action = r.get("action") or r.get("response_status") or r.get("status")
         if dept_id and action in ("accepted", "declined"):
-            activity[dept_id][action] += 1
+            key = "accepts" if action == "accepted" else "declines"
+            activity[dept_id][key] += 1
 
-    return [{"department_id": did, **counts} for did, counts in activity.items()]
+    if not activity:
+        return []
+
+    # Batch-fetch department names
+    dept_names: dict[str, str] = {}
+    try:
+        rows = client.db_query(
+            "departments",
+            params={"select": "id,name"},
+            use_service_role=True,
+        )
+        dept_names = {row["id"]: row.get("name", "Unknown") for row in rows}
+    except Exception:
+        pass
+
+    return [
+        {"name": dept_names.get(did, did), **counts}
+        for did, counts in activity.items()
+    ]
 
 
 def _count_unattended(

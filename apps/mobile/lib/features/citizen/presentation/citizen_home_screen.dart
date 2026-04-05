@@ -2,8 +2,8 @@ import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
+import 'package:dispatch_mobile/features/mesh/presentation/citizen_mesh_dashboard_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/mesh_status_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,7 +48,7 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const MeshStatusScreen(),
+      CitizenMeshDashboardScreen(onOpenMapTab: () => _onItemTapped(1)),
       const MeshPeopleMapScreen(
         title: 'Mesh Feed Map',
         subtitle: 'Interactive map',

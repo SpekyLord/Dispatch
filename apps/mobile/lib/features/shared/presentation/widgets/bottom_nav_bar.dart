@@ -16,43 +16,40 @@ class AppBottomNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark
-        ? dc.darkSurface.withValues(alpha: 0.9)
-        : dc.surface.withValues(alpha: 0.9);
-    final selectedColor = isDark ? dc.darkInk : dc.onSurface;
+    final bgColor = isDark
+        ? dc.darkSurface.withValues(alpha: 0.8)
+        : dc.surface.withValues(alpha: 0.92);
+    final selectedColor = isDark ? dc.darkPrimaryAccent : dc.primary;
     final unselectedColor = isDark
-        ? dc.darkMutedInk
-        : dc.onSurfaceVariant.withValues(alpha: 0.82);
-    final dividerColor = isDark
-        ? dc.darkBorder.withValues(alpha: 0.45)
-        : dc.outlineVariant.withValues(alpha: 0.2);
+        ? dc.darkInk.withValues(alpha: 0.5)
+        : dc.onSurface.withValues(alpha: 0.5);
 
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: backgroundColor,
-            border: Border(top: BorderSide(color: dividerColor)),
+            color: bgColor,
             boxShadow: [
               BoxShadow(
-                color: dc.onSurface.withValues(alpha: 0.05),
-                blurRadius: 24,
-                offset: const Offset(0, -6),
+                color: dc.onSurface.withValues(alpha: 0.06),
+                blurRadius: 32,
+                offset: const Offset(0, -8),
               ),
             ],
           ),
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _NavItem(
-                    icon: Icons.list_alt_outlined,
-                    activeIcon: Icons.list,
-                    label: 'Feed',
+                    icon: Icons.hub_outlined,
+                    activeIcon: Icons.hub,
+                    label: 'MESH',
                     isSelected: selectedIndex == 0,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -61,16 +58,16 @@ class AppBottomNavigationBar extends StatelessWidget {
                   _NavItem(
                     icon: Icons.map_outlined,
                     activeIcon: Icons.map,
-                    label: 'Map',
+                    label: 'MAP',
                     isSelected: selectedIndex == 1,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
                     onTap: () => onItemTapped(1),
                   ),
                   _NavItem(
-                    icon: Icons.hub_outlined,
-                    activeIcon: Icons.hub,
-                    label: 'Nodes',
+                    icon: Icons.dynamic_feed_outlined,
+                    activeIcon: Icons.dynamic_feed,
+                    label: 'FEED',
                     isSelected: selectedIndex == 2,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -79,7 +76,7 @@ class AppBottomNavigationBar extends StatelessWidget {
                   _NavItem(
                     icon: Icons.settings_outlined,
                     activeIcon: Icons.settings,
-                    label: 'Settings',
+                    label: 'SETTINGS',
                     isSelected: selectedIndex == 3,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -117,32 +114,38 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isSelected ? selectedColor : unselectedColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(isSelected ? activeIcon : icon, color: color, size: 22),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: color,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: isSelected
+            ? BoxDecoration(
+                color: isDark
+                    ? dc.darkPrimaryAccent.withValues(alpha: 0.12)
+                    : dc.primaryContainer,
+                borderRadius: BorderRadius.circular(24),
+              )
+            : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(isSelected ? activeIcon : icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                color: color,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: 1.0,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

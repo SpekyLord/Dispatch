@@ -16,7 +16,7 @@ class CitizenHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 2;
 
   @override
   void initState() {
@@ -48,17 +48,17 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      CitizenFeedScreen(
-        onOpenMapTab: () => _onItemTapped(1),
-        onOpenNodesTab: () => _onItemTapped(2),
-      ),
+      const MeshStatusScreen(),
       const MeshPeopleMapScreen(
         title: 'Mesh Feed Map',
         subtitle: 'Interactive map',
         allowResolveActions: false,
         allowCompassActions: true,
       ),
-      const MeshStatusScreen(),
+      CitizenFeedScreen(
+        onOpenMapTab: () => _onItemTapped(1),
+        onOpenNodesTab: () => _onItemTapped(0),
+      ),
       const CitizenProfileScreen(),
     ];
 

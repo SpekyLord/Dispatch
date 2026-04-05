@@ -220,7 +220,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: dc.alertFill,
+                          color: dc.chipFill,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: dc.warmSeed.withValues(alpha: 0.18),

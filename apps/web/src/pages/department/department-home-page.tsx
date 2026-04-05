@@ -152,15 +152,6 @@ type ReportSummary = {
   } | null;
 };
 
-const liveMapMarkerSlots = [
-  { left: "18%", top: "24%" },
-  { left: "64%", top: "34%" },
-  { left: "43%", top: "68%" },
-  { left: "82%", top: "56%" },
-  { left: "24%", top: "78%" },
-  { left: "74%", top: "17%" },
-] as const;
-
 const DEFAULT_MAP_CENTER: [number, number] = [14.5995, 120.9842];
 
 function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
@@ -188,7 +179,6 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
   const alertReports = reports
     .filter((report) => report.status !== "resolved")
     .slice(0, 4);
-  const mapReports = reports.slice(0, liveMapMarkerSlots.length);
   const geoReports = reports
     .filter(
       (
@@ -200,9 +190,6 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
         Number.isFinite(report.longitude),
     )
     .slice(0, 12);
-  const priorityReport = geoReports[0] ?? alertReports[0] ?? reports[0] ?? null;
-  const coverageLabel =
-    department.area_of_responsibility?.trim() || "Municipal coverage";
   const mapStatCards = [
     {
       label: "Pending Dispatch",
@@ -272,7 +259,10 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
   return (
     <div className="space-y-6">
       <DepartmentPageHero
-        chips={[formatDepartmentType(department.type), coverageLabel]}
+        chips={[
+          formatDepartmentType(department.type),
+          department.area_of_responsibility?.trim() || "Municipal coverage",
+        ]}
         dataTestId="department-page-hero"
         eyebrow="Department Command Center"
         headingTone="soft-light"
@@ -287,12 +277,7 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
         >
           <div className="space-y-3">
             <LiveMapPlaceholderCard
-              coverageLabel={coverageLabel}
-              department={department}
               mapStatCards={mapStatCards}
-              pendingCount={pendingCount}
-              priorityReport={priorityReport}
-              reports={mapReports}
               geoReports={geoReports}
               reportsLoading={reportsLoading}
             />
@@ -317,17 +302,10 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
 }
 
 function LiveMapPlaceholderCard({
-  coverageLabel,
-  department,
   mapStatCards,
-  pendingCount,
-  priorityReport,
   geoReports,
-  reports,
   reportsLoading,
 }: {
-  coverageLabel: string;
-  department: DepartmentInfo;
   mapStatCards: ReadonlyArray<{
     label: string;
     value: number;
@@ -336,10 +314,7 @@ function LiveMapPlaceholderCard({
     tone: string;
     detail: string;
   }>;
-  pendingCount: number;
-  priorityReport: ReportSummary | null;
   geoReports: Array<ReportSummary & { latitude: number; longitude: number }>;
-  reports: ReportSummary[];
   reportsLoading: boolean;
 }) {
   return (
@@ -406,126 +381,11 @@ function LiveMapPlaceholderCard({
         </div>
 
         <div
-          className="relative mt-5 min-h-[430px] overflow-hidden rounded-[30px] border border-[#263848]/70 bg-[#111c25] sm:min-h-[500px]"
+          className="relative mt-5 min-h-[365px] overflow-hidden rounded-[30px] border border-[#d8c9bc] bg-[#f8f1ea] sm:min-h-[425px]"
           data-testid="department-live-map-placeholder"
         >
           <div className="absolute inset-0">
             <DepartmentDashboardMap geoReports={geoReports} />
-          </div>
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(112,165,214,0.18),transparent_26%),radial-gradient(circle_at_78%_70%,rgba(217,119,87,0.18),transparent_22%),linear-gradient(180deg,rgba(8,14,20,0.12),rgba(8,14,20,0.52))]" />
-
-          <div className="pointer-events-none absolute left-5 top-5 w-[calc(100%-2.5rem)] max-w-[360px] rounded-[26px] border border-white/10 bg-[rgba(10,17,23,0.74)] p-5 text-white shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-md">
-            <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-white/58">
-              Live Incident Map
-            </p>
-            <h2 className="mt-3 font-headline text-4xl leading-none">
-              {department.name}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-white/74">
-              Coverage focus: {coverageLabel}. This block is ready to be
-              replaced with an actual live map feed when the GIS layer is
-              connected.
-            </p>
-
-            <div className="mt-5 grid grid-cols-3 gap-3">
-              <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
-                  Markers
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {formatMetricValue(geoReports.length || reports.length)}
-                </p>
-              </div>
-              <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
-                  Queue
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {formatMetricValue(pendingCount)}
-                </p>
-              </div>
-              <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
-                  Mode
-                </p>
-                <p className="mt-2 text-2xl font-semibold">Live</p>
-              </div>
-            </div>
-          </div>
-
-          {geoReports.length === 0 &&
-            reports.map((report, index) => {
-              const markerSlot =
-                liveMapMarkerSlots[index] ?? liveMapMarkerSlots[0];
-              const markerTone = mapMarkerTone(report.category);
-
-              return (
-                <div
-                  key={report.id}
-                  aria-label={`Map marker for ${reportTitle(report)}`}
-                  className="absolute"
-                  style={{ left: markerSlot.left, top: markerSlot.top }}
-                >
-                  <div
-                    className={`absolute -inset-3 rounded-full blur-md ${markerTone.glowClassName}`}
-                  />
-                  <div
-                    className={`relative flex h-5 w-5 items-center justify-center rounded-full border-2 border-white ${markerTone.shellClassName}`}
-                  >
-                    <div
-                      className={`h-2.5 w-2.5 rounded-full ${markerTone.coreClassName}`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-
-          <div className="pointer-events-none absolute bottom-5 left-5 rounded-[22px] border border-white/10 bg-[rgba(10,17,23,0.68)] px-4 py-3 text-white/78 backdrop-blur-md">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/48">
-              Active Lane
-            </p>
-            <p className="mt-1 text-sm">
-              {geoReports.length > 0
-                ? `${geoReports.length} live incident marker${geoReports.length === 1 ? "" : "s"} plotted on OpenStreetMap.`
-                : reports.length > 0
-                  ? `${reports.length} incident marker${reports.length === 1 ? "" : "s"} awaiting coordinates.`
-                  : "No incident markers available yet."}
-            </p>
-          </div>
-
-          {priorityReport ? (
-            <div className="pointer-events-none absolute bottom-5 right-5 w-[calc(100%-2.5rem)] max-w-[300px] rounded-[24px] border border-white/10 bg-[rgba(9,15,20,0.74)] p-4 text-white shadow-[0_20px_55px_rgba(0,0,0,0.28)] backdrop-blur-md">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/48">
-                Priority Incident
-              </p>
-              <h3 className="mt-2 text-lg font-semibold text-white">
-                {reportTitle(priorityReport)}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-white/70">
-                {reportPreview(priorityReport)}
-              </p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${statusStyle(priorityReport.status)}`}
-                >
-                  {formatLabel(priorityReport.status)}
-                </span>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
-                  {formatLabel(priorityReport.category || "general")}
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="pointer-events-none absolute right-5 top-5 flex flex-col gap-3">
-            <div className="rounded-[16px] border border-white/10 bg-[rgba(10,17,23,0.68)] px-3 py-2 text-center text-white/72 backdrop-blur-md">
-              <span className="material-symbols-outlined text-[20px]">add</span>
-            </div>
-            <div className="rounded-[16px] border border-white/10 bg-[rgba(10,17,23,0.68)] px-3 py-2 text-center text-white/72 backdrop-blur-md">
-              <span className="material-symbols-outlined text-[20px]">
-                remove
-              </span>
-            </div>
           </div>
         </div>
       </Card>
@@ -778,7 +638,7 @@ function IncidentActivityBoard({
 }) {
   return (
     <Card
-      className="rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-5 shadow-[0_18px_40px_rgba(132,94,59,0.08)] sm:p-6"
+      className="flex h-full flex-col rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-5 shadow-[0_18px_40px_rgba(132,94,59,0.08)] sm:p-6"
       data-testid="department-activity-board"
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -846,8 +706,8 @@ function IncidentActivityBoard({
             ))}
           </div>
 
-          <div className="mt-6 hidden overflow-hidden rounded-[24px] border border-[#eee1d8] bg-white lg:block">
-            <div className="grid grid-cols-[minmax(0,2.3fr)_0.9fr_0.9fr_0.9fr_0.8fr] gap-4 border-b border-[#eee1d8] bg-[#fbf5ef] px-5 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[#8a6d5d]">
+          <div className="mt-6 hidden min-h-[420px] flex-1 overflow-hidden rounded-[24px] border border-[#eee1d8] bg-white lg:flex lg:flex-col">
+            <div className="grid grid-cols-[minmax(0,2.8fr)_minmax(110px,0.9fr)_minmax(110px,0.95fr)_minmax(138px,1fr)_88px] items-center gap-5 border-b border-[#eee1d8] bg-[#fbf5ef] px-5 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-[#8a6d5d]">
               <span>Incident</span>
               <span>Category</span>
               <span>Received</span>
@@ -859,10 +719,10 @@ function IncidentActivityBoard({
               {reports.map((report) => (
                 <Link
                   key={report.id}
-                  className="grid grid-cols-[minmax(0,2.3fr)_0.9fr_0.9fr_0.9fr_0.8fr] gap-4 px-5 py-4 transition-colors hover:bg-[#fdf8f3]"
+                  className="grid grid-cols-[minmax(0,2.8fr)_minmax(110px,0.9fr)_minmax(110px,0.95fr)_minmax(138px,1fr)_88px] items-center gap-5 px-5 py-4 transition-colors hover:bg-[#fdf8f3]"
                   to={`/department/reports/${report.id}`}
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 self-start">
                     <p className="truncate text-[15px] font-semibold text-[#2f211c]">
                       {reportTitle(report)}
                     </p>
@@ -870,12 +730,12 @@ function IncidentActivityBoard({
                       {reportPreview(report)}
                     </p>
                   </div>
-                  <div className="flex items-center">
+                  <div className="flex items-center min-w-0">
                     <span className="rounded-full border border-[#ecd8cf] bg-[#fff8f3] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8a6d5d]">
                       {formatLabel(report.category || "general")}
                     </span>
                   </div>
-                  <div className="flex flex-col justify-center">
+                  <div className="flex min-w-0 flex-col justify-center">
                     <span className="text-sm font-semibold text-[#3d2f29]">
                       {formatTimeAgo(report.created_at)}
                     </span>
@@ -883,20 +743,27 @@ function IncidentActivityBoard({
                       {formatClockTime(report.created_at)}
                     </span>
                   </div>
-                  <div className="flex items-center">
+                  <div className="flex items-center min-w-0">
                     <span
                       className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${statusStyle(report.status)}`}
                     >
                       {formatLabel(report.status)}
                     </span>
                   </div>
-                  <div className="flex items-center">
+                  <div className="flex items-center min-w-0">
                     <span className="text-sm font-semibold text-[#6d564b]">
                       {formatVisibleRoute(report)}
                     </span>
                   </div>
                 </Link>
               ))}
+            </div>
+
+            <div className="flex-1 bg-[#fffdfb]" />
+
+            <div className="flex items-center justify-between border-t border-[#f1e7de] bg-[#fffaf6] px-5 py-3.5 text-[11px] text-[#9b8578]">
+              <span>These are the latest routed incident updates visible to your agency.</span>
+              <span className="font-semibold text-[#b58b77]">Live board snapshot</span>
             </div>
           </div>
         </>
@@ -932,41 +799,6 @@ function severityTone(severity?: string | null) {
       return { dotClassName: "bg-[#4f7c66]" };
     default:
       return { dotClassName: "bg-[#8d7b71]" };
-  }
-}
-
-function mapMarkerTone(category?: string | null) {
-  switch (category) {
-    case "fire":
-      return {
-        shellClassName: "bg-[#a73f2f]/70",
-        coreClassName: "bg-[#ff9f7f]",
-        glowClassName: "bg-[#d15b45]/35",
-      };
-    case "flood":
-      return {
-        shellClassName: "bg-[#284f73]/70",
-        coreClassName: "bg-[#7ec7ff]",
-        glowClassName: "bg-[#4b91c7]/35",
-      };
-    case "medical":
-      return {
-        shellClassName: "bg-[#2d624b]/70",
-        coreClassName: "bg-[#86d3ae]",
-        glowClassName: "bg-[#4e9a73]/35",
-      };
-    case "road_accident":
-      return {
-        shellClassName: "bg-[#6e4d1f]/70",
-        coreClassName: "bg-[#ffd277]",
-        glowClassName: "bg-[#c4943b]/35",
-      };
-    default:
-      return {
-        shellClassName: "bg-[#5c4d46]/70",
-        coreClassName: "bg-[#f7d6c5]",
-        glowClassName: "bg-[#b29081]/30",
-      };
   }
 }
 
@@ -1164,18 +996,20 @@ function DepartmentProfileRail({ department }: { department: DepartmentInfo }) {
         {compactProfileDetails.map((detail) => (
           <div
             key={detail.label}
-            className="grid grid-cols-[34px_minmax(0,1fr)] items-start gap-3 rounded-[18px] border border-[#efe4db] bg-white px-3.5 py-3 shadow-[0_14px_32px_rgba(95,66,44,0.07)]"
+            className="rounded-[18px] border border-[#efe4db] bg-white px-3.5 py-3 shadow-[0_14px_32px_rgba(95,66,44,0.07)]"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-[12px] bg-[#f7ede5] text-[#b98f76]">
-              <span className="material-symbols-outlined text-[16px]">
-                {detail.icon}
-              </span>
-            </div>
-            <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-[12px] bg-[#f7ede5] text-[#b98f76]">
+                <span className="material-symbols-outlined text-[16px]">
+                  {detail.icon}
+                </span>
+              </div>
               <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#875740]">
                 {detail.label}
               </p>
-              <p className="mt-1 text-[13px] leading-5 text-[#3f3028]">
+            </div>
+            <div className="mt-3 border-t border-[#f1e5dc] pt-3">
+              <p className="text-[13px] leading-5 text-[#3f3028]">
                 {detail.value}
               </p>
             </div>
@@ -1183,14 +1017,6 @@ function DepartmentProfileRail({ department }: { department: DepartmentInfo }) {
         ))}
       </div>
 
-      <div className="mt-5 border-t border-[#f3e8df] pt-4">
-        <div className="flex items-center gap-2 text-[#b49a89]">
-          <span className="material-symbols-outlined text-[14px]">badge</span>
-          <p className="text-[8px] font-bold uppercase tracking-[0.26em]">
-            Verified department identity
-          </p>
-        </div>
-      </div>
     </Card>
   );
 }

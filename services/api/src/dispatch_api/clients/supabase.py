@@ -54,7 +54,10 @@ class SupabaseClient:
             json=body,
         )
         if not response.is_success:
-            return {"error": response.json()}
+            return {
+                "error": response.json(),
+                "status_code": response.status_code,
+            }
         return response.json()
 
     def sign_in(self, *, email: str, password: str) -> dict[str, Any]:

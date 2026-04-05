@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { apiRequest } from "@/lib/api/client";
@@ -31,12 +31,6 @@ type RegisterResponse = {
   refresh_token?: string | null;
 };
 
-const registrationHighlights = [
-  "Citizen intake with full report visibility",
-  "Department onboarding with verification-aware routing",
-  "Shared feed, mesh, and notification surfaces after sign-in",
-] as const;
-
 const roleCardMeta = {
   citizen: {
     icon: "person",
@@ -49,6 +43,46 @@ const roleCardMeta = {
       "Include organization, type, contact, address, and area coverage for verification.",
   },
 } as const;
+
+const provisioningContent = {
+  citizen: {
+    body: "Open a resident-facing Dispatch account for reporting incidents, following live advisories, and staying connected to nearby response updates from the same warm feed surface.",
+    highlights: [
+      "Submit emergency reports and track their status from one account",
+      "Follow advisories, alerts, and feed updates after sign-in",
+      "Stay connected to mesh-aware status and responder activity",
+    ],
+    title: "Start citizen access with fast reporting and feed visibility.",
+  },
+  department: {
+    body: "Create a responder-facing account for verified agencies so Dispatch can route incidents, carry agency details into review, and unlock operational tools after approval.",
+    highlights: [
+      "Send organization details forward for municipality verification",
+      "Unlock dispatch, feed, and responder coordination after approval",
+      "Keep agency contact, coverage, and routing context in one flow",
+    ],
+    title: "Prepare department access with verification-ready response context.",
+  },
+} as const;
+
+const provisioningSlides = [
+  {
+    alt: "Rescue responders digging through landslide debris.",
+    src: "/auth-slides/bicol-front.jpg",
+  },
+  {
+    alt: "Flood response team guiding evacuees through deep water.",
+    src: "/auth-slides/typhoon-rai.jpg",
+  },
+  {
+    alt: "Firefighters coordinating suppression efforts from an elevated platform.",
+    src: "/auth-slides/fire-response.jpg",
+  },
+  {
+    alt: "Medical responders preparing equipment from an emergency vehicle.",
+    src: "/auth-slides/medical-response.jpg",
+  },
+] as const;
 
 function createDeterministicRandom(seed: number) {
   let current = seed >>> 0;
@@ -117,6 +151,16 @@ export function RegisterPage() {
   const [areaOfResponsibility, setAreaOfResponsibility] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const activeProvisioning = provisioningContent[role];
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % provisioningSlides.length);
+    }, 12000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -256,8 +300,26 @@ export function RegisterPage() {
         <main className="mx-auto flex w-full max-w-[1380px] flex-1 items-center px-5 py-6 lg:px-8 lg:py-8">
           <div className="w-full rounded-[38px] border border-[#ead9cd] bg-[linear-gradient(180deg,#fbf5ef_0%,#f7efe7_100%)] p-3.5 shadow-[0_14px_28px_-12px_rgba(56,36,27,0.28),0_18px_38px_-20px_rgba(56,36,27,0.24)] lg:p-3.5">
             <div className="grid gap-3.5 lg:grid-cols-[0.9fr_1.02fr]">
-              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(160deg,#c97c53_0%,#9c5d41_48%,#5a4138_100%)] px-5 py-5 text-white shadow-[0_22px_48px_rgba(49,27,19,0.18)] lg:min-h-[600px] lg:px-6 lg:py-6">
-                <div className="absolute inset-y-0 left-0 w-1/2 bg-[radial-gradient(circle_at_left,rgba(255,255,255,0.1),transparent_72%)]" />
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#6d4639] px-5 py-5 text-white shadow-[0_22px_48px_rgba(49,27,19,0.18)] lg:min-h-[600px] lg:px-6 lg:py-6">
+                <div className="absolute inset-0">
+                  {provisioningSlides.map((slide, index) => (
+                    <div
+                      key={slide.src}
+                      aria-hidden={index !== activeSlide}
+                      className={`absolute inset-0 transition-opacity duration-[1800ms] ease-out ${
+                        index === activeSlide ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      <img
+                        alt={slide.alt}
+                        className="h-full w-full object-cover"
+                        src={slide.src}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(45,28,22,0.28)_0%,rgba(57,34,27,0.48)_34%,rgba(49,29,23,0.74)_100%)]" />
+                <div className="absolute inset-y-0 left-0 w-[58%] bg-[radial-gradient(circle_at_left,rgba(255,255,255,0.14),transparent_74%)]" />
                 <div className="absolute right-[-80px] top-[-50px] h-56 w-56 rounded-full bg-white/10 blur-3xl" />
                 <div className="absolute bottom-[-110px] left-[10%] h-60 w-60 rounded-full bg-[#f5d7c6]/12 blur-3xl" />
 
@@ -265,7 +327,7 @@ export function RegisterPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-headline text-[1.8rem] italic leading-none text-white">
-                        DISPATCHER
+                        Dispatch
                       </p>
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-white/62">
                         Field Access Portal
@@ -288,31 +350,41 @@ export function RegisterPage() {
                       Provisioning flow
                     </p>
                     <h1 className="mt-3 max-w-[15ch] font-headline text-[2.5rem] italic leading-[0.92] text-white lg:text-[3.2rem]">
-                      Build Dispatch access with the same warm feed language.
+                      {activeProvisioning.title}
                     </h1>
                     <p className="mt-3.5 max-w-[25rem] text-[14px] leading-6 text-white/82">
-                      Create a citizen or department account, carry the full
-                      verification context forward, and keep auth connected to
-                      the same backend response contract used by mobile.
+                      {activeProvisioning.body}
                     </p>
 
                     <div className="mt-5 space-y-2.5">
-                      {registrationHighlights.map((highlight) => (
+                      {activeProvisioning.highlights.map((highlight, index) => (
                         <div
                           key={highlight}
-                          className="rounded-[18px] border border-white/14 bg-white/10 px-3.5 py-2.5 backdrop-blur-sm"
+                          className="group rounded-[20px] border border-white/20 bg-[linear-gradient(135deg,rgba(34,20,17,0.52)_0%,rgba(88,52,40,0.38)_46%,rgba(255,255,255,0.08)_100%)] px-3.5 py-3 shadow-[0_14px_30px_-18px_rgba(0,0,0,0.75)] backdrop-blur-md"
                         >
-                          <p className="text-[13px] leading-[1.35rem] text-white/88">
-                            {highlight}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/24 bg-white/14 text-[10px] font-bold tracking-[0.18em] text-white/88">
+                              {String(index + 1).padStart(2, "0")}
+                            </div>
+                            <p className="text-[13px] font-medium leading-[1.35rem] text-white/92">
+                              {highlight}
+                            </p>
+                          </div>
                         </div>
                       ))}
                     </div>
 
                     <div className="mt-6 flex gap-2">
-                      <span className="h-1.5 w-12 rounded-full bg-white/88" />
-                      <span className="h-1.5 w-12 rounded-full bg-white/34" />
-                      <span className="h-1.5 w-12 rounded-full bg-white/20" />
+                      {provisioningSlides.map((slide, index) => (
+                        <span
+                          key={slide.src}
+                          className={`h-1.5 w-12 rounded-full transition-all duration-500 ${
+                            index === activeSlide
+                              ? "bg-white/88"
+                              : "bg-white/24"
+                          }`}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>

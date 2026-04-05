@@ -73,6 +73,13 @@ def _extract_supabase_error(error: dict | None) -> tuple[str, str, dict]:
     return str(code), str(message), payload
 
 
+def _resolve_signup_error_status(result: dict) -> int:
+    status_code = result.get("status_code")
+    if isinstance(status_code, int) and status_code >= 400:
+        return status_code
+    return HTTPStatus.BAD_REQUEST
+
+
 @blueprint.post("/register")
 def register():
     """Create a new citizen or department account and return the access token."""
@@ -104,11 +111,24 @@ def register():
 
     if "error" in result:
         code, message, details = _extract_supabase_error(result.get("error"))
+        status_code = _resolve_signup_error_status(result)
+        normalized = f"{code} {message}".lower()
+        if status_code == HTTPStatus.TOO_MANY_REQUESTS or "rate limit" in normalized:
+            raise ApiError(
+                (
+                    "Supabase email rate limit exceeded. Wait a bit before "
+                    "retrying, use a different email, or disable email "
+                    "confirmation in Supabase Auth for local testing."
+                ),
+                code="email_rate_limit_exceeded",
+                details={"supabase_error": details},
+                status_code=HTTPStatus.TOO_MANY_REQUESTS,
+            )
         raise ApiError(
             message,
             code=code,
             details={"supabase_error": details},
-            status_code=HTTPStatus.BAD_REQUEST,
+            status_code=status_code,
         )
 
     auth_user = result.get("user") or result

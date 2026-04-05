@@ -1457,9 +1457,9 @@ export function AppShell({
       ) : null}
 
       {isSignOutConfirmOpen && (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
           <div
-            className={`w-full max-w-md rounded-[28px] border border-[#efd8d0] bg-[#fff8f3] p-6 ${popupPanelShadowClassName}`}
+            className={`relative z-[1201] w-full max-w-md rounded-[28px] border border-[#efd8d0] bg-[#fff8f3] p-6 ${popupPanelShadowClassName}`}
           >
             <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
               {t("shell.signOut")}

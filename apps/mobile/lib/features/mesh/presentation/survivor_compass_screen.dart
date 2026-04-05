@@ -1,21 +1,24 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/compass_sensor_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
-import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
-import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Compass Locator — Mesh Network
+// Editorial design: glassmorphic nav, precision compass, tonal layering
+// ═══════════════════════════════════════════════════════════════════════════
 
 class SurvivorCompassScreen extends ConsumerStatefulWidget {
   const SurvivorCompassScreen({
@@ -47,6 +50,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   bool _pulseActive = false;
   DateTime? _lastHapticAt;
 
+  // ── Lifecycle ────────────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
@@ -57,9 +62,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     final initialTargetMessageId = widget.initialTargetMessageId;
     if (initialTargetMessageId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ref
             .read(sarModeControllerProvider.notifier)
             .pinTarget(initialTargetMessageId);
@@ -69,43 +72,39 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     unawaited(Future<void>.microtask(() => _hydrateSignals(silent: true)));
   }
 
+  @override
+  void dispose() {
+    _resolutionController.dispose();
+    unawaited(_headingSub?.cancel());
+    unawaited(_locationSub?.cancel());
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  // ── Sensor & data management ─────────────────────────────────────────────
+
   Future<void> _bindSensors() async {
     final locationService = ref.read(locationServiceProvider);
     final currentLocation = await locationService.getCurrentPosition();
     if (mounted && currentLocation != null) {
-      setState(() {
-        _rescuerLocation = currentLocation;
-      });
+      setState(() => _rescuerLocation = currentLocation);
       _syncPulseState();
     }
 
-    _headingSub = ref.read(compassSensorProvider).watchHeading().listen((
-      sample,
-    ) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _headingSample = sample;
-      });
+    _headingSub =
+        ref.read(compassSensorProvider).watchHeading().listen((sample) {
+      if (!mounted) return;
+      setState(() => _headingSample = sample);
       _syncPulseState();
     });
 
     _locationSub = locationService.watchPosition().listen((location) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _rescuerLocation = location;
-      });
+      if (!mounted) return;
+      setState(() => _rescuerLocation = location);
       _syncPulseState();
     });
 
-    if (mounted) {
-      setState(() {
-        _bootstrapping = false;
-      });
-    }
+    if (mounted) setState(() => _bootstrapping = false);
   }
 
   Future<void> _hydrateSignals({bool silent = false}) async {
@@ -120,13 +119,12 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
               .cast<Map<String, dynamic>>();
       ref.read(meshTransportProvider).ingestServerLastSeen(devices);
       await _hydrateTrailForActiveTarget(authOverride: auth);
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     } catch (_) {
       if (!silent && mounted) {
         _showSnack(
-          'Live survivor sync is unavailable right now. Local SAR detections are still visible.',
+          'Live survivor sync is unavailable right now. '
+          'Local SAR detections are still visible.',
         );
       }
     }
@@ -136,37 +134,29 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     AuthService? authOverride,
     String? deviceFingerprint,
   }) async {
-    final fingerprint =
-        deviceFingerprint ??
-        ref.read(sarModeControllerProvider).activeTarget?.detectedDeviceIdentifier;
-    if (fingerprint == null || fingerprint.isEmpty) {
-      return;
-    }
+    final fingerprint = deviceFingerprint ??
+        ref
+            .read(sarModeControllerProvider)
+            .activeTarget
+            ?.detectedDeviceIdentifier;
+    if (fingerprint == null || fingerprint.isEmpty) return;
 
     try {
       final AuthService auth = authOverride ?? ref.read(authServiceProvider);
-      final trailResponse = await auth.getMeshTrail(
-        fingerprint,
-        limit: 120,
-      );
+      final trailResponse = await auth.getMeshTrail(fingerprint, limit: 120);
       final points =
           (trailResponse['points'] as List<dynamic>? ?? const [])
               .cast<Map<String, dynamic>>();
       ref.read(meshTransportProvider).ingestServerTrail(fingerprint, points);
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     } catch (_) {}
   }
 
   Future<void> _handleRefresh() async {
-    final currentLocation = await ref
-        .read(locationServiceProvider)
-        .getCurrentPosition();
+    final currentLocation =
+        await ref.read(locationServiceProvider).getCurrentPosition();
     if (mounted && currentLocation != null) {
-      setState(() {
-        _rescuerLocation = currentLocation;
-      });
+      setState(() => _rescuerLocation = currentLocation);
       _syncPulseState();
     }
     await _hydrateSignals();
@@ -177,11 +167,9 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     final signals = ref.read(sarModeControllerProvider).activeSignals;
     for (final signal in signals) {
       if (signal.messageId == messageId) {
-        unawaited(
-          _hydrateTrailForActiveTarget(
-            deviceFingerprint: signal.detectedDeviceIdentifier,
-          ),
-        );
+        unawaited(_hydrateTrailForActiveTarget(
+          deviceFingerprint: signal.detectedDeviceIdentifier,
+        ));
         break;
       }
     }
@@ -189,13 +177,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   }
 
   Future<void> _markLocated(SurvivorSignalEvent target) async {
-    if (_resolving) {
-      return;
-    }
-
-    setState(() {
-      _resolving = true;
-    });
+    if (_resolving) return;
+    setState(() => _resolving = true);
 
     final note = _resolutionController.text.trim();
     final controller = ref.read(sarModeControllerProvider.notifier);
@@ -220,7 +203,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         );
         _resolutionController.clear();
         _showSnack(
-          'This signal has not reached the server yet. The resolve note was added to the mesh queue for relay.',
+          'This signal has not reached the server yet. '
+          'The resolve note was added to the mesh queue for relay.',
         );
         return;
       }
@@ -244,26 +228,23 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
       );
       _resolutionController.clear();
       _showSnack(
-        'Offline or API unavailable. The resolve note was added to the mesh queue for relay.',
+        'Offline or API unavailable. '
+        'The resolve note was added to the mesh queue for relay.',
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _resolving = false;
-        });
-      }
+      if (mounted) setState(() => _resolving = false);
       _syncPulseState();
     }
   }
+
+  // ── Pulse & haptic ───────────────────────────────────────────────────────
 
   void _syncPulseState() {
     final location = _rescuerLocation;
     final target = ref.read(sarModeControllerProvider).activeTarget;
     if (location == null || target == null) {
       if (_pulseActive) {
-        setState(() {
-          _pulseActive = false;
-        });
+        setState(() => _pulseActive = false);
         _pulseController.stop();
         _pulseController.value = 0;
       }
@@ -278,12 +259,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     );
 
     if (snapshot.shouldPulse != _pulseActive) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _pulseActive = snapshot.shouldPulse;
-      });
+      if (!mounted) return;
+      setState(() => _pulseActive = snapshot.shouldPulse);
       if (snapshot.shouldPulse) {
         _pulseController.repeat(reverse: true);
         _emitHaptic(const Duration(milliseconds: 1), impact: true);
@@ -313,20 +290,49 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     }
   }
 
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  // ── Action handlers ──────────────────────────────────────────────────────
+
+  void _handlePingNode() {
+    HapticFeedback.heavyImpact();
+    _showSnack('Pinging node\u2026');
   }
 
-  @override
-  void dispose() {
-    _resolutionController.dispose();
-    unawaited(_headingSub?.cancel());
-    unawaited(_locationSub?.cancel());
-    _pulseController.dispose();
-    super.dispose();
+  void _handleViewOnMap() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MeshPeopleMapScreen(
+          title: 'Mesh Network',
+          subtitle: 'Interactive Map',
+          allowResolveActions: widget.allowResolve,
+          allowCompassActions: false,
+        ),
+      ),
+    );
   }
+
+  void _handleOpenResolve(SurvivorSignalEvent target) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ResolveSheet(
+        target: target,
+        controller: _resolutionController,
+        resolving: _resolving,
+        onResolve: () {
+          Navigator.of(ctx).pop();
+          _markLocated(target);
+        },
+      ),
+    );
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -341,829 +347,831 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
             peers: transport.peers,
           )
         : null;
-    final trailPoints = target == null
-        ? const <DeviceLocationTrailPoint>[]
-        : transport.trailForDevice(target.detectedDeviceIdentifier);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: dc.warmBackground,
-      appBar: AppBar(
-        title: const Text('Survivor Compass'),
-        backgroundColor: dc.warmBackground,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          IconButton(
-            onPressed: () => unawaited(_handleRefresh()),
-            icon: const Icon(Icons.sync),
-            tooltip: 'Refresh survivor feed',
+      backgroundColor: isDark ? dc.darkBackground : dc.background,
+      body: Stack(
+        children: [
+          // ── Main scrollable content ──
+          RefreshIndicator(
+            color: dc.primary,
+            onRefresh: _handleRefresh,
+            child: ListView(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 64 + 32,
+                bottom: MediaQuery.of(context).padding.bottom + 96,
+                left: 24,
+                right: 24,
+              ),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 512),
+                    child: Column(
+                      children: [
+                        _StatusBanner(
+                          target: target,
+                          snapshot: snapshot,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 32),
+                        _DirectionalBanner(
+                          snapshot: snapshot,
+                          bootstrapping: _bootstrapping,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 48),
+                        _PrecisionCompass(
+                          relativeTurnDegrees: snapshot?.relativeTurnDegrees,
+                          distanceMeters:
+                              snapshot?.distanceToDetectionNodeMeters,
+                          shouldPulse: _pulseActive,
+                          pulseController: _pulseController,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 48),
+                        _NodeStatus(target: target, isDark: isDark),
+                        const SizedBox(height: 48),
+                        _ActionButtons(
+                          onPingNode:
+                              target != null ? _handlePingNode : null,
+                          onViewOnMap: _handleViewOnMap,
+                          isDark: isDark,
+                        ),
+                        if (sarState.activeSignals.isNotEmpty) ...[
+                          const SizedBox(height: 48),
+                          _TargetBoard(
+                            activeTargetMessageId:
+                                sarState.activeTargetMessageId,
+                            onPinTarget: _handlePinTarget,
+                            signals: sarState.activeSignals,
+                            allowResolve: widget.allowResolve,
+                            onResolve: _handleOpenResolve,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Glassmorphic top nav ──
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _CompassAppBar(
+              onBack: () => Navigator.of(context).pop(),
+              onSync: () => unawaited(_handleRefresh()),
+              isDark: isDark,
+            ),
+          ),
+
+          // ── Fixed bottom status footer ──
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _StatusFooter(
+              hasLocation: _rescuerLocation != null,
+              isDark: isDark,
+            ),
           ),
         ],
       ),
-      body: RefreshIndicator(
-        color: dc.warmSeed,
-        onRefresh: _handleRefresh,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    ...dc.heroGradient,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Glassmorphic App Bar
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _CompassAppBar extends StatelessWidget {
+  const _CompassAppBar({
+    required this.onBack,
+    required this.onSync,
+    required this.isDark,
+  });
+
+  final VoidCallback onBack;
+  final VoidCallback onSync;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          height: topPad + 64,
+          padding: EdgeInsets.only(top: topPad, left: 24, right: 24),
+          color: (isDark ? dc.darkBackground : dc.surfaceContainerLow)
+              .withValues(alpha: 0.8),
+          child: Row(
+            children: [
+              _NavButton(
+                icon: Icons.arrow_back,
+                onTap: onBack,
+                isDark: isDark,
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'Mesh Network',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 24,
+                  letterSpacing: -0.5,
+                  color: isDark ? dc.darkPrimaryAccent : dc.primary,
                 ),
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x26131110),
-                    blurRadius: 24,
-                    offset: Offset(0, 14),
-                  ),
-                ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Text(
-                      'Survivor Compass',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Track and locate survivor signals.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      height: 1.15,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    target == null
-                        ? 'Pin a signal from the feed below to start bearing guidance.'
-                        : 'Live compass — heading, GPS, and signal location.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.86),
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _HeroStat(
-                        label: 'Tracked target',
-                        value: target == null
-                            ? 'None'
-                            : target.detectedDeviceIdentifier,
-                      ),
-                      _HeroStat(
-                        label: 'Nearby peers',
-                        value: '${transport.peerCount}',
-                      ),
-                      _HeroStat(
-                        label: 'Heading source',
-                        value: _headingSample?.source ?? 'Awaiting sensor',
-                      ),
-                    ],
-                  ),
-                ],
+              const Spacer(),
+              _NavButton(
+                icon: Icons.sync,
+                onTap: onSync,
+                isDark: isDark,
               ),
-            ),
-            const SizedBox(height: 20),
-            if (_bootstrapping && _rescuerLocation == null)
-              const _InfoCard(
-                icon: Icons.sensors,
-                title: 'Initializing sensors',
-                body:
-                    'Acquiring GPS and heading data...',
-              )
-            else if (target == null)
-              const _InfoCard(
-                icon: Icons.radar,
-                title: 'No target selected',
-                body:
-                    'Pin a survivor signal from the feed below to begin tracking.',
-              )
-            else ...[
-              _CompassSummaryCard(
-                headingSample: _headingSample,
-                pulseActive: _pulseActive,
-                pulseController: _pulseController,
-                snapshot: snapshot,
-                target: target,
-              ),
-              if (snapshot != null && widget.showMiniMap) ...[
-                const SizedBox(height: 18),
-                _CompassMapCard(
-                  snapshot: snapshot,
-                  target: target,
-                  trailPoints: trailPoints,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.icon,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Center(
+            child: Icon(icon, color: isDark ? dc.darkInk : dc.onSurface),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Status Banner — Current Target + Signal Strength
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _StatusBanner extends StatelessWidget {
+  const _StatusBanner({
+    required this.target,
+    required this.snapshot,
+    required this.isDark,
+  });
+
+  final SurvivorSignalEvent? target;
+  final SurvivorCompassSnapshot? snapshot;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final nodeLabel = _formatNodeLabel(target);
+    final signalLabel = _signalLabel(snapshot?.confidenceBand);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? dc.darkSurfaceContainer : dc.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CURRENT TARGET',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.2,
+                    color: (isDark ? dc.darkInk : dc.onPrimaryContainer)
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  nodeLabel,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? dc.darkInk : dc.onPrimaryContainer,
+                  ),
                 ),
               ],
-              const SizedBox(height: 18),
-              if (widget.allowResolve)
-                _ResolveSignalCard(
-                  controller: _resolutionController,
-                  onResolve: _resolving ? null : () => _markLocated(target),
-                  resolving: _resolving,
-                  target: target,
-                )
-              else
-                const _InfoCard(
-                  icon: Icons.explore,
-                  title: 'Locator mode',
-                  body:
-                      'Direction and distance to the signal. Resolve actions are available to responders.',
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? dc.darkSurface
+                  : dc.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (target != null)
+                  const _PingDot()
+                else
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDark ? dc.darkMutedInk : dc.outlineVariant,
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                Text(
+                  signalLabel,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? dc.darkInk : dc.onSurface,
+                  ),
                 ),
-            ],
-            const SizedBox(height: 18),
-            _TargetBoard(
-              activeTargetMessageId: sarState.activeTargetMessageId,
-              onPinTarget: _handlePinTarget,
-              signals: sarState.activeSignals,
-              lastSeenLookup: transport.lastSeenForDevice,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Animated ping dot (matches Tailwind animate-ping) ──────────────────
+
+class _PingDot extends StatefulWidget {
+  const _PingDot();
+
+  @override
+  State<_PingDot> createState() => _PingDotState();
+}
+
+class _PingDotState extends State<_PingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 16,
+      height: 16,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _ctrl,
+            builder: (_, _) => Container(
+              width: 8 + _ctrl.value * 8,
+              height: 8 + _ctrl.value * 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dc.primary.withValues(alpha: 0.75 * (1 - _ctrl.value)),
+              ),
+            ),
+          ),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: dc.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Directional Guidance Banner
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DirectionalBanner extends StatelessWidget {
+  const _DirectionalBanner({
+    required this.snapshot,
+    required this.bootstrapping,
+    required this.isDark,
+  });
+
+  final SurvivorCompassSnapshot? snapshot;
+  final bool bootstrapping;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = snapshot != null
+        ? _turnGuidance(snapshot!.relativeTurnDegrees)
+        : bootstrapping
+            ? (Icons.sensors, 'Acquiring heading\u2026')
+            : (Icons.radar, 'Select a signal to track');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+      decoration: BoxDecoration(
+        color: isDark ? dc.darkInk : dc.onSurface,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 15,
+            offset: Offset(0, 10),
+            spreadRadius: -3,
+          ),
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 6,
+            offset: Offset(0, 4),
+            spreadRadius: -4,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: isDark ? dc.darkPrimaryAccent : dc.primaryFixed,
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                letterSpacing: -0.3,
+                color: isDark
+                    ? dc.darkBackground
+                    : dc.surfaceContainerLowest,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static (IconData, String) _turnGuidance(double degrees) {
+    final abs = degrees.abs();
+    if (abs < 10) return (Icons.straight, 'Continue Straight');
+    if (degrees < 0) {
+      if (abs < 35) return (Icons.turn_slight_left, 'Turn Slightly Left');
+      if (abs < 100) return (Icons.turn_left, 'Turn Left');
+      if (abs < 160) return (Icons.turn_sharp_left, 'Turn Sharp Left');
+      return (Icons.u_turn_left, 'Turn Around');
+    }
+    if (abs < 35) return (Icons.turn_slight_right, 'Turn Slightly Right');
+    if (abs < 100) return (Icons.turn_right, 'Turn Right');
+    if (abs < 160) return (Icons.turn_sharp_right, 'Turn Sharp Right');
+    return (Icons.u_turn_right, 'Turn Around');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Minimalist Precision Compass
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _PrecisionCompass extends StatelessWidget {
+  const _PrecisionCompass({
+    required this.relativeTurnDegrees,
+    required this.distanceMeters,
+    required this.shouldPulse,
+    required this.pulseController,
+    required this.isDark,
+  });
+
+  final double? relativeTurnDegrees;
+  final double? distanceMeters;
+  final bool shouldPulse;
+  final AnimationController pulseController;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final angle = (relativeTurnDegrees ?? 0) * math.pi / 180;
+    final (distValue, distUnit) = _formatDistance(distanceMeters);
+    final ringColor = isDark ? dc.darkBorder : dc.outlineVariant;
+    final primaryColor = isDark ? dc.darkPrimaryAccent : dc.primary;
+
+    return Center(
+      child: SizedBox(
+        width: 288,
+        height: 288,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // ── Decorative outer ring ──
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: ringColor.withValues(alpha: 0.2),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Second ring ──
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: ringColor.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Third ring (primary tint) ──
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: 0.1),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Proximity pulse halo ──
+            if (shouldPulse)
+              AnimatedBuilder(
+                animation: pulseController,
+                builder: (_, _) {
+                  final scale = 1 + pulseController.value * 0.15;
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: primaryColor.withValues(
+                            alpha: 0.3 - pulseController.value * 0.2,
+                          ),
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+            // ── Rotating directional arrow ──
+            Transform.rotate(
+              angle: angle,
+              child: SizedBox(
+                width: 288,
+                height: 288,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      top: -16,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: CustomPaint(
+                          size: const Size(48, 42),
+                          painter:
+                              _TriangleArrowPainter(color: primaryColor),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Center core (stationary) ──
+            Container(
+              width: 128,
+              height: 128,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? dc.darkSurface
+                    : dc.surfaceContainerLowest,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark ? dc.darkBorder : dc.surfaceVariant,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                    blurRadius: 50,
+                    offset: const Offset(0, 25),
+                    spreadRadius: -12,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: distValue,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 56,
+                              fontWeight: FontWeight.w900,
+                              height: 1,
+                              letterSpacing: -3,
+                              color: isDark ? dc.darkInk : dc.onSurface,
+                            ),
+                          ),
+                          TextSpan(
+                            text: distUnit,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: (isDark ? dc.darkInk : dc.onSurface)
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  static (String, String) _formatDistance(double? meters) {
+    if (meters == null) return ('--', 'm');
+    if (meters >= 1000) {
+      return ((meters / 1000).toStringAsFixed(1), 'km');
+    }
+    if (meters >= 10) return ('${meters.round()}', 'm');
+    return (meters.toStringAsFixed(1), 'm');
+  }
 }
 
-class _HeroStat extends StatelessWidget {
-  const _HeroStat({required this.label, required this.value});
+// ── Filled triangle arrow for compass ──────────────────────────────────
 
-  final String label;
-  final String value;
+class _TriangleArrowPainter extends CustomPainter {
+  _TriangleArrowPainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_TriangleArrowPainter old) => old.color != color;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Approaching Node Status
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _NodeStatus extends StatelessWidget {
+  const _NodeStatus({required this.target, required this.isDark});
+
+  final SurvivorSignalEvent? target;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 130),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
+    final nodeLabel = _formatNodeLabel(target);
+
+    return Column(
+      children: [
+        RichText(
+          textAlign: TextAlign.center,
+          text: TextSpan(
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
+              fontFamily: 'Inter',
+              fontSize: 16,
+              color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: dc.chipFill,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: dc.warmSeed),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: dc.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  body,
-                  style: const TextStyle(color: dc.mutedInk, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompassSummaryCard extends StatelessWidget {
-  const _CompassSummaryCard({
-    required this.headingSample,
-    required this.pulseActive,
-    required this.pulseController,
-    required this.snapshot,
-    required this.target,
-  });
-
-  final CompassHeadingSample? headingSample;
-  final bool pulseActive;
-  final AnimationController pulseController;
-  final SurvivorCompassSnapshot? snapshot;
-  final SurvivorSignalEvent target;
-
-  @override
-  Widget build(BuildContext context) {
-    final band = snapshot == null
-        ? SurvivorCompassConfidenceBand.broadSearch
-        : snapshot!.confidenceBand;
-    final turnLabel = snapshot == null
-        ? 'Turn guidance unavailable'
-        : _turnLabel(snapshot!.relativeTurnDegrees);
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 280,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 252,
-                  height: 252,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [dc.chipFill, dc.warmBorder],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    border: Border.all(color: dc.warmBorder, width: 1.5),
-                  ),
-                ),
-                if (pulseActive)
-                  AnimatedBuilder(
-                    animation: pulseController,
-                    builder: (context, child) {
-                      final scale = 1 + (pulseController.value * 0.35);
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          width: 164,
-                          height: 164,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: dc.warmSeed.withValues(
-                                alpha: 0.28 - pulseController.value * 0.12,
-                              ),
-                              width: 3,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                const Positioned(top: 20, child: _DialLabel(label: 'N')),
-                const Positioned(right: 24, child: _DialLabel(label: 'E')),
-                const Positioned(bottom: 20, child: _DialLabel(label: 'S')),
-                const Positioned(left: 24, child: _DialLabel(label: 'W')),
-                Transform.rotate(
-                  angle: ((snapshot?.relativeTurnDegrees ?? 0) * math.pi) / 180,
-                  child: Icon(
-                    Icons.navigation,
-                    size: 122,
-                    color: pulseActive ? dc.warmSeed : dc.coolAccent,
-                  ),
-                ),
-                Container(
-                  width: 16,
-                  height: 16,
-                  decoration: const BoxDecoration(
-                    color: dc.ink,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            snapshot == null
-                ? 'Waiting for survivor location'
-                : '${snapshot!.distanceToDetectionNodeMeters.toStringAsFixed(1)} m',
-            style: const TextStyle(
-              color: dc.ink,
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            pulseActive
-                ? 'Proximity pulse active'
-                : 'Distance to detection node',
-            style: const TextStyle(
-              color: dc.mutedInk,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 10,
             children: [
-              _MetricChip(
-                icon: Icons.explore,
-                label: snapshot == null
-                    ? 'Bearing unavailable'
-                    : 'Bearing ${snapshot!.targetCardinalLabel}',
-              ),
-              _MetricChip(icon: Icons.turn_right, label: turnLabel),
-              _MetricChip(
-                icon: Icons.radar,
-                label:
-                    'Search radius ${target.estimatedDistanceMeters.toStringAsFixed(1)} m',
-              ),
-              _MetricChip(
-                icon: Icons.my_location,
-                label: headingSample == null
-                    ? 'Awaiting sensor heading'
-                    : 'Heading ${headingSample!.headingDegrees.toStringAsFixed(0)} deg',
+              const TextSpan(text: 'Approaching '),
+              TextSpan(
+                text: nodeLabel,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? dc.darkInk : dc.onSurface,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: dc.chipFill,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  SurvivorCompassService.confidenceBandLabel(band),
-                  style: const TextStyle(
-                    color: dc.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  SurvivorCompassService.confidenceBandBody(band),
-                  style: const TextStyle(color: dc.mutedInk, height: 1.5),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _MetricChip(
-                      icon: Icons.bluetooth_searching,
-                      label: _signalMethodLabel(target.detectionMethod),
-                    ),
-                    _MetricChip(
-                      icon: Icons.network_ping,
-                      label: target.isRelayed
-                          ? '${target.hopCount} hops'
-                          : 'Direct detection',
-                    ),
-                    _MetricChip(
-                      icon: Icons.verified,
-                      label: 'Confidence ${(target.confidence * 100).round()}%',
-                    ),
-                    if (target.isResolutionQueued)
-                      const _MetricChip(
-                        icon: Icons.schedule_send,
-                        label: 'Resolve queued for mesh',
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _signalMethodLabel(SarDetectionMethod method) {
-    return switch (method) {
-      SarDetectionMethod.wifiProbe => 'Wi-Fi probe',
-      SarDetectionMethod.blePassive => 'BLE passive',
-      SarDetectionMethod.acoustic => 'Acoustic',
-      SarDetectionMethod.sosBeacon => 'SOS beacon',
-    };
-  }
-
-  static String _turnLabel(double relativeTurnDegrees) {
-    final magnitude = relativeTurnDegrees.abs().round();
-    if (magnitude < 8) {
-      return 'On heading';
-    }
-    return relativeTurnDegrees > 0
-        ? 'Turn $magnitude deg right'
-        : 'Turn $magnitude deg left';
-  }
-}
-
-class _DialLabel extends StatelessWidget {
-  const _DialLabel({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(color: dc.ink, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class _MetricChip extends StatelessWidget {
-  const _MetricChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: dc.warmSeed),
-          const SizedBox(width: 8),
+        ),
+        const SizedBox(height: 8),
+        if (target != null)
           Text(
-            label,
-            style: const TextStyle(
-              color: dc.ink,
-              fontWeight: FontWeight.w600,
+            'Lat: ${target!.nodeLocation.lat.toStringAsFixed(4)}\u00b0 '
+            '${target!.nodeLocation.lat >= 0 ? 'N' : 'S'} | '
+            'Long: ${target!.nodeLocation.lng.abs().toStringAsFixed(4)}\u00b0 '
+            '${target!.nodeLocation.lng >= 0 ? 'E' : 'W'}',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? dc.darkMutedInk : dc.outline,
+            ),
+            textAlign: TextAlign.center,
+          )
+        else
+          Text(
+            'No target pinned',
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? dc.darkMutedInk : dc.outline,
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
 
-class _CompassMapCard extends StatelessWidget {
-  const _CompassMapCard({
-    required this.snapshot,
-    required this.target,
-    required this.trailPoints,
+// ═══════════════════════════════════════════════════════════════════════════
+// Critical Action Buttons — Ping Node + View on Map
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ActionButtons extends StatelessWidget {
+  const _ActionButtons({
+    required this.onPingNode,
+    required this.onViewOnMap,
+    required this.isDark,
   });
 
-  final SurvivorCompassSnapshot snapshot;
-  final SurvivorSignalEvent target;
-  final List<DeviceLocationTrailPoint> trailPoints;
-
-  /// Interpolate points along the great-circle (haversine) path between two
-  /// coordinates so the line curves naturally on a Mercator-projected map.
-  static List<LatLng> _haversineLine(LatLng a, LatLng b, {int segments = 40}) {
-    final lat1 = a.latitudeInRad;
-    final lon1 = a.longitudeInRad;
-    final lat2 = b.latitudeInRad;
-    final lon2 = b.longitudeInRad;
-
-    // Angular distance using haversine formula.
-    final dLat = lat2 - lat1;
-    final dLon = lon2 - lon1;
-    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dLon / 2) * math.sin(dLon / 2);
-    final d = 2 * math.asin(math.sqrt(h));
-
-    if (d < 1e-10) return [a, b]; // Points are effectively the same.
-
-    final points = <LatLng>[];
-    for (int i = 0; i <= segments; i++) {
-      final f = i / segments;
-      final af = math.sin((1 - f) * d) / math.sin(d);
-      final bf = math.sin(f * d) / math.sin(d);
-      final x = af * math.cos(lat1) * math.cos(lon1) + bf * math.cos(lat2) * math.cos(lon2);
-      final y = af * math.cos(lat1) * math.sin(lon1) + bf * math.cos(lat2) * math.sin(lon2);
-      final z = af * math.sin(lat1) + bf * math.sin(lat2);
-      final lat = math.atan2(z, math.sqrt(x * x + y * y));
-      final lon = math.atan2(y, x);
-      points.add(LatLng(lat * 180 / math.pi, lon * 180 / math.pi));
-    }
-    return points;
-  }
+  final VoidCallback? onPingNode;
+  final VoidCallback onViewOnMap;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    final mapCenter = LatLng(
-      (snapshot.rescuerPoint.latitude + snapshot.targetPoint.latitude) / 2,
-      (snapshot.rescuerPoint.longitude + snapshot.targetPoint.longitude) / 2,
-    );
+    final hasTarget = onPingNode != null;
 
-    final peerMarkers = snapshot.peerPreviewPoints
-        .map(
-          (point) => Marker(
-            point: point,
-            width: 18,
-            height: 18,
+    return Column(
+      children: [
+        // ── Primary CTA: Ping Node ──
+        Material(
+          color: hasTarget
+              ? (isDark ? dc.darkPrimaryAccent : dc.primary)
+              : (isDark ? dc.darkBorder : dc.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
+          elevation: hasTarget ? 8 : 0,
+          shadowColor: Colors.black26,
+          child: InkWell(
+            onTap: onPingNode,
+            borderRadius: BorderRadius.circular(12),
             child: Container(
-              decoration: BoxDecoration(
-                color: dc.ink.withValues(alpha: 0.75),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-              ),
-            ),
-          ),
-        )
-        .toList();
-    final trailLatLngs = trailPoints
-        .map((point) => LatLng(point.lat, point.lng))
-        .toList(growable: false);
-    final staleCutoff = DateTime.now().subtract(const Duration(minutes: 10));
-    final recentTrail = trailPoints
-        .where((point) => point.recordedAt.isAfter(staleCutoff))
-        .map((point) => LatLng(point.lat, point.lng))
-        .toList(growable: false);
-    final trailMarkers = trailPoints
-        .map(
-          (point) => Marker(
-            point: LatLng(point.lat, point.lng),
-            width: 16,
-            height: 16,
-            child: _TrailDot(
-              faded: point.recordedAt.isBefore(staleCutoff),
-            ),
-          ),
-        )
-        .toList(growable: false);
-    // Haversine arc from this node to the target signal.
-    final haversineArc = _haversineLine(snapshot.rescuerPoint, snapshot.targetPoint);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Search map',
-            style: TextStyle(
-              color: dc.ink,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Node positions and survivor trail on the map.',
-            style: TextStyle(color: dc.mutedInk, height: 1.45),
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: SizedBox(
-              height: 240,
-              child: FlutterMap(
-                options: MapOptions(
-                  initialCenter: mapCenter,
-                  initialZoom: 17,
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.none,
-                  ),
-                ),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ...buildDispatchMapTileLayers(),
-                  PolylineLayer(
-                    polylines: [
-                      if (trailLatLngs.length >= 2)
-                        Polyline(
-                          points: trailLatLngs,
-                          strokeWidth: 5,
-                          color: dc.warmSeed.withValues(alpha: 0.18),
-                        ),
-                      if (recentTrail.length >= 2)
-                        Polyline(
-                          points: recentTrail,
-                          strokeWidth: 4,
-                          color: dc.warmSeed.withValues(alpha: 0.72),
-                        ),
-                      Polyline(
-                        points: haversineArc,
-                        strokeWidth: 4,
-                        color: dc.coolAccent.withValues(alpha: 0.85),
-                      ),
-                    ],
+                  Icon(
+                    Icons.volume_up,
+                    color: hasTarget
+                        ? (isDark ? dc.darkBackground : dc.onPrimary)
+                        : (isDark ? dc.darkMutedInk : dc.outline),
                   ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: snapshot.rescuerPoint,
-                        width: 54,
-                        height: 54,
-                        child: _MapMarker(
-                          color: dc.coolAccent,
-                          icon: Icons.navigation,
-                          label: 'Node',
-                        ),
-                      ),
-                      Marker(
-                        point: snapshot.targetPoint,
-                        width: 54,
-                        height: 54,
-                        child: _MapMarker(
-                          color: dc.warmSeed,
-                          icon: Icons.sos,
-                          label: 'Target',
-                        ),
-                      ),
-                      ...peerMarkers,
-                      ...trailMarkers,
-                    ],
+                  const SizedBox(width: 12),
+                  Text(
+                    'Ping Node',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: hasTarget
+                          ? (isDark ? dc.darkBackground : dc.onPrimary)
+                          : (isDark ? dc.darkMutedInk : dc.outline),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetricChip(
-                icon: Icons.route,
-                label:
-                    'Detection ${_CompassSummaryCard._signalMethodLabel(target.detectionMethod)}',
-              ),
-              _MetricChip(
-                icon: Icons.people_alt_outlined,
-                label: '${snapshot.peerPreviewPoints.length} nearby peers',
-              ),
-              if (trailPoints.isNotEmpty)
-                _MetricChip(
-                  icon: Icons.timeline,
-                  label: '${trailPoints.length} trail points',
-                ),
-              if (trailPoints.isNotEmpty)
-                _MetricChip(
-                  icon: Icons.history,
-                  label:
-                      'Last beacon ${_TargetBoard._formatLastSeen(trailPoints.last.recordedAt)}',
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TrailDot extends StatelessWidget {
-  const _TrailDot({required this.faded});
-
-  final bool faded;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: faded
-            ? dc.warmSeed.withValues(alpha: 0.28)
-            : dc.warmSeed.withValues(alpha: 0.82),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.5),
-      ),
-    );
-  }
-}
-
-class _MapMarker extends StatelessWidget {
-  const _MapMarker({
-    required this.color,
-    required this.icon,
-    required this.label,
-  });
-
-  final Color color;
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.28),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(icon, color: Colors.white, size: 20),
         ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: dc.ink,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+        const SizedBox(height: 16),
+
+        // ── Secondary: View on Map ──
+        Material(
+          color: isDark
+              ? dc.darkSurfaceContainerHigh
+              : dc.secondaryContainer,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: onViewOnMap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.map_outlined,
+                    color: isDark
+                        ? dc.darkInk
+                        : dc.onSecondaryContainer,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'View on Map',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? dc.darkInk
+                          : dc.onSecondaryContainer,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1172,295 +1180,358 @@ class _MapMarker extends StatelessWidget {
   }
 }
 
-class _ResolveSignalCard extends StatelessWidget {
-  const _ResolveSignalCard({
-    required this.controller,
-    required this.onResolve,
-    required this.resolving,
-    required this.target,
-  });
+// ═══════════════════════════════════════════════════════════════════════════
+// Status Footer — Battery + GPS indicators
+// ═══════════════════════════════════════════════════════════════════════════
 
-  final TextEditingController controller;
-  final VoidCallback? onResolve;
-  final bool resolving;
-  final SurvivorSignalEvent target;
+class _StatusFooter extends StatelessWidget {
+  const _StatusFooter({required this.hasLocation, required this.isDark});
+
+  final bool hasLocation;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dc.warmBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Resolve this survivor signal',
-            style: TextStyle(
-              color: dc.ink,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            target.isResolutionQueued
-                ? 'A resolve is already queued. Submitting again will update the note.'
-                : 'Add a note when the survivor is found or the signal is resolved.',
-            style: const TextStyle(color: dc.mutedInk, height: 1.45),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: controller,
-            minLines: 2,
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: 'Example: survivor located near collapsed stairwell',
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onResolve,
-              style: FilledButton.styleFrom(
-                backgroundColor: dc.warmSeed,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    return IgnorePointer(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          bottom: bottomPad + 24,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 512),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _StatusPill(
+                  icon: Icons.battery_charging_full,
+                  label: 'Active',
+                  isDark: isDark,
                 ),
-              ),
-              icon: resolving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.check_circle_outline),
-              label: Text(
-                resolving ? 'Syncing resolve note...' : 'Mark located',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
+                _StatusPill(
+                  icon: Icons.satellite_alt,
+                  label: hasLocation ? 'GPS ACTIVE' : 'GPS SEARCHING',
+                  isDark: isDark,
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color:
+                (isDark ? dc.darkSurface : dc.surfaceContainerLowest)
+                    .withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0D000000),
+                blurRadius: 2,
+                offset: Offset(0, 1),
+              ),
+            ],
+            border: Border.all(
+              color: (isDark ? dc.darkBorder : dc.surfaceVariant)
+                  .withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isDark ? dc.darkPrimaryAccent : dc.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? dc.darkInk : dc.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Target Board — Survivor signal selection (below the fold)
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _TargetBoard extends StatelessWidget {
   const _TargetBoard({
     required this.activeTargetMessageId,
     required this.onPinTarget,
     required this.signals,
-    required this.lastSeenLookup,
+    required this.allowResolve,
+    required this.onResolve,
+    required this.isDark,
   });
 
   final String? activeTargetMessageId;
   final ValueChanged<String> onPinTarget;
   final List<SurvivorSignalEvent> signals;
-  final DeviceLocationTrailPoint? Function(String deviceFingerprint) lastSeenLookup;
+  final bool allowResolve;
+  final void Function(SurvivorSignalEvent) onResolve;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: dc.warmSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: dc.warmBorder),
+        color: isDark ? dc.darkSurface : dc.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Survivor signals',
+          Text(
+            'Survivor Signals',
             style: TextStyle(
-              color: dc.ink,
+              fontFamily: 'Inter',
               fontSize: 18,
               fontWeight: FontWeight.w700,
+              color: isDark ? dc.darkInk : dc.onSurface,
             ),
           ),
-          const SizedBox(height: 6),
-          const Text(
+          const SizedBox(height: 4),
+          Text(
             'Pin a signal to track it with the compass.',
-            style: TextStyle(color: dc.mutedInk, height: 1.45),
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+              height: 1.45,
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           if (signals.isEmpty)
-            const _InfoCard(
-              icon: Icons.wifi_find,
-              title: 'No signals yet',
-              body:
-                  'Survivor signals will appear here once detected by nearby nodes.',
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? dc.darkSurfaceContainer
+                    : dc.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.wifi_find,
+                    size: 32,
+                    color:
+                        isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No signals yet',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? dc.darkInk : dc.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Survivor signals will appear here once detected.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? dc.darkMutedInk
+                          : dc.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             )
           else
             ...signals.map((signal) {
-              final isPinned = signal.messageId == activeTargetMessageId;
+              final isPinned =
+                  signal.messageId == activeTargetMessageId;
               final resolved = signal.isResolved;
-              final lastSeenBeacon = lastSeenLookup(
-                signal.detectedDeviceIdentifier,
-              );
+
               return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isPinned ? dc.chipFill : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isPinned ? dc.warmSeed : dc.warmBorder,
-                  ),
+                  color: isPinned
+                      ? (isDark
+                          ? dc.darkSurfaceContainerHigh
+                          : dc.primaryContainer)
+                      : (isDark
+                          ? dc.darkSurfaceContainer
+                          : dc.surfaceContainerLowest),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 42,
-                          height: 42,
+                          width: 40,
+                          height: 40,
                           decoration: BoxDecoration(
                             color: resolved
                                 ? dc.statusResolved.withValues(alpha: 0.15)
-                                : dc.coolAccent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
+                                : (isDark
+                                        ? dc.darkPrimaryAccent
+                                        : dc.primary)
+                                    .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            switch (signal.detectionMethod) {
-                              SarDetectionMethod.wifiProbe =>
-                                Icons.wifi_tethering,
-                              SarDetectionMethod.blePassive =>
-                                Icons.bluetooth_searching,
-                              SarDetectionMethod.acoustic => Icons.graphic_eq,
-                              SarDetectionMethod.sosBeacon => Icons.sos,
-                            },
+                            _signalIcon(signal.detectionMethod),
+                            size: 20,
                             color: resolved
                                 ? dc.statusResolved
-                                : dc.coolAccent,
+                                : (isDark
+                                    ? dc.darkPrimaryAccent
+                                    : dc.primary),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
-                                signal.detectedDeviceIdentifier,
-                                style: const TextStyle(
-                                  color: dc.ink,
-                                  fontSize: 16,
+                                _formatNodeLabel(signal),
+                                style: TextStyle(
                                   fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? dc.darkInk
+                                      : dc.onSurface,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
-                                '${_CompassSummaryCard._signalMethodLabel(signal.detectionMethod)} | ${signal.estimatedDistanceMeters.toStringAsFixed(1)} m search radius | ${_formatLastSeen(signal.lastSeenTimestamp)}',
-                                style: const TextStyle(
-                                  color: dc.mutedInk,
-                                  height: 1.4,
+                                '${signal.estimatedDistanceMeters.toStringAsFixed(1)} m \u00b7 '
+                                '${(signal.confidence * 100).round()}% conf',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? dc.darkMutedInk
+                                      : dc.onSurfaceVariant,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        FilledButton(
-                          onPressed: resolved
-                              ? null
-                              : () => onPinTarget(signal.messageId),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: isPinned
-                                ? dc.warmSeed
-                                : dc.coolAccent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: Text(isPinned ? 'Tracked' : 'Track'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _MetricChip(
-                          icon: Icons.verified,
-                          label:
-                              'Confidence ${(signal.confidence * 100).round()}%',
-                        ),
-                        _MetricChip(
-                          icon: Icons.route,
-                          label: signal.isRelayed
-                              ? '${signal.hopCount}/${signal.maxHops} hops'
-                              : 'Direct detection',
-                        ),
                         if (resolved)
-                          const _MetricChip(
-                            icon: Icons.task_alt,
-                            label: 'Resolved',
-                          ),
-                        if (signal.isResolutionQueued)
-                          const _MetricChip(
-                            icon: Icons.schedule_send,
-                            label: 'Resolve queued for mesh',
-                          ),
-                      ],
-                    ),
-                    if (lastSeenBeacon != null) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: dc.chipFill,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Last Seen beacon ${_formatLastSeen(lastSeenBeacon.recordedAt)}',
-                              style: const TextStyle(
-                                color: dc.ink,
-                                fontWeight: FontWeight.w700,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  dc.statusResolved.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Resolved',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: dc.statusResolved,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${lastSeenBeacon.lat.toStringAsFixed(4)}, ${lastSeenBeacon.lng.toStringAsFixed(4)}',
-                              style: const TextStyle(color: dc.mutedInk),
+                          )
+                        else
+                          FilledButton(
+                            onPressed: () =>
+                                onPinTarget(signal.messageId),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: isPinned
+                                  ? (isDark
+                                      ? dc.darkPrimaryAccent
+                                      : dc.primary)
+                                  : (isDark
+                                      ? dc.darkSurfaceContainerHigh
+                                      : dc.secondaryContainer),
+                              foregroundColor: isPinned
+                                  ? (isDark
+                                      ? dc.darkBackground
+                                      : dc.onPrimary)
+                                  : (isDark
+                                      ? dc.darkInk
+                                      : dc.onSecondaryContainer),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "State ${lastSeenBeacon.appState.replaceAll('_', ' ')}${lastSeenBeacon.batteryPct == null ? '' : ' | Battery ${lastSeenBeacon.batteryPct}%'}",
-                              style: const TextStyle(color: dc.mutedInk),
+                            child: Text(
+                              isPinned ? 'Tracked' : 'Track',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if ((signal.resolutionNote ?? '').isNotEmpty) ...[
+                          ),
+                      ],
+                    ),
+                    if (allowResolve && isPinned && !resolved) ...[
                       const SizedBox(height: 10),
-                      Text(
-                        signal.resolutionNote!,
-                        style: const TextStyle(color: dc.mutedInk, height: 1.45),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => onResolve(signal),
+                          icon: const Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                          ),
+                          label: const Text('Mark as Located'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: isDark
+                                ? dc.darkPrimaryAccent
+                                : dc.primary,
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -1472,18 +1543,162 @@ class _TargetBoard extends StatelessWidget {
     );
   }
 
-  static String _formatLastSeen(DateTime dateTime) {
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.inSeconds < 60) {
-      return '${diff.inSeconds}s ago';
-    }
-    if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
-    }
-    return '${diff.inHours}h ago';
+  static IconData _signalIcon(SarDetectionMethod method) {
+    return switch (method) {
+      SarDetectionMethod.wifiProbe => Icons.wifi_tethering,
+      SarDetectionMethod.blePassive => Icons.bluetooth_searching,
+      SarDetectionMethod.acoustic => Icons.graphic_eq,
+      SarDetectionMethod.sosBeacon => Icons.sos,
+    };
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Resolve Bottom Sheet
+// ═══════════════════════════════════════════════════════════════════════════
 
+class _ResolveSheet extends StatelessWidget {
+  const _ResolveSheet({
+    required this.target,
+    required this.controller,
+    required this.resolving,
+    required this.onResolve,
+  });
 
+  final SurvivorSignalEvent target;
+  final TextEditingController controller;
+  final bool resolving;
+  final VoidCallback onResolve;
 
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isDark ? dc.darkSurface : dc.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: dc.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Resolve Signal',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: isDark ? dc.darkInk : dc.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              target.isResolutionQueued
+                  ? 'A resolve is already queued. Submitting again '
+                      'will update the note.'
+                  : 'Add a note when the survivor is found or '
+                      'the signal is resolved.',
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText:
+                    'Example: survivor located near collapsed stairwell',
+                filled: true,
+                fillColor: isDark
+                    ? dc.darkSurfaceContainer
+                    : dc.surfaceContainerHigh,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: resolving ? null : onResolve,
+                style: FilledButton.styleFrom(
+                  backgroundColor:
+                      isDark ? dc.darkPrimaryAccent : dc.primary,
+                  foregroundColor:
+                      isDark ? dc.darkBackground : dc.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: resolving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.check_circle_outline),
+                label: Text(
+                  resolving ? 'Syncing\u2026' : 'Mark Located',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+String _formatNodeLabel(SurvivorSignalEvent? target) {
+  if (target == null) return 'None';
+  final id = target.detectedDeviceIdentifier;
+  final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.length >= 3) {
+    return 'Node #${digits.substring(digits.length - 3)}';
+  }
+  return 'Node #${id.hashCode.abs() % 1000}';
+}
+
+String _signalLabel(SurvivorCompassConfidenceBand? band) {
+  if (band == null) return 'Scanning';
+  return switch (band) {
+    SurvivorCompassConfidenceBand.directLock => 'Strong Signal',
+    SurvivorCompassConfidenceBand.relayAssist => 'Moderate Signal',
+    SurvivorCompassConfidenceBand.broadSearch => 'Weak Signal',
+  };
+}

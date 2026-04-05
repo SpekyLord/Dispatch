@@ -151,7 +151,7 @@ class _CitizenMeshDashboardScreenState
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const _StatusBanner(),
+                    _StatusBanner(transport: transport),
                     const SizedBox(height: 34),
                     _MetricCard(
                       label: 'TOTAL ACTIVE NODES',
@@ -164,20 +164,23 @@ class _CitizenMeshDashboardScreenState
                     _MetricCard(
                       label: 'RECENT DISPATCHES',
                       value: '$recentDispatches',
-                      suffixIcon: Icons.wifi_tethering_rounded,
+                      suffixIcon: recentDispatches > 0
+                          ? Icons.wifi_tethering_rounded
+                          : null,
                     ),
                     const SizedBox(height: 28),
                     _MetricCard(
                       label: 'NETWORK RANGE',
                       value: rangeKm,
-                      trailingText: 'km',
+                      trailingText: rangeKm == '--' ? null : 'km',
                     ),
                     const SizedBox(height: 36),
                     GestureDetector(
                       onTap: widget.onOpenMapTab,
                       child: _ScanMapCard(
-                        scanningLabel:
-                            'Scanning ${transport.estimatedReach * 240}m sector...',
+                        scanningLabel: transport.peerCount > 0
+                            ? 'Scanning ${transport.estimatedReach * 240}m sector...'
+                            : 'Scanning for nearby nodes...',
                       ),
                     ),
                     const SizedBox(height: 34),
@@ -253,8 +256,8 @@ class _CitizenMeshDashboardScreenState
   }
 
   String _rangeKm(MeshTransportService transport) {
-    if (transport.estimatedReach <= 0) return '0.0';
-    final km = (transport.estimatedReach * 0.3).clamp(0.0, 9.9);
+    if (transport.peerCount == 0) return '--';
+    final km = (transport.estimatedReach * 0.3).clamp(0.1, 9.9);
     return km.toStringAsFixed(1);
   }
 
@@ -302,10 +305,35 @@ class _CitizenMeshDashboardScreenState
 }
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner();
+  const _StatusBanner({required this.transport});
+
+  final MeshTransportService transport;
 
   @override
   Widget build(BuildContext context) {
+    final IconData icon;
+    final String title;
+    final String subtitle;
+
+    if (!transport.isDiscovering) {
+      icon = Icons.wifi_off_rounded;
+      title = 'Mesh Offline';
+      subtitle = 'Discovery not started';
+    } else if (transport.peerCount > 0) {
+      icon = Icons.hub_rounded;
+      title = 'Mesh Active';
+      final p = transport.peerCount;
+      subtitle = '$p peer${p == 1 ? '' : 's'} connected';
+    } else if (transport.hasNativeDiscovery) {
+      icon = Icons.wifi_tethering_rounded;
+      title = 'Mesh Scanning';
+      subtitle = 'Looking for nearby nodes\u2026';
+    } else {
+      icon = Icons.wifi_off_rounded;
+      title = 'Mesh Limited';
+      subtitle = 'BLE unavailable \u2014 internet relay only';
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
       decoration: BoxDecoration(
@@ -321,25 +349,25 @@ class _StatusBanner extends StatelessWidget {
               color: Color(0xFFF2E6D9),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.wifi_off_rounded, color: dc.primary),
+            child: Icon(icon, color: dc.primary),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Network Offline',
-                  style: TextStyle(
+                  title,
+                  style: const TextStyle(
                     color: dc.primary,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Mesh Communication Only',
-                  style: TextStyle(color: dc.primaryDim, fontSize: 14),
+                  subtitle,
+                  style: const TextStyle(color: dc.primaryDim, fontSize: 14),
                 ),
               ],
             ),

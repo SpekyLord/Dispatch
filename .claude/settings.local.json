@@ -17,7 +17,14 @@
       "Bash(python3 -m py_compile src/dispatch_api/modules/*/routes.py src/dispatch_api/services/*.py)",
       "Bash(find apps/mobile/lib -name *.dart -path *page*)",
       "Bash(find apps/mobile/lib -name *.dart)",
-      "Bash(grep -n \"TODO\\\\|FIXME\\\\|XXX\\\\|INCOMPLETE\\\\|placeholder\\\\|mock\\\\|stub\" /c/Users/Jorge Acidre/Documents/GitHub/hackathon/Dispatch/apps/web/src/pages/municipality/*.tsx)"
+      "Bash(grep -n \"TODO\\\\|FIXME\\\\|XXX\\\\|INCOMPLETE\\\\|placeholder\\\\|mock\\\\|stub\" /c/Users/Jorge Acidre/Documents/GitHub/hackathon/Dispatch/apps/web/src/pages/municipality/*.tsx)",
+      "Bash(python -m py_compile src/dispatch_api/services/feed_service.py)",
+      "Bash(python -m py_compile src/dispatch_api/services/report_service.py)",
+      "Bash(python -m py_compile src/dispatch_api/services/mesh_service.py)",
+      "Bash(python -m py_compile src/dispatch_api/services/notification_service.py)",
+      "Bash(python -m py_compile src/dispatch_api/services/department_service.py)",
+      "Bash(python3 -m py_compile src/dispatch_api/services/feed_service.py)",
+      "Bash(py -3 -m py_compile src/dispatch_api/services/feed_service.py)"
     ]
   }
 }

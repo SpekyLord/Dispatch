@@ -359,6 +359,7 @@ class ReportService:
         return updated
 
     def scan_pending_timeouts(self) -> list[dict[str, Any]]:
+        all_responses = self._latest_responses_by_report()
         escalated_reports: list[dict[str, Any]] = []
         for report in self._all_reports():
             if report.get("status") != "pending" or report.get("is_escalated"):
@@ -368,7 +369,7 @@ class ReportService:
             if created_at > _utc_now() - timedelta(seconds=ESCALATION_THRESHOLD_SECONDS):
                 continue
 
-            latest_responses = self._latest_responses_for_report(report["id"])
+            latest_responses = all_responses.get(report["id"], {})
             if any(response.get("action") == "accepted" for response in latest_responses.values()):
                 continue
 
@@ -562,14 +563,17 @@ class ReportService:
             )
         departments = self.client.db_query(
             "departments",
-            params={"select": "*", "order": "name.asc"},
+            params={
+                "select": "*",
+                "verification_status": "eq.approved",
+                "order": "name.asc",
+            },
             use_service_role=True,
         )
         return [
             department
             for department in departments
-            if department.get("verification_status") == "approved"
-            and department.get("type") in department_types
+            if department.get("type") in department_types
         ]
 
     def _primary_departments(self, category: str) -> list[dict[str, Any]]:
@@ -589,12 +593,15 @@ class ReportService:
         ]
 
     def _approved_departments(self) -> list[dict[str, Any]]:
-        rows = self.client.db_query(
+        return self.client.db_query(
             "departments",
-            params={"select": "*", "order": "name.asc"},
+            params={
+                "select": "*",
+                "verification_status": "eq.approved",
+                "order": "name.asc",
+            },
             use_service_role=True,
         )
-        return [row for row in rows if row.get("verification_status") == "approved"]
 
     def _serialize_department_report(
         self,

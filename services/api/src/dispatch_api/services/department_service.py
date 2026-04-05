@@ -45,12 +45,15 @@ class DepartmentService:
             )
 
     def list_approved_departments(self) -> list[dict[str, Any]]:
-        rows = self.client.db_query(
+        return self.client.db_query(
             "departments",
-            params={"select": "*", "order": "name.asc"},
+            params={
+                "select": "*",
+                "verification_status": "eq.approved",
+                "order": "name.asc",
+            },
             use_service_role=True,
         )
-        return [row for row in rows if row.get("verification_status") == "approved"]
 
     def list_public_departments(self) -> list[dict[str, Any]]:
         base_rows = self.list_approved_departments()

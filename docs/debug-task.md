@@ -121,6 +121,41 @@ Full feature audit conducted on `2026-04-05` across web, mobile, and API.
   - Called on every feed post creation to notify citizens — loaded entire users table
   - Added `"role": f"eq.{role}"` to PostgREST query params
 
+### MEDIUM — Data Integrity
+
+- [x] **D1**: `feed_service.toggle_reaction()` race condition — stale reaction count
+  - Two concurrent likes would both read `reaction=5`, both write `6` instead of `7`
+  - Fixed: now counts actual reaction rows from DB instead of incrementing stale value
+
+### MEDIUM — N+1 Query / Full-Table Scan Bugs
+
+- [x] **Q1**: `report_service.scan_pending_timeouts()` N+1 — fetched ALL department responses per pending report in a loop
+  - Extracted single `_latest_responses_by_report()` call before the loop
+
+- [x] **Q2**: `feed_service._departments_by_user_id()` N+1 — one DB query per unique uploader
+  - Replaced with single batch query using PostgREST `in.()` operator
+
+- [x] **Q3**: `feed_service._assets_by_post_id()` fetched ENTIRE `department_feed_storage` table
+  - Added PostgREST `in.()` filter to only fetch assets for relevant post IDs
+
+- [x] **Q4**: `feed_service._comment_counts_by_post_id()` fetched ENTIRE `department_feed_comment` table
+  - Added PostgREST `in.()` filter + reduced select to `post_id` only
+
+- [x] **Q5**: `feed_service.list_posts()` filtered category/uploader in Python after full-table fetch
+  - Pushed category and uploader filters to PostgREST query params
+
+- [x] **Q6**: `report_service._approved_departments()` fetched all departments, filtered in Python
+  - Added `verification_status=eq.approved` to PostgREST query
+
+- [x] **Q7**: `report_service._visible_departments_for_report()` same pattern
+  - Added `verification_status=eq.approved` to PostgREST query
+
+- [x] **Q8**: `department_service.list_approved_departments()` same pattern
+  - Added `verification_status=eq.approved` to PostgREST query
+
+- [x] **Q9**: `mesh_service.list_mesh_posts()` fetched all posts, filtered `is_mesh_origin` in Python
+  - Added `is_mesh_origin=eq.true` to PostgREST query
+
 ---
 
 ## TS Build Status

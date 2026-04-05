@@ -350,12 +350,16 @@ class MeshService:
         ]
 
     def list_mesh_posts(self) -> list[dict[str, Any]]:
-        rows = self.client.db_query(
+        return self.client.db_query(
             "posts",
-            params={"select": "*", "order": "created_at.desc", "limit": "50"},
+            params={
+                "select": "*",
+                "is_mesh_origin": "eq.true",
+                "order": "created_at.desc",
+                "limit": "50",
+            },
             use_service_role=True,
         )
-        return [row for row in rows if row.get("is_mesh_origin")]
 
     def _viewer_can_access_message(
         self,

@@ -175,10 +175,14 @@ class FeedService:
                 return_repr=False,
             )
 
-        current_reaction = int(post.get("reaction") or 0)
-        next_reaction = current_reaction - 1 if existing_reaction_rows else current_reaction + 1
-        if next_reaction < 0:
-            next_reaction = 0
+        # Count actual reactions from the table to avoid race conditions
+        # where concurrent requests read stale counts.
+        reaction_rows = self.client.db_query(
+            FEED_REACTIONS_TABLE,
+            params={"select": "id", "post_id": f"eq.{post_id}"},
+            use_service_role=True,
+        )
+        next_reaction = len(reaction_rows)
         updated_rows = self.client.db_update(
             FEED_POSTS_TABLE,
             data={"reaction": next_reaction},
@@ -331,15 +335,16 @@ class FeedService:
         uploader_id: str | None = None,
         viewer_user_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
+        if category:
+            params["category"] = f"eq.{category}"
+        if uploader_id:
+            params["uploader"] = f"eq.{uploader_id}"
         rows = self.client.db_query(
             FEED_POSTS_TABLE,
-            params={"select": "*", "order": "created_at.desc"},
+            params=params,
             use_service_role=True,
         )
-        if category:
-            rows = [row for row in rows if row.get("category") == category]
-        if uploader_id:
-            rows = [row for row in rows if str(row.get("uploader")) == str(uploader_id)]
 
         departments_by_user = self._departments_by_user_id(
             user_ids=[row.get("uploader") for row in rows if row.get("uploader")]
@@ -394,17 +399,15 @@ class FeedService:
         return departments[0] if departments else None
 
     def _departments_by_user_id(self, *, user_ids: list[Any]) -> dict[str, dict[str, Any]]:
-        departments_by_user: dict[str, dict[str, Any]] = {}
-        for uploader_id in user_ids:
-            if uploader_id is None:
-                continue
-            key = str(uploader_id)
-            if key in departments_by_user:
-                continue
-            department = self._department_for_uploader(uploader_id)
-            if department:
-                departments_by_user[key] = department
-        return departments_by_user
+        unique_ids = {str(uid) for uid in user_ids if uid is not None}
+        if not unique_ids:
+            return {}
+        departments = self.client.db_query(
+            "departments",
+            params={"select": "*", "user_id": f"in.({','.join(unique_ids)})"},
+            use_service_role=True,
+        )
+        return {str(d["user_id"]): d for d in departments if d.get("user_id")}
 
     def _assets_for_post(self, post_id: Any) -> dict[str, list[str]]:
         if post_id is None:
@@ -423,14 +426,12 @@ class FeedService:
 
         rows = self.client.db_query(
             FEED_STORAGE_TABLE,
-            params={"select": "*"},
+            params={"select": "*", "id": f"in.({','.join(valid_post_ids)})"},
             use_service_role=True,
         )
         grouped: dict[str, dict[str, list[str]]] = {}
         for row in rows:
             key = str(row.get("id"))
-            if key not in valid_post_ids:
-                continue
             bucket = grouped.setdefault(key, {"photos": [], "attachments": []})
             if row.get("photos"):
                 bucket["photos"].append(row["photos"])
@@ -445,14 +446,12 @@ class FeedService:
 
         rows = self.client.db_query(
             FEED_COMMENTS_TABLE,
-            params={"select": "*"},
+            params={"select": "post_id", "post_id": f"in.({','.join(valid_post_ids)})"},
             use_service_role=True,
         )
         counts: dict[str, int] = {}
         for row in rows:
             key = str(row.get("post_id"))
-            if key not in valid_post_ids:
-                continue
             counts[key] = counts.get(key, 0) + 1
         return counts
 

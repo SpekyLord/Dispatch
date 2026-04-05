@@ -77,9 +77,10 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
     final pages = [
       _buildDashboard(context),
       const MeshPeopleMapScreen(
-        title: 'Mesh Map',
-        subtitle: 'Nodes and signals',
+        title: 'Mesh Network',
+        subtitle: 'Interactive Map',
         allowResolveActions: false,
+        allowCompassActions: true,
       ),
       const CitizenFeedScreen(),
       const CitizenProfileScreen(),

@@ -253,37 +253,14 @@ class _CitizenMeshDashboardScreenState
   }
 
   String _rangeKm(MeshTransportService transport) {
-    final reach = transport.estimatedReach <= 0 ? 1 : transport.estimatedReach;
-    final km = (reach * 0.3).clamp(0.3, 9.9);
+    if (transport.estimatedReach <= 0) return '0.0';
+    final km = (transport.estimatedReach * 0.3).clamp(0.0, 9.9);
     return km.toStringAsFixed(1);
   }
 
   List<_DashboardActivity> _buildActivities(MeshTransportService transport) {
     final inbox = transport.inboxItems;
-    if (inbox.isNotEmpty) {
-      return inbox.take(3).map(_activityFromInboxItem).toList(growable: false);
-    }
-
-    return const [
-      _DashboardActivity(
-        icon: Icons.description_outlined,
-        title: 'New Report from Node #210',
-        subtitle: 'Structural damage noted',
-        timeLabel: '2m ago',
-      ),
-      _DashboardActivity(
-        icon: Icons.sync_alt_rounded,
-        title: 'Sync Complete for Node #402',
-        subtitle: 'Batch telemetry upload',
-        timeLabel: '14m ago',
-      ),
-      _DashboardActivity(
-        icon: Icons.place_outlined,
-        title: 'New Node Detected',
-        subtitle: 'Unidentified device within 500m',
-        timeLabel: '1h',
-      ),
-    ];
+    return inbox.take(3).map(_activityFromInboxItem).toList(growable: false);
   }
 
   _DashboardActivity _activityFromInboxItem(MeshInboxItem item) {

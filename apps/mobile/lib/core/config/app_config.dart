@@ -61,7 +61,7 @@ String resolveApiBaseUrl({
       return webOverride;
     }
 
-    if (apiOverride.isNotEmpty && !_isAndroidEmulatorAlias(apiOverride)) {
+    if (apiOverride.isNotEmpty && !isAndroidEmulatorAlias(apiOverride)) {
       return apiOverride;
     }
 
@@ -80,7 +80,39 @@ String resolveApiBaseUrl({
   return isAndroid ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
 }
 
-bool _isAndroidEmulatorAlias(String url) {
+bool isAndroidEmulatorAlias(String url) {
   final uri = Uri.tryParse(url);
   return uri?.host == '10.0.2.2';
+}
+
+bool isLoopbackApiUrl(String url) {
+  final uri = Uri.tryParse(url);
+  final host = uri?.host.toLowerCase();
+  return host == '10.0.2.2' || host == '127.0.0.1' || host == 'localhost';
+}
+
+String? buildMobileApiUrlHelp({
+  required bool isWeb,
+  required bool isAndroid,
+  required String url,
+}) {
+  if (isWeb || !isAndroid) {
+    return null;
+  }
+
+  if (isAndroidEmulatorAlias(url)) {
+    return 'This Android build is still using 10.0.2.2, which only works in '
+        'the Android emulator. On a physical phone or installed APK, use your '
+        'computer\'s LAN IP or a public API URL instead.';
+  }
+
+  final uri = Uri.tryParse(url);
+  final host = uri?.host.toLowerCase();
+  if (host == '127.0.0.1' || host == 'localhost') {
+    return 'This Android build is pointing at localhost. A physical phone '
+        'cannot reach your computer through localhost, so use your computer\'s '
+        'LAN IP or a public API URL instead.';
+  }
+
+  return null;
 }

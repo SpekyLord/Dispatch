@@ -107,6 +107,14 @@ flutter run --dart-define-from-file=.env
 > **Note:** Android SDK is only required for device/emulator builds. `flutter analyze` and `flutter test` work without it.
 >
 > **Chrome note:** `flutter run -d chrome` uses `MOBILE_WEB_API_BASE_URL` if provided. If you leave it blank, the app falls back to the current browser host on port `5000`. The API now allows localhost and `127.0.0.1` development origins on any port.
+>
+> **APK note:** A plain `flutter build apk` does not pick up your mobile `.env` unless you pass it during the build. Use:
+>
+> ```bash
+> flutter build apk --dart-define-from-file=.env
+> ```
+>
+> If that APK will run on a physical Android phone, `MOBILE_API_BASE_URL` must not be `http://10.0.2.2:5000`, because `10.0.2.2` only works inside the Android emulator.
 
 ### Running on a Physical Android Phone
 
@@ -129,6 +137,13 @@ MOBILE_API_BASE_URL=http://<YOUR_PC_LAN_IP>:5000
 ```
 
 Example: `http://192.168.254.119:5000`
+
+If you are building an APK for that phone instead of using `flutter run`, build it with the same `.env` file:
+
+```bash
+cd apps/mobile
+flutter build apk --dart-define-from-file=.env
+```
 
 3. Start the API:
 

@@ -1,5 +1,6 @@
 // Login screen - email/password form, delegates auth to SessionController.
 
+import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/foundation.dart';
@@ -31,9 +32,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _apiUrlController = TextEditingController(text: currentUrl);
     // Auto-expand server settings on physical Android devices (10.0.2.2 won't
     // work there — the user must enter their computer's LAN IP).
-    if (!kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.android &&
-        Uri.tryParse(currentUrl)?.host == '10.0.2.2') {
+    if (_currentApiHelp(currentUrl) != null) {
       _showServerConfig = true;
     }
   }
@@ -44,6 +43,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.dispose();
     _apiUrlController.dispose();
     super.dispose();
+  }
+
+  String? _currentApiHelp(String url) {
+    return buildMobileApiUrlHelp(
+      isWeb: kIsWeb,
+      isAndroid: defaultTargetPlatform == TargetPlatform.android,
+      url: url,
+    );
   }
 
   Future<void> _applyApiUrl() async {
@@ -84,9 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     if (mounted) {
-      final currentUrl = controller.currentApiBaseUrl;
-      final isEmulatorAlias =
-          Uri.tryParse(currentUrl)?.host == '10.0.2.2';
+      final isEmulatorAlias = false;
       if (err != null && isEmulatorAlias) {
         err =
             'Cannot reach 10.0.2.2 — this address only works on '
@@ -99,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() {
         _loading = false;
         _error = err;
-        if (err != null && isEmulatorAlias) {
+        if (err != null && _currentApiHelp(controller.currentApiBaseUrl) != null) {
           _showServerConfig = true;
         }
       });
@@ -108,6 +113,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUrl = ref
+        .read(sessionControllerProvider.notifier)
+        .currentApiBaseUrl;
+    final apiHelp = _currentApiHelp(currentUrl);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login'),
@@ -184,6 +194,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           style: const TextStyle(color: dc.warmSeed),
                         ),
                       ),
+                    if (apiHelp != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: dc.alertFill,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: dc.warmSeed.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Android API target',
+                              style: TextStyle(
+                                color: dc.warmSeed,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              apiHelp,
+                              style: const TextStyle(color: dc.warmSeed),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Current target: $currentUrl',
+                              style: const TextStyle(
+                                color: dc.mutedInk,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     InkWell(
                       onTap: () =>
                           setState(() => _showServerConfig = !_showServerConfig),
@@ -232,7 +280,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'For physical devices, use your computer\'s local network IP (e.g. 192.168.x.x:5000).',
+                        'For a physical phone or installed APK, use your computer\'s LAN IP or a public API URL.',
                         style: TextStyle(
                           color: dc.mutedInk,
                           fontSize: 11,

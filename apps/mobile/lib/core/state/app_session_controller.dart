@@ -5,8 +5,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/session_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_session_state.dart';
@@ -244,7 +246,19 @@ class SessionController extends StateNotifier<SessionState> {
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.connectionError) {
-        return 'Unable to reach the API. Check MOBILE_API_BASE_URL and ensure the backend is running.';
+        final apiUrl = currentApiBaseUrl;
+        final configHelp = buildMobileApiUrlHelp(
+          isWeb: kIsWeb,
+          isAndroid: defaultTargetPlatform == TargetPlatform.android,
+          url: apiUrl,
+        );
+        if (configHelp != null) {
+          return '$configHelp\n\nUpdate MOBILE_API_BASE_URL before building '
+              'the APK, or change Server Settings inside the app.';
+        }
+        return 'Unable to reach the API at $apiUrl. Check '
+            'MOBILE_API_BASE_URL and ensure the backend is running and '
+            'reachable from this device.';
       }
       final payload = error.response?.data;
       if (payload is Map<String, dynamic>) {

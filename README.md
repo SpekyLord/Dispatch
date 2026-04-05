@@ -84,6 +84,12 @@ flutter run --dart-define-from-file=.env
 
 Use `MOBILE_API_BASE_URL` for Android or emulator builds and `MOBILE_WEB_API_BASE_URL` for `flutter run -d chrome`. In development, the API now accepts localhost and `127.0.0.1` origins on any port so Flutter web can talk to the local backend.
 
+For a physical Android phone or an installed APK, do not leave `MOBILE_API_BASE_URL` set to `http://10.0.2.2:5000`, because that host only works inside the Android emulator. Build the APK with the same env file:
+
+```powershell
+flutter build apk --dart-define-from-file=.env
+```
+
 ## Quality Checks
 
 ### Web

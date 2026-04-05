@@ -66,4 +66,38 @@ void main() {
       expect(url, 'http://192.168.1.50:5000');
     });
   });
+
+  group('buildMobileApiUrlHelp', () {
+    test('warns when Android points at the emulator alias', () {
+      final help = buildMobileApiUrlHelp(
+        isWeb: false,
+        isAndroid: true,
+        url: 'http://10.0.2.2:5000',
+      );
+
+      expect(help, isNotNull);
+      expect(help, contains('10.0.2.2'));
+    });
+
+    test('warns when Android points at localhost', () {
+      final help = buildMobileApiUrlHelp(
+        isWeb: false,
+        isAndroid: true,
+        url: 'http://127.0.0.1:5000',
+      );
+
+      expect(help, isNotNull);
+      expect(help, contains('localhost'));
+    });
+
+    test('does not warn for a LAN API URL', () {
+      final help = buildMobileApiUrlHelp(
+        isWeb: false,
+        isAndroid: true,
+        url: 'http://192.168.1.50:5000',
+      );
+
+      expect(help, isNull);
+    });
+  });
 }

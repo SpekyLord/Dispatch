@@ -1,8 +1,10 @@
 // Register screen - citizen or department account creation.
 // Department fields remain conditional when role = 'department'.
 
+import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +20,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final TextEditingController _apiUrlController;
   final _fullNameController = TextEditingController();
   final _orgNameController = TextEditingController();
   final _contactController = TextEditingController();
@@ -27,10 +30,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String _role = 'citizen';
   String _deptType = 'fire';
   bool _loading = false;
+  bool _showServerConfig = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    final currentUrl =
+        ref.read(sessionControllerProvider.notifier).currentApiBaseUrl;
+    _apiUrlController = TextEditingController(text: currentUrl);
+    if (_currentApiHelp(currentUrl) != null) {
+      _showServerConfig = true;
+    }
+  }
+
+  @override
   void dispose() {
+    _apiUrlController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _fullNameController.dispose();
@@ -39,6 +55,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _addressController.dispose();
     _areaController.dispose();
     super.dispose();
+  }
+
+  String? _currentApiHelp(String url) {
+    return buildMobileApiUrlHelp(
+      isWeb: kIsWeb,
+      isAndroid: defaultTargetPlatform == TargetPlatform.android,
+      url: url,
+    );
+  }
+
+  Future<void> _applyApiUrl() async {
+    final url = _apiUrlController.text.trim();
+    if (url.isEmpty) return;
+    await ref.read(sessionControllerProvider.notifier).setCustomApiBaseUrl(url);
+    if (mounted) {
+      setState(() => _error = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server URL set to $url')),
+      );
+    }
   }
 
   Future<void> _handleRegister() async {
@@ -83,12 +119,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       setState(() {
         _loading = false;
         _error = err;
+        if (err != null && _currentApiHelp(controller.currentApiBaseUrl) != null) {
+          _showServerConfig = true;
+        }
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentUrl = ref
+        .read(sessionControllerProvider.notifier)
+        .currentApiBaseUrl;
+    final apiHelp = _currentApiHelp(currentUrl);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Register'),
@@ -170,6 +214,100 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           style: const TextStyle(color: dc.warmSeed),
                         ),
                       ),
+                    if (apiHelp != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: dc.alertFill,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: dc.warmSeed.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Android API target',
+                              style: TextStyle(
+                                color: dc.warmSeed,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              apiHelp,
+                              style: const TextStyle(color: dc.warmSeed),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Current target: $currentUrl',
+                              style: const TextStyle(
+                                color: dc.mutedInk,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    InkWell(
+                      onTap: () =>
+                          setState(() => _showServerConfig = !_showServerConfig),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _showServerConfig
+                                  ? Icons.expand_less
+                                  : Icons.dns_outlined,
+                              size: 18,
+                              color: dc.mutedInk,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _showServerConfig
+                                  ? 'Hide server settings'
+                                  : 'Server settings',
+                              style: const TextStyle(
+                                color: dc.mutedInk,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_showServerConfig) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _apiUrlController,
+                        decoration: InputDecoration(
+                          labelText: 'API server URL',
+                          hintText: 'http://192.168.x.x:5000',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            onPressed: _applyApiUrl,
+                            icon: const Icon(Icons.check),
+                            tooltip: 'Apply',
+                          ),
+                        ),
+                        keyboardType: TextInputType.url,
+                        onSubmitted: (_) => _applyApiUrl(),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'For a physical phone or installed APK, use your computer\'s LAN IP or a public API URL.',
+                        style: TextStyle(
+                          color: dc.mutedInk,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       children: [
                         Expanded(

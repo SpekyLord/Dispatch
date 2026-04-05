@@ -98,7 +98,7 @@ class _CitizenMeshDashboardScreenState
     final transport = ref.read(meshTransportProvider);
     final activeNodes = transport.peerCount + 1;
     final recentDispatches = transport.inboxItems.length;
-    final rangeKm = _rangeKm(transport);
+    final rangeDisplay = _rangeDisplay(transport);
     final activities = _buildActivities(transport);
 
     return Scaffold(
@@ -171,15 +171,15 @@ class _CitizenMeshDashboardScreenState
                     const SizedBox(height: 28),
                     _MetricCard(
                       label: 'NETWORK RANGE',
-                      value: rangeKm,
-                      trailingText: rangeKm == '--' ? null : 'km',
+                      value: rangeDisplay.value,
+                      trailingText: rangeDisplay.unit,
                     ),
                     const SizedBox(height: 36),
                     GestureDetector(
                       onTap: widget.onOpenMapTab,
                       child: _ScanMapCard(
                         scanningLabel: transport.peerCount > 0
-                            ? 'Scanning ${transport.estimatedReach * 240}m sector...'
+                            ? 'Scanning ~${transport.peerCount * 150}m sector...'
                             : 'Scanning for nearby nodes...',
                       ),
                     ),
@@ -255,10 +255,14 @@ class _CitizenMeshDashboardScreenState
     );
   }
 
-  String _rangeKm(MeshTransportService transport) {
-    if (transport.peerCount == 0) return '--';
-    final km = (transport.estimatedReach * 0.3).clamp(0.1, 9.9);
-    return km.toStringAsFixed(1);
+  ({String value, String? unit}) _rangeDisplay(MeshTransportService transport) {
+    if (transport.peerCount == 0) return (value: '--', unit: null);
+    // ~150 m per direct peer is a realistic BLE estimate; cap at 9.9 km
+    final meters = (transport.peerCount * 150).clamp(50, 9900);
+    if (meters >= 1000) {
+      return (value: (meters / 1000).toStringAsFixed(1), unit: 'km');
+    }
+    return (value: '$meters', unit: 'm');
   }
 
   List<_DashboardActivity> _buildActivities(MeshTransportService transport) {

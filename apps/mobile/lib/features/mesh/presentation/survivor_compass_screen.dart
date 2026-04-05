@@ -128,6 +128,35 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         );
       }
     }
+
+    // Inject local BLE peers as trackable signals so the compass can target them
+    // even when there are no active SOS/survivor events from the server.
+    try {
+      final transport = ref.read(meshTransportProvider);
+      final snapshot = await transport.buildTopologySnapshot();
+      if (snapshot == null || !mounted) return;
+      final sarController = ref.read(sarModeControllerProvider.notifier);
+      final nodes = (snapshot['nodes'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>();
+      for (final node in nodes) {
+        final lat = (node['lat'] as num?)?.toDouble();
+        final lng = (node['lng'] as num?)?.toDouble();
+        final deviceId = node['nodeDeviceId'] as String?;
+        if (lat == null || lng == null || deviceId == null) continue;
+        sarController.registerBlePassiveScan(
+          rawDeviceIdentifier: deviceId,
+          signalStrengthDbm: -70,
+          nodeLocation: SarNodeLocation(
+            lat: lat,
+            lng: lng,
+            accuracyMeters: 10,
+          ),
+        );
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      // BLE peer injection is best-effort; ignore errors.
+    }
   }
 
   Future<void> _hydrateTrailForActiveTarget({

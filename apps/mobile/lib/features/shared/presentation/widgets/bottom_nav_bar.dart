@@ -1,56 +1,58 @@
 import 'dart:ui';
+
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 
-/// Glassmorphic bottom navigation bar — frosted glass with rounded top.
-/// 4 tabs: Mesh, Map, Reports, Settings (matches design system).
 class AppBottomNavigationBar extends StatelessWidget {
-  final int selectedIndex;
-  final Function(int) onItemTapped;
-
   const AppBottomNavigationBar({
     super.key,
     required this.selectedIndex,
     required this.onItemTapped,
   });
 
+  final int selectedIndex;
+  final ValueChanged<int> onItemTapped;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark
-        ? dc.darkSurface.withValues(alpha: 0.8)
-        : dc.surface.withValues(alpha: 0.8);
-    final selectedColor = isDark ? dc.darkPrimaryAccent : dc.primary;
+    final backgroundColor = isDark
+        ? dc.darkSurface.withValues(alpha: 0.9)
+        : dc.surface.withValues(alpha: 0.9);
+    final selectedColor = isDark ? dc.darkInk : dc.onSurface;
     final unselectedColor = isDark
-        ? dc.darkInk.withValues(alpha: 0.5)
-        : dc.onSurface.withValues(alpha: 0.5);
+        ? dc.darkMutedInk
+        : dc.onSurfaceVariant.withValues(alpha: 0.82);
+    final dividerColor = isDark
+        ? dc.darkBorder.withValues(alpha: 0.45)
+        : dc.outlineVariant.withValues(alpha: 0.2);
 
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: bgColor,
+            color: backgroundColor,
+            border: Border(top: BorderSide(color: dividerColor)),
             boxShadow: [
               BoxShadow(
-                color: dc.onSurface.withValues(alpha: 0.06),
-                blurRadius: 32,
-                offset: const Offset(0, -8),
+                color: dc.onSurface.withValues(alpha: 0.05),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
               ),
             ],
           ),
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _NavItem(
-                    icon: Icons.hub_outlined,
-                    activeIcon: Icons.hub,
-                    label: 'MESH',
+                    icon: Icons.list_alt_outlined,
+                    activeIcon: Icons.list,
+                    label: 'Feed',
                     isSelected: selectedIndex == 0,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -59,16 +61,16 @@ class AppBottomNavigationBar extends StatelessWidget {
                   _NavItem(
                     icon: Icons.map_outlined,
                     activeIcon: Icons.map,
-                    label: 'MAP',
+                    label: 'Map',
                     isSelected: selectedIndex == 1,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
                     onTap: () => onItemTapped(1),
                   ),
                   _NavItem(
-                    icon: Icons.edit_note_outlined,
-                    activeIcon: Icons.edit_note,
-                    label: 'REPORTS',
+                    icon: Icons.hub_outlined,
+                    activeIcon: Icons.hub,
+                    label: 'Nodes',
                     isSelected: selectedIndex == 2,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -77,7 +79,7 @@ class AppBottomNavigationBar extends StatelessWidget {
                   _NavItem(
                     icon: Icons.settings_outlined,
                     activeIcon: Icons.settings,
-                    label: 'SETTINGS',
+                    label: 'Settings',
                     isSelected: selectedIndex == 3,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,
@@ -115,38 +117,32 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isSelected ? selectedColor : unselectedColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: isSelected
-            ? BoxDecoration(
-                color: isDark
-                    ? dc.darkPrimaryAccent.withValues(alpha: 0.12)
-                    : dc.primaryContainer,
-                borderRadius: BorderRadius.circular(24),
-              )
-            : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(isSelected ? activeIcon : icon, color: color, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                color: color,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                letterSpacing: 1.0,
-              ),
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(isSelected ? activeIcon : icon, color: color, size: 22),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: color,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

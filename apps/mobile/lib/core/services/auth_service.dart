@@ -297,6 +297,54 @@ class AuthService {
         as Map<String, dynamic>;
   }
 
+  /// Aggregates the citizen-facing mesh feed into a single payload so the
+  /// frontend can render the redesigned feed without manually orchestrating
+  /// several unrelated backend requests.
+  Future<Map<String, dynamic>> getCitizenMeshFeedSnapshot() async {
+    Future<List<Map<String, dynamic>>> safeList(
+      Future<List<Map<String, dynamic>>> Function() loader,
+    ) async {
+      try {
+        return await loader();
+      } catch (_) {
+        return const <Map<String, dynamic>>[];
+      }
+    }
+
+    Future<Map<String, dynamic>> safeMap(
+      Future<Map<String, dynamic>> Function() loader,
+    ) async {
+      try {
+        return await loader();
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
+
+    final results = await Future.wait<Object>([
+      safeList(() => getFeedPosts()),
+      safeList(() async => (await getReports()).cast<Map<String, dynamic>>()),
+      safeMap(() => getMeshMessages(includePosts: true)),
+      safeMap(() => getMeshTopology()),
+    ]);
+
+    final feedPosts = results[0] as List<Map<String, dynamic>>;
+    final reports = results[1] as List<Map<String, dynamic>>;
+    final meshResponse = results[2] as Map<String, dynamic>;
+    final topology = results[3] as Map<String, dynamic>;
+
+    return {
+      'posts': feedPosts,
+      'reports': reports,
+      'mesh_messages': (meshResponse['messages'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>(),
+      'mesh_posts': (meshResponse['mesh_posts'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>(),
+      'topology_nodes': (topology['nodes'] as List<dynamic>? ?? const [])
+          .cast<Map<String, dynamic>>(),
+    };
+  }
+
   // --- Notifications (Phase 2) ---
 
   // List all notifications for current user

@@ -1,25 +1,24 @@
 import 'dart:ui';
+
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 
-/// Glassmorphic bottom navigation bar — frosted glass with rounded top.
-/// 4 tabs: Mesh, Map, Reports, Settings (matches design system).
 class AppBottomNavigationBar extends StatelessWidget {
-  final int selectedIndex;
-  final Function(int) onItemTapped;
-
   const AppBottomNavigationBar({
     super.key,
     required this.selectedIndex,
     required this.onItemTapped,
   });
 
+  final int selectedIndex;
+  final ValueChanged<int> onItemTapped;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark
         ? dc.darkSurface.withValues(alpha: 0.8)
-        : dc.surface.withValues(alpha: 0.8);
+        : dc.surface.withValues(alpha: 0.92);
     final selectedColor = isDark ? dc.darkPrimaryAccent : dc.primary;
     final unselectedColor = isDark
         ? dc.darkInk.withValues(alpha: 0.5)
@@ -66,9 +65,9 @@ class AppBottomNavigationBar extends StatelessWidget {
                     onTap: () => onItemTapped(1),
                   ),
                   _NavItem(
-                    icon: Icons.edit_note_outlined,
-                    activeIcon: Icons.edit_note,
-                    label: 'REPORTS',
+                    icon: Icons.dynamic_feed_outlined,
+                    activeIcon: Icons.dynamic_feed,
+                    label: 'FEED',
                     isSelected: selectedIndex == 2,
                     selectedColor: selectedColor,
                     unselectedColor: unselectedColor,

@@ -1,5 +1,12 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { AttachmentList } from "@/components/feed/attachment-list";
 import {
@@ -13,6 +20,7 @@ import {
 } from "@/components/feed/department-hover-preview";
 import { DepartmentCreatePostForm } from "@/components/feed/department-create-post-form";
 import { AppShell } from "@/components/layout/app-shell";
+import { DepartmentPageHero } from "@/components/layout/department-page-hero";
 import { useAppShellTheme } from "@/components/layout/app-shell-theme";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -75,26 +83,32 @@ const roleCopy: Record<NewsFeedRole, RoleCopy> = {
   citizen: {
     badge: "Citizen View",
     subtitle: "Temporary bulletin board",
-    intro: "A temporary News feed based on the provided HTML. It gives citizens a quick place to review response updates, preparedness reminders, and agency highlights while we refine the permanent module later.",
+    intro:
+      "A temporary News feed based on the provided HTML. It gives citizens a quick place to review response updates, preparedness reminders, and agency highlights while we refine the permanent module later.",
     searchPlaceholder: "Search local safety updates...",
     accessTitle: "Read-only access",
-    accessBody: "Citizens can browse awareness posts, public advisories, and response updates here, but only departments are allowed to publish News feed content.",
+    accessBody:
+      "Citizens can browse awareness posts, public advisories, and response updates here, but only departments are allowed to publish News feed content.",
   },
   department: {
     badge: "Department View",
     subtitle: "Temporary operations bulletin",
-    intro: "A temporary News feed for response teams to scan public-facing announcements, readiness notes, and cross-agency highlights using the layout from the supplied HTML.",
+    intro:
+      "A temporary News feed for response teams to scan public-facing announcements, readiness notes, and cross-agency highlights using the layout from the supplied HTML.",
     searchPlaceholder: "Search response protocols and field updates...",
     accessTitle: "Department publishing",
-    accessBody: "Departments are the only role that can publish awareness posts, incident updates, and public News feed announcements from this temporary view.",
+    accessBody:
+      "Departments are the only role that can publish awareness posts, incident updates, and public News feed announcements from this temporary view.",
   },
   municipality: {
     badge: "Municipality View",
     subtitle: "Temporary regional bulletin",
-    intro: "A temporary News feed for municipal users to monitor advisories, readiness themes, and cross-department communication in a single view before we replace it with the final implementation.",
+    intro:
+      "A temporary News feed for municipal users to monitor advisories, readiness themes, and cross-department communication in a single view before we replace it with the final implementation.",
     searchPlaceholder: "Search municipal alerts and coordination notes...",
     accessTitle: "Observation-only access",
-    accessBody: "Municipality users can monitor the News feed here, but publishing remains restricted to departments only for awareness posts, reports, and news.",
+    accessBody:
+      "Municipality users can monitor the News feed here, but publishing remains restricted to departments only for awareness posts, reports, and news.",
   },
 };
 
@@ -104,25 +118,42 @@ const quickActions = [
   { icon: "broadcast_on_personal", label: "Broadcasts" },
 ] as const;
 
-const categoryStyles: Record<string, { accentClassName: string; icon: string }> = {
+const categoryStyles: Record<
+  string,
+  { accentClassName: string; icon: string }
+> = {
   alert: { accentClassName: "bg-[#ffdbd0] text-[#89391e]", icon: "warning" },
-  warning: { accentClassName: "bg-[#ffe7cf] text-[#a14b2f]", icon: "error_outline" },
-  safety_tip: { accentClassName: "bg-[#dce8f3] text-[#456b86]", icon: "health_and_safety" },
+  warning: {
+    accentClassName: "bg-[#ffe7cf] text-[#a14b2f]",
+    icon: "error_outline",
+  },
+  safety_tip: {
+    accentClassName: "bg-[#dce8f3] text-[#456b86]",
+    icon: "health_and_safety",
+  },
   update: { accentClassName: "bg-[#e6f1e8] text-[#397154]", icon: "info" },
-  situational_report: { accentClassName: "bg-[#ece3f5] text-[#6e4c91]", icon: "summarize" },
+  situational_report: {
+    accentClassName: "bg-[#ece3f5] text-[#6e4c91]",
+    icon: "summarize",
+  },
 };
 
 const readinessCategories = ["alert", "warning", "situational_report"] as const;
 const readinessCategorySet = new Set<string>(readinessCategories);
-const readinessCategoryLabels: Record<(typeof readinessCategories)[number], string> = {
+const readinessCategoryLabels: Record<
+  (typeof readinessCategories)[number],
+  string
+> = {
   alert: "Alert",
   warning: "Warning",
   situational_report: "Situational Report",
 };
 
 const footerLinks = ["Standard Ops", "Ethics Policy", "Command Chain"] as const;
-const baseWarmPanelClassName = "dispatch-news-feed-surface border-[#efd8d0] bg-[#fff8f3]";
-const baseWarmTabClassName = "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b]";
+const baseWarmPanelClassName =
+  "dispatch-news-feed-surface border-[#efd8d0] bg-[#fff8f3]";
+const baseWarmTabClassName =
+  "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b]";
 const baseWarmActionTabClassName =
   "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#8a5a40] transition-colors hover:bg-[#f2e7de]";
 const basePopupPanelShadowClassName =
@@ -210,7 +241,9 @@ function parseCoordinateLocation(location?: string | null) {
     return null;
   }
 
-  const match = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  const match = location
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
 
   if (!match) {
     return null;
@@ -267,7 +300,10 @@ function summarizeResolvedLocation(data: {
   const country = address.country;
 
   return [primary, locality, country]
-    .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
+    .filter(
+      (value, index, values) =>
+        Boolean(value) && values.indexOf(value) === index,
+    )
     .join(", ");
 }
 
@@ -288,7 +324,11 @@ function AnimatedHeartIcon({ liked }: { liked: boolean }) {
     <span className="relative flex h-6 w-6 items-center justify-center">
       <svg
         aria-hidden="true"
-        className={liked ? "h-5 w-5 fill-current opacity-0" : "h-5 w-5 fill-current opacity-100"}
+        className={
+          liked
+            ? "h-5 w-5 fill-current opacity-0"
+            : "h-5 w-5 fill-current opacity-100"
+        }
         viewBox="0 0 24 24"
       >
         <path d={heartOutlinePath} />
@@ -320,12 +360,22 @@ function AnimatedHeartIcon({ liked }: { liked: boolean }) {
   );
 }
 
-function AnimatedBookmarkIcon({ bookmarked, animate }: { bookmarked: boolean; animate: boolean }) {
+function AnimatedBookmarkIcon({
+  bookmarked,
+  animate,
+}: {
+  bookmarked: boolean;
+  animate: boolean;
+}) {
   return (
     <span className="relative flex h-6 w-6 items-center justify-center">
       <svg
         aria-hidden="true"
-        className={animate ? "dispatch-bookmark-active h-5 w-5 transition-colors duration-200" : "h-5 w-5 transition-colors duration-200"}
+        className={
+          animate
+            ? "dispatch-bookmark-active h-5 w-5 transition-colors duration-200"
+            : "h-5 w-5 transition-colors duration-200"
+        }
         viewBox="0 0 32 32"
       >
         <path
@@ -352,7 +402,9 @@ function NewsFeedCaughtUpFooter({
 }) {
   const hourglassStyle = {
     "--dispatch-hourglass-shell-bg": isDarkMode ? "#2a2320" : "#8c6a5c",
-    "--dispatch-hourglass-shell-glow": isDarkMode ? "rgba(255, 244, 232, 0.08)" : "rgba(255, 247, 238, 0.42)",
+    "--dispatch-hourglass-shell-glow": isDarkMode
+      ? "rgba(255, 244, 232, 0.08)"
+      : "rgba(255, 247, 238, 0.42)",
     "--dispatch-hourglass-frame": isDarkMode ? "#a9978b" : "#9d8b81",
     "--dispatch-hourglass-core": isDarkMode ? "#201a18" : "#5e4d45",
     "--dispatch-hourglass-sand": isDarkMode ? "#fff0d1" : "#fffaf0",
@@ -361,7 +413,9 @@ function NewsFeedCaughtUpFooter({
   return (
     <Card
       className={`overflow-hidden rounded-[34px] border px-6 py-10 text-center shadow-[0_10px_28px_-18px_rgba(120,78,58,0.34)] ${
-        isDarkMode ? "border-[#3a3530] bg-[#221f1d] text-[#f7efe8]" : "border-[#e6d3c8] bg-[#fffaf6] text-[#4e3c33]"
+        isDarkMode
+          ? "border-[#3a3530] bg-[#221f1d] text-[#f7efe8]"
+          : "border-[#e6d3c8] bg-[#fffaf6] text-[#4e3c33]"
       }`}
     >
       <div className="mx-auto flex max-w-[30rem] flex-col items-center">
@@ -377,12 +431,18 @@ function NewsFeedCaughtUpFooter({
         <h3 className="mt-4 font-headline text-[2rem] leading-[1.02] sm:text-[2.25rem]">
           You&apos;ve catched up with the news chu2.
         </h3>
-        <p className={`mt-3 max-w-[26rem] text-sm leading-relaxed ${isDarkMode ? "text-[#c7b8ae]" : "text-[#7f6a60]"}`}>
+        <p
+          className={`mt-3 max-w-[26rem] text-sm leading-relaxed ${isDarkMode ? "text-[#c7b8ae]" : "text-[#7f6a60]"}`}
+        >
           {isEmpty
             ? "No published posts are visible yet, but new bulletins will land here as soon as teams publish them."
             : "That was the latest published bulletin for now. Check back again when new public updates are posted."}
         </p>
-        <div className="dispatch-hourglass-background mt-5" style={hourglassStyle} aria-hidden="true">
+        <div
+          className="dispatch-hourglass-background mt-5"
+          style={hourglassStyle}
+          aria-hidden="true"
+        >
           <div className="dispatch-hourglass-container">
             <div className="dispatch-hourglass-cap-top" />
             <div className="dispatch-hourglass-cap-bottom" />
@@ -406,31 +466,53 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isDarkMode } = useAppShellTheme();
   const accessToken = useSessionStore((state) => state.accessToken);
+  const currentDepartment = useSessionStore((state) => state.department);
   const currentUser = useSessionStore((state) => state.user);
   const [posts, setPosts] = useState<FeedPost[]>([]);
-  const [followDepartments, setFollowDepartments] = useState<FollowDepartment[]>([]);
+  const [followDepartments, setFollowDepartments] = useState<
+    FollowDepartment[]
+  >([]);
   const [loading, setLoading] = useState(true);
-  const [activeCommentPostId, setActiveCommentPostId] = useState<string | number | null>(null);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<
+    string | number | null
+  >(null);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [likedPostIds, setLikedPostIds] = useState<Array<string | number>>([]);
-  const [bookmarkedPostIds, setBookmarkedPostIds] = useState<Array<string | number>>([]);
-  const [bookmarkAnimatingPostIds, setBookmarkAnimatingPostIds] = useState<Array<string | number>>([]);
-  const [reactingPostIds, setReactingPostIds] = useState<Array<string | number>>([]);
+  const [bookmarkedPostIds, setBookmarkedPostIds] = useState<
+    Array<string | number>
+  >([]);
+  const [bookmarkAnimatingPostIds, setBookmarkAnimatingPostIds] = useState<
+    Array<string | number>
+  >([]);
+  const [reactingPostIds, setReactingPostIds] = useState<
+    Array<string | number>
+  >([]);
   const [comments, setComments] = useState<CommentThreadItem[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [deleteConfirmPost, setDeleteConfirmPost] = useState<FeedPost | null>(null);
+  const [deleteConfirmPost, setDeleteConfirmPost] = useState<FeedPost | null>(
+    null,
+  );
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deletingPostId, setDeletingPostId] = useState<string | number | null>(null);
-  const [menuOpenPostId, setMenuOpenPostId] = useState<string | number | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | number | null>(
+    null,
+  );
+  const [menuOpenPostId, setMenuOpenPostId] = useState<string | number | null>(
+    null,
+  );
   const [editPost, setEditPost] = useState<FeedPost | null>(null);
   const [commentModalOrigin, setCommentModalOrigin] = useState({ x: 0, y: 0 });
   const [createModalOrigin, setCreateModalOrigin] = useState({ x: 0, y: 0 });
-  const [postPhotoIndices, setPostPhotoIndices] = useState<Record<string, number>>({});
-  const [activeImageViewer, setActiveImageViewer] = useState<ActiveImageViewer>(null);
-  const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
+  const [postPhotoIndices, setPostPhotoIndices] = useState<
+    Record<string, number>
+  >({});
+  const [activeImageViewer, setActiveImageViewer] =
+    useState<ActiveImageViewer>(null);
+  const [resolvedLocations, setResolvedLocations] = useState<
+    Record<string, string>
+  >({});
   const resolvingLocationsRef = useRef(new Set<string>());
   const warmPanelClassName = isDarkMode
     ? "border-[#34302b] bg-[#23211f]"
@@ -477,7 +559,9 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     return apiRequest<{ posts: FeedPost[] }>("/api/feed")
       .then((res) => {
         setPosts(res.posts);
-        setLikedPostIds(res.posts.filter((post) => post.liked_by_me).map((post) => post.id));
+        setLikedPostIds(
+          res.posts.filter((post) => post.liked_by_me).map((post) => post.id),
+        );
       })
       .catch(() => {
         setPosts([]);
@@ -491,11 +575,16 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   }, []);
 
   const fetchFollowDepartments = useCallback(() => {
-    return apiRequest<{ departments: FollowDepartment[] }>("/api/departments/directory")
+    return apiRequest<{ departments: FollowDepartment[] }>(
+      "/api/departments/directory",
+    )
       .then((res) => {
         setFollowDepartments(
           (res.departments ?? [])
-            .filter((department) => department.user_id && department.user_id !== currentUser?.id)
+            .filter(
+              (department) =>
+                department.user_id && department.user_id !== currentUser?.id,
+            )
             .slice(0, 3),
         );
       })
@@ -527,15 +616,20 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     [activeCommentPostId, posts],
   );
   const readinessPosts = useMemo(
-    () => posts.filter((post) => readinessCategorySet.has(post.category)).slice(0, 3),
+    () =>
+      posts
+        .filter((post) => readinessCategorySet.has(post.category))
+        .slice(0, 3),
     [posts],
   );
   const readinessCount = useMemo(
-    () => posts.filter((post) => readinessCategorySet.has(post.category)).length,
+    () =>
+      posts.filter((post) => readinessCategorySet.has(post.category)).length,
     [posts],
   );
   const activeCommentLocationLabel = activeCommentPost?.location
-    ? resolvedLocations[activeCommentPost.location.trim()] ?? formatCoordinateFallback(activeCommentPost.location)
+    ? (resolvedLocations[activeCommentPost.location.trim()] ??
+      formatCoordinateFallback(activeCommentPost.location))
     : null;
 
   useEffect(() => {
@@ -547,12 +641,18 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       }
     }
 
-    if (activeCommentPost?.location && parseCoordinateLocation(activeCommentPost.location)) {
+    if (
+      activeCommentPost?.location &&
+      parseCoordinateLocation(activeCommentPost.location)
+    ) {
       coordinateLocations.add(activeCommentPost.location.trim());
     }
 
     coordinateLocations.forEach((location) => {
-      if (resolvedLocations[location] || resolvingLocationsRef.current.has(location)) {
+      if (
+        resolvedLocations[location] ||
+        resolvingLocationsRef.current.has(location)
+      ) {
         return;
       }
 
@@ -576,7 +676,9 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             address?: Record<string, string | undefined>;
           };
           const summary =
-            summarizeResolvedLocation(data) || data.display_name || formatCoordinateFallback(location);
+            summarizeResolvedLocation(data) ||
+            data.display_name ||
+            formatCoordinateFallback(location);
 
           setResolvedLocations((current) => ({
             ...current,
@@ -595,19 +697,24 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     });
   }, [activeCommentPost, posts, resolvedLocations]);
 
-  const fetchComments = useCallback((postId: string | number, showLoader = true) => {
-    if (showLoader) {
-      setCommentsLoading(true);
-    }
-    return apiRequest<{ comments: CommentThreadItem[] }>(`/api/feed/${postId}/comments`)
-      .then((res) => setComments(res.comments))
-      .catch(() => setComments([]))
-      .finally(() => {
-        if (showLoader) {
-          setCommentsLoading(false);
-        }
-      });
-  }, []);
+  const fetchComments = useCallback(
+    (postId: string | number, showLoader = true) => {
+      if (showLoader) {
+        setCommentsLoading(true);
+      }
+      return apiRequest<{ comments: CommentThreadItem[] }>(
+        `/api/feed/${postId}/comments`,
+      )
+        .then((res) => setComments(res.comments))
+        .catch(() => setComments([]))
+        .finally(() => {
+          if (showLoader) {
+            setCommentsLoading(false);
+          }
+        });
+    },
+    [],
+  );
 
   async function handleReact(postId: string | number) {
     if (reactingPostIds.includes(postId)) {
@@ -621,7 +728,10 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
 
     const wasLiked = likedPostIds.includes(postId);
     const previousReactionCount = currentPost.reaction ?? 0;
-    const optimisticReactionCount = Math.max(0, previousReactionCount + (wasLiked ? -1 : 1));
+    const optimisticReactionCount = Math.max(
+      0,
+      previousReactionCount + (wasLiked ? -1 : 1),
+    );
 
     setReactingPostIds((prev) => [...prev, postId]);
     setPosts((prev) =>
@@ -640,9 +750,12 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     );
 
     try {
-      const response = await apiRequest<{ post: FeedPost }>(`/api/feed/${postId}/reaction`, {
-        method: "POST",
-      });
+      const response = await apiRequest<{ post: FeedPost }>(
+        `/api/feed/${postId}/reaction`,
+        {
+          method: "POST",
+        },
+      );
       setPosts((prev) =>
         prev.map((post) =>
           post.id === postId
@@ -674,14 +787,21 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
         ),
       );
       setLikedPostIds((prev) =>
-        wasLiked ? (prev.includes(postId) ? prev : [...prev, postId]) : prev.filter((id) => id !== postId),
+        wasLiked
+          ? prev.includes(postId)
+            ? prev
+            : [...prev, postId]
+          : prev.filter((id) => id !== postId),
       );
     } finally {
       setReactingPostIds((prev) => prev.filter((id) => id !== postId));
     }
   }
 
-  function openCommentModal(postId: string | number, button?: HTMLElement | null) {
+  function openCommentModal(
+    postId: string | number,
+    button?: HTMLElement | null,
+  ) {
     if (button) {
       const rect = button.getBoundingClientRect();
       setCommentModalOrigin({
@@ -739,11 +859,20 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     postId: string | number,
   ) {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("button, a, input, textarea, select, label, details, summary")) {
+    if (
+      target?.closest(
+        "button, a, input, textarea, select, label, details, summary",
+      )
+    ) {
       return;
     }
 
-    if ("key" in event && event.key && event.key !== "Enter" && event.key !== " ") {
+    if (
+      "key" in event &&
+      event.key &&
+      event.key !== "Enter" &&
+      event.key !== " "
+    ) {
       return;
     }
 
@@ -818,14 +947,18 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   function toggleBookmarked(postId: string | number) {
     setBookmarkedPostIds((prev) => {
       const isBookmarked = prev.includes(postId);
-      const next = isBookmarked ? prev.filter((id) => id !== postId) : [...prev, postId];
+      const next = isBookmarked
+        ? prev.filter((id) => id !== postId)
+        : [...prev, postId];
 
       if (!isBookmarked) {
         setBookmarkAnimatingPostIds((current) =>
           current.includes(postId) ? current : [...current, postId],
         );
         window.setTimeout(() => {
-          setBookmarkAnimatingPostIds((current) => current.filter((id) => id !== postId));
+          setBookmarkAnimatingPostIds((current) =>
+            current.filter((id) => id !== postId),
+          );
         }, 650);
       }
 
@@ -845,14 +978,22 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     setCommentSubmitting(true);
     setCommentError(null);
     try {
-      await apiRequest<{ comment: CommentThreadItem }>(`/api/feed/${activeCommentPostId}/comments`, {
-        method: "POST",
-        body: JSON.stringify({ comment: commentDraft.trim() }),
-      });
+      await apiRequest<{ comment: CommentThreadItem }>(
+        `/api/feed/${activeCommentPostId}/comments`,
+        {
+          method: "POST",
+          body: JSON.stringify({ comment: commentDraft.trim() }),
+        },
+      );
       setCommentDraft("");
-      await Promise.all([fetchComments(activeCommentPostId, false), fetchPosts(false)]);
+      await Promise.all([
+        fetchComments(activeCommentPostId, false),
+        fetchPosts(false),
+      ]);
     } catch (error) {
-      setCommentError(error instanceof Error ? error.message : "Failed to publish comment.");
+      setCommentError(
+        error instanceof Error ? error.message : "Failed to publish comment.",
+      );
     } finally {
       setCommentSubmitting(false);
     }
@@ -866,9 +1007,12 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     setDeleteError(null);
     setDeletingPostId(deleteConfirmPost.id);
     try {
-      await apiRequest<{ deleted: boolean }>(`/api/feed/${deleteConfirmPost.id}`, {
-        method: "DELETE",
-      });
+      await apiRequest<{ deleted: boolean }>(
+        `/api/feed/${deleteConfirmPost.id}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (activeCommentPostId === deleteConfirmPost.id) {
         setActiveCommentPostId(null);
       }
@@ -876,7 +1020,9 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
       setMenuOpenPostId(null);
       await fetchPosts(false);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Failed to delete post.");
+      setDeleteError(
+        error instanceof Error ? error.message : "Failed to delete post.",
+      );
     } finally {
       setDeletingPostId(null);
     }
@@ -1387,8 +1533,14 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
         }
       `}</style>
       <AppShell subtitle={copy.subtitle} title="News Feed">
-      <div className={isDarkMode ? "dispatch-news-feed-page dispatch-news-feed-dark space-y-8" : "dispatch-news-feed-page space-y-8"}>
-        <style>{`
+        <div
+          className={
+            isDarkMode
+              ? "dispatch-news-feed-page dispatch-news-feed-dark space-y-8"
+              : "dispatch-news-feed-page space-y-8"
+          }
+        >
+          <style>{`
           .dispatch-shell-dark .dispatch-news-feed-page .text-on-surface { color: #f4eee8 !important; }
           .dispatch-shell-dark .dispatch-news-feed-page .text-on-surface-variant { color: #c6b8ac !important; }
           .dispatch-shell-dark .dispatch-news-feed-page .text-outline,
@@ -1431,86 +1583,222 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
             color: #d7c4b7 !important;
           }
         `}</style>
-        {!departmentLayout && (
-        <section className="overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-gradient-to-br from-[#a14b2f] via-[#8f4427] to-[#5f5e5c] p-6 text-white shadow-xl">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-3xl">
-              <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/90">
-                {copy.badge}
-              </span>
-              <h2 className="mt-4 font-headline text-3xl lg:text-4xl">ResilienceHub Temporary News Desk</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80">
-                {copy.intro}
-              </p>
-              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                <span className="material-symbols-outlined text-white/75">search</span>
-                <input
-                  aria-label="Temporary news search"
-                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/55"
-                  placeholder={copy.searchPlaceholder}
-                  readOnly
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                  Active advisories
-                </p>
-                <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(readinessCount).padStart(2, "0")}</p>
-                <p className="mt-1 text-xs text-white/70">Live alerts, warnings, and situational reports</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                  Coordination mode
-                </p>
-                <p className="mt-2 font-headline text-2xl">Steady Watch</p>
-                <p className="mt-1 text-xs text-white/70">Preparedness bulletin enabled</p>
-              </div>
-            </div>
-          </div>
-        </section>
-        )}
-
-        <div
-          className={departmentLayout
-            ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start xl:grid-cols-[minmax(0,1fr)_20rem]"
-            : "grid gap-6 xl:grid-cols-12"}
-        >
-          <div className={`min-w-0 space-y-6 ${departmentLayout ? "" : "xl:col-span-8"}`}>
-            {!departmentLayout && (
-            <Card className={warmPanelClassName}>
-              <div className="flex flex-col gap-4 md:flex-row md:items-start">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
-                  <span className="material-symbols-outlined">campaign</span>
+          {departmentLayout && (
+            <DepartmentPageHero
+              dataTestId="department-news-feed-hero"
+              department={currentDepartment}
+              eyebrow="Public Information Desk"
+              headingTone="soft-light"
+              icon="campaign"
+              title="News Feed"
+            />
+          )}
+          {!departmentLayout && (
+            <section className="overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-gradient-to-br from-[#a14b2f] via-[#8f4427] to-[#5f5e5c] p-6 text-white shadow-xl">
+              <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+                <div className="max-w-3xl">
+                  <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-white/90">
+                    {copy.badge}
+                  </span>
+                  <h2 className="mt-4 font-headline text-3xl lg:text-4xl">
+                    ResilienceHub Temporary News Desk
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80">
+                    {copy.intro}
+                  </p>
+                  <div className="mt-5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                    <span className="material-symbols-outlined text-white/75">
+                      search
+                    </span>
+                    <input
+                      aria-label="Temporary news search"
+                      className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/55"
+                      placeholder={copy.searchPlaceholder}
+                      readOnly
+                    />
+                  </div>
                 </div>
-                  <div className="flex-1">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
-                      {canPost ? "Department composer" : "Posting permissions"}
-                    </p>
 
-                    {canPost ? (
-                      <>
+                <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[360px]">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                      Active advisories
+                    </p>
+                    <p className="mt-2 font-headline text-4xl">
+                      {loading
+                        ? "..."
+                        : String(readinessCount).padStart(2, "0")}
+                    </p>
+                    <p className="mt-1 text-xs text-white/70">
+                      Live alerts, warnings, and situational reports
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                      Coordination mode
+                    </p>
+                    <p className="mt-2 font-headline text-2xl">Steady Watch</p>
+                    <p className="mt-1 text-xs text-white/70">
+                      Preparedness bulletin enabled
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <div
+            className={
+              departmentLayout
+                ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start xl:grid-cols-[minmax(0,1fr)_20rem]"
+                : "grid gap-6 xl:grid-cols-12"
+            }
+          >
+            <div
+              className={`min-w-0 space-y-6 ${departmentLayout ? "" : "xl:col-span-8"}`}
+            >
+              {!departmentLayout && (
+                <Card className={warmPanelClassName}>
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
+                      <span className="material-symbols-outlined">
+                        campaign
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                        {canPost
+                          ? "Department composer"
+                          : "Posting permissions"}
+                      </p>
+
+                      {canPost ? (
+                        <>
+                          <div
+                            className={`mt-4 ${composerInnerPanelClassName}`}
+                          >
+                            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
+                                <span className="material-symbols-outlined">
+                                  edit_square
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(event) =>
+                                  openCreatePostModal(event.currentTarget)
+                                }
+                                className={
+                                  isDarkMode
+                                    ? "min-h-[56px] flex-1 rounded-full border border-[#3b3732] bg-[#2a2724] px-5 text-left text-lg text-[#d7c4b7] transition-colors hover:bg-[#332f2b] hover:text-[#f4eee8]"
+                                    : "min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-lg text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46]"
+                                }
+                              >
+                                Anything urgent to share?
+                              </button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="min-w-[96px] self-end md:self-auto"
+                                onClick={(event) =>
+                                  openCreatePostModal(event.currentTarget)
+                                }
+                              >
+                                Post
+                              </Button>
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-2 border-t border-[#ecd8cf] pt-4">
+                              {quickActions.map((action) => (
+                                <span
+                                  key={action.label}
+                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${warmTabClassName}`}
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">
+                                    {action.icon}
+                                  </span>
+                                  {action.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="mt-3 text-2xl text-on-surface">
+                            {copy.accessTitle}
+                          </h3>
+                          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
+                            {copy.accessBody}
+                          </p>
+                          <div
+                            className={`mt-4 rounded-2xl px-4 py-4 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-white"}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="material-symbols-outlined text-[#a14b2f]">
+                                lock
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-on-surface">
+                                  Publishing is restricted
+                                </p>
+                                <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                                  Only department accounts can create awareness
+                                  posts, reports, and news entries in this News
+                                  feed.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )}
+
+              <div
+                className={
+                  departmentLayout ? publishLaneEffectClassName : "space-y-5"
+                }
+              >
+                {departmentLayout && (
+                  <Card
+                    className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName}`}
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
+                        <span className="material-symbols-outlined">
+                          campaign
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                          Department composer
+                        </p>
                         <div className={`mt-4 ${composerInnerPanelClassName}`}>
-                          <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
-                              <span className="material-symbols-outlined">edit_square</span>
+                              <span className="material-symbols-outlined">
+                                edit_square
+                              </span>
                             </div>
                             <button
                               type="button"
-                              onClick={(event) => openCreatePostModal(event.currentTarget)}
-                              className={isDarkMode
-                                ? "min-h-[56px] flex-1 rounded-full border border-[#3b3732] bg-[#2a2724] px-5 text-left text-lg text-[#d7c4b7] transition-colors hover:bg-[#332f2b] hover:text-[#f4eee8]"
-                                : "min-h-[56px] flex-1 rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 text-left text-lg text-[#7a6b63] transition-colors hover:bg-[#f2e7de] hover:text-[#5f4f46]"}
+                              onClick={(event) =>
+                                openCreatePostModal(event.currentTarget)
+                              }
+                              className={composerPromptClassName}
                             >
                               Anything urgent to share?
                             </button>
                             <Button
                               type="button"
                               variant="secondary"
-                              className="min-w-[96px] self-end md:self-auto"
-                              onClick={(event) => openCreatePostModal(event.currentTarget)}
+                              className="min-w-[96px] self-end lg:self-auto"
+                              onClick={(event) =>
+                                openCreatePostModal(event.currentTarget)
+                              }
                             >
                               Post
                             </Button>
@@ -1522,931 +1810,1122 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                                 key={action.label}
                                 className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${warmTabClassName}`}
                               >
-                              <span className="material-symbols-outlined text-[16px]">{action.icon}</span>
+                                <span className="material-symbols-outlined text-[16px]">
+                                  {action.icon}
+                                </span>
                                 {action.label}
                               </span>
                             ))}
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      <>
-                        <h3 className="mt-3 text-2xl text-on-surface">{copy.accessTitle}</h3>
-                        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
-                          {copy.accessBody}
-                        </p>
-                        <div className={`mt-4 rounded-2xl px-4 py-4 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-white"}`}>
-                        <div className="flex items-start gap-3">
-                          <span className="material-symbols-outlined text-[#a14b2f]">lock</span>
-                          <div>
-                            <p className="text-sm font-semibold text-on-surface">Publishing is restricted</p>
-                            <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
-                              Only department accounts can create awareness posts, reports, and news entries in this News feed.
-                            </p>
-                          </div>
-                        </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            <div className={departmentLayout ? publishLaneEffectClassName : "space-y-5"}>
-              {departmentLayout && (
-                <Card className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName}`}>
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffdbd0] text-[#89391e]">
-                      <span className="material-symbols-outlined">campaign</span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
-                        Department composer
-                      </p>
-                      <div className={`mt-4 ${composerInnerPanelClassName}`}>
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ffefe6] text-[#a14b2f]">
-                            <span className="material-symbols-outlined">edit_square</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(event) => openCreatePostModal(event.currentTarget)}
-                            className={composerPromptClassName}
-                          >
-                            Anything urgent to share?
-                          </button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="min-w-[96px] self-end lg:self-auto"
-                            onClick={(event) => openCreatePostModal(event.currentTarget)}
-                          >
-                            Post
-                          </Button>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2 border-t border-[#ecd8cf] pt-4">
-                          {quickActions.map((action) => (
-                            <span
-                              key={action.label}
-                              className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${warmTabClassName}`}
-                            >
-                              <span className="material-symbols-outlined text-[16px]">{action.icon}</span>
-                              {action.label}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              )}
-              {loading ? (
-                <Card className={`${warmPanelClassName} py-16 text-center text-on-surface-variant`}>
-                  <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
-                  Loading news feed...
-                </Card>
-              ) : posts.length === 0 ? (
-                showCaughtUpFooter ? (
-                  <NewsFeedCaughtUpFooter isDarkMode={isDarkMode} isEmpty />
-                ) : (
-                  <Card className={`${warmPanelClassName} py-16 text-center`}>
-                    <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">campaign</span>
-                    <p className="text-on-surface-variant">No department news posts yet.</p>
                   </Card>
-                )
-              ) : (
-                <>
-                  {posts.map((post) => {
-                  const categoryStyle = categoryStyles[post.category] ?? {
-                    accentClassName: "bg-[#f0eee5] text-[#5f5e5c]",
-                    icon: "article",
-                  };
-                  const publisherPath = `/departments/${post.uploader}`;
-                  const canDeletePost = currentUser?.role === "department" && String(currentUser.id) === String(post.uploader);
-                  const isMenuOpen = menuOpenPostId === post.id;
-                  const locationLabel = post.location
-                    ? resolvedLocations[post.location.trim()] ?? formatCoordinateFallback(post.location)
-                    : null;
-                  const assessmentPost = isAssessmentPost(post);
+                )}
+                {loading ? (
+                  <Card
+                    className={`${warmPanelClassName} py-16 text-center text-on-surface-variant`}
+                  >
+                    <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
+                    Loading news feed...
+                  </Card>
+                ) : posts.length === 0 ? (
+                  showCaughtUpFooter ? (
+                    <NewsFeedCaughtUpFooter isDarkMode={isDarkMode} isEmpty />
+                  ) : (
+                    <Card className={`${warmPanelClassName} py-16 text-center`}>
+                      <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">
+                        campaign
+                      </span>
+                      <p className="text-on-surface-variant">
+                        No department news posts yet.
+                      </p>
+                    </Card>
+                  )
+                ) : (
+                  <>
+                    {posts.map((post) => {
+                      const categoryStyle = categoryStyles[post.category] ?? {
+                        accentClassName: "bg-[#f0eee5] text-[#5f5e5c]",
+                        icon: "article",
+                      };
+                      const publisherPath = `/departments/${post.uploader}`;
+                      const canDeletePost =
+                        currentUser?.role === "department" &&
+                        String(currentUser.id) === String(post.uploader);
+                      const isMenuOpen = menuOpenPostId === post.id;
+                      const locationLabel = post.location
+                        ? (resolvedLocations[post.location.trim()] ??
+                          formatCoordinateFallback(post.location))
+                        : null;
+                      const assessmentPost = isAssessmentPost(post);
 
-                  return (
-                    <Card key={post.id} className={`dispatch-news-feed-card dispatch-news-feed-published-card ${warmPanelClassName} ${publishedFeedCardShadowClassName} ${publishedTabHighlightClassName} relative overflow-visible`}>
-                      <article
-                        className="cursor-pointer space-y-5"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => handlePostCardActivate(event, post.id)}
-                        onKeyDown={(event) => handlePostCardActivate(event, post.id)}
-                      >
-                        <div className="flex items-start gap-3">
-                          <DepartmentHoverPreview
-                            className="shrink-0"
-                            department={post.department}
-                            panelClassName="left-1/2 -translate-x-1/2"
-                            profilePath={publisherPath}
+                      return (
+                        <Card
+                          key={post.id}
+                          className={`dispatch-news-feed-card dispatch-news-feed-published-card ${warmPanelClassName} ${publishedFeedCardShadowClassName} ${publishedTabHighlightClassName} relative overflow-visible`}
+                        >
+                          <article
+                            className="cursor-pointer space-y-5"
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) =>
+                              handlePostCardActivate(event, post.id)
+                            }
+                            onKeyDown={(event) =>
+                              handlePostCardActivate(event, post.id)
+                            }
                           >
-                            <Link
-                              aria-label={`Open ${post.department?.name ?? "department"} profile`}
-                              className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full transition-transform duration-200 ease-out group-hover/publisher:scale-[1.04] ${categoryStyle.accentClassName}`}
-                              to={publisherPath}
-                            >
-                              {post.department?.profile_picture ? (
-                                <img
-                                  alt={`${post.department.name} profile`}
-                                  className="h-full w-full object-cover"
-                                  src={post.department.profile_picture}
-                                />
-                              ) : (
-                                <span className="material-symbols-outlined">{categoryStyle.icon}</span>
-                              )}
-                            </Link>
-                          </DepartmentHoverPreview>
-                          <div className="min-w-0 flex-1">
-                            <DepartmentHoverPreview
-                              className="inline-flex max-w-full"
-                              department={post.department}
-                              panelClassName="left-1/2 -translate-x-1/2"
-                              profilePath={publisherPath}
-                            >
-                              <Link className="inline-flex min-w-0 flex-col items-start" to={publisherPath}>
-                                <p className="text-sm font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
-                                  {post.department?.name ?? "Department Update"}
-                                </p>
-                                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
-                                  {new Date(post.created_at).toLocaleString()}
-                                </p>
-                              </Link>
-                            </DepartmentHoverPreview>
-                          </div>
-                          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                            {locationLabel && !assessmentPost ? (
-                              <span className={`inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}>
-                                <span className="material-symbols-outlined text-[14px]">location_on</span>
-                                <span className="truncate normal-case tracking-normal">{locationLabel}</span>
-                              </span>
-                            ) : null}
-                            <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
-                              <span className="material-symbols-outlined text-[14px]">{categoryStyle.icon}</span>
-                              {post.category.replace("_", " ")}
-                            </span>
-                            {canDeletePost && (
-                              <div className="relative">
-                                <button
-                                  type="button"
-                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${warmActionTabClassName}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setMenuOpenPostId((current) => (current === post.id ? null : post.id));
-                                  }}
-                                  title="Post actions"
+                            <div className="flex items-start gap-3">
+                              <DepartmentHoverPreview
+                                className="shrink-0"
+                                department={post.department}
+                                panelClassName="left-1/2 -translate-x-1/2"
+                                profilePath={publisherPath}
+                              >
+                                <Link
+                                  aria-label={`Open ${post.department?.name ?? "department"} profile`}
+                                  className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full transition-transform duration-200 ease-out group-hover/publisher:scale-[1.04] ${categoryStyle.accentClassName}`}
+                                  to={publisherPath}
                                 >
-                                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-                                </button>
-                                {isMenuOpen && (
-                                  <div className={menuSurfaceClassName}>
+                                  {post.department?.profile_picture ? (
+                                    <img
+                                      alt={`${post.department.name} profile`}
+                                      className="h-full w-full object-cover"
+                                      src={post.department.profile_picture}
+                                    />
+                                  ) : (
+                                    <span className="material-symbols-outlined">
+                                      {categoryStyle.icon}
+                                    </span>
+                                  )}
+                                </Link>
+                              </DepartmentHoverPreview>
+                              <div className="min-w-0 flex-1">
+                                <DepartmentHoverPreview
+                                  className="inline-flex max-w-full"
+                                  department={post.department}
+                                  panelClassName="left-1/2 -translate-x-1/2"
+                                  profilePath={publisherPath}
+                                >
+                                  <Link
+                                    className="inline-flex min-w-0 flex-col items-start"
+                                    to={publisherPath}
+                                  >
+                                    <p className="text-sm font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
+                                      {post.department?.name ??
+                                        "Department Update"}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
+                                      {new Date(
+                                        post.created_at,
+                                      ).toLocaleString()}
+                                    </p>
+                                  </Link>
+                                </DepartmentHoverPreview>
+                              </div>
+                              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                                {locationLabel && !assessmentPost ? (
+                                  <span
+                                    className={`inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      location_on
+                                    </span>
+                                    <span className="truncate normal-case tracking-normal">
+                                      {locationLabel}
+                                    </span>
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    {categoryStyle.icon}
+                                  </span>
+                                  {post.category.replace("_", " ")}
+                                </span>
+                                {canDeletePost && (
+                                  <div className="relative">
                                     <button
                                       type="button"
-                                      aria-label="Edit post"
-                                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
-                                      onClick={() => {
-                                        setMenuOpenPostId(null);
-                                        setDeleteError(null);
-                                        setEditPost(post);
+                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${warmActionTabClassName}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setMenuOpenPostId((current) =>
+                                          current === post.id ? null : post.id,
+                                        );
                                       }}
+                                      title="Post actions"
                                     >
-                                      <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">edit</span>
-                                      Edit post
+                                      <span className="material-symbols-outlined text-[18px]">
+                                        more_horiz
+                                      </span>
                                     </button>
-                                    <button
-                                      type="button"
-                                      aria-label="Delete post"
-                                      className="flex w-full items-center gap-3 border-t border-[#ecd8cf] px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
-                                      onClick={() => {
-                                        setMenuOpenPostId(null);
-                                        setDeleteError(null);
-                                        setDeleteConfirmPost(post);
-                                      }}
-                                    >
-                                      <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">delete</span>
-                                      Delete post
-                                    </button>
+                                    {isMenuOpen && (
+                                      <div className={menuSurfaceClassName}>
+                                        <button
+                                          type="button"
+                                          aria-label="Edit post"
+                                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
+                                          onClick={() => {
+                                            setMenuOpenPostId(null);
+                                            setDeleteError(null);
+                                            setEditPost(post);
+                                          }}
+                                        >
+                                          <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">
+                                            edit
+                                          </span>
+                                          Edit post
+                                        </button>
+                                        <button
+                                          type="button"
+                                          aria-label="Delete post"
+                                          className="flex w-full items-center gap-3 border-t border-[#ecd8cf] px-4 py-3 text-left text-sm text-on-surface transition-colors hover:bg-[#f7efe7]"
+                                          onClick={() => {
+                                            setMenuOpenPostId(null);
+                                            setDeleteError(null);
+                                            setDeleteConfirmPost(post);
+                                          }}
+                                        >
+                                          <span className="material-symbols-outlined text-[18px] text-[#a14b2f]">
+                                            delete
+                                          </span>
+                                          Delete post
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        </div>
+                            </div>
 
-                        <div className="space-y-4 pl-0 md:pl-12">
-                          <div>
-                            <h3 className="text-2xl text-on-surface">{post.title}</h3>
-                          </div>
+                            <div className="space-y-4 pl-0 md:pl-12">
+                              <div>
+                                <h3 className="text-2xl text-on-surface">
+                                  {post.title}
+                                </h3>
+                              </div>
 
-                          {assessmentPost && post.assessment_details ? (
-                            <AssessmentPostSummary
-                              className="mt-1"
-                              details={post.assessment_details}
-                              locationLabel={locationLabel}
-                            />
-                          ) : null}
+                              {assessmentPost && post.assessment_details ? (
+                                <AssessmentPostSummary
+                                  className="mt-1"
+                                  details={post.assessment_details}
+                                  locationLabel={locationLabel}
+                                />
+                              ) : null}
 
-                          <p className="text-base leading-relaxed text-on-surface-variant whitespace-pre-wrap">
-                            {post.content}
-                          </p>
+                              <p className="text-base leading-relaxed text-on-surface-variant whitespace-pre-wrap">
+                                {post.content}
+                              </p>
 
-                          {post.photos && post.photos.length > 0 && (
-                            <div className="space-y-3">
-                              {post.photos.length > 1 ? (
-                                <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4] p-1">
-                                  {post.photos.slice(0, 4).map((photo, index) => {
-                                    const previewCount = Math.min(post.photos!.length, 4);
-                                    const hiddenPhotoCount = post.photos!.length - 4;
+                              {post.photos && post.photos.length > 0 && (
+                                <div className="space-y-3">
+                                  {post.photos.length > 1 ? (
+                                    <div className="grid grid-cols-2 gap-1 overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4] p-1">
+                                      {post.photos
+                                        .slice(0, 4)
+                                        .map((photo, index) => {
+                                          const previewCount = Math.min(
+                                            post.photos!.length,
+                                            4,
+                                          );
+                                          const hiddenPhotoCount =
+                                            post.photos!.length - 4;
 
-                                    return (
+                                          return (
+                                            <button
+                                              key={`${post.id}-grid-photo-${index}`}
+                                              type="button"
+                                              className={`group relative overflow-hidden rounded-[22px] bg-[#eadfd6] ${getFeedPhotoGridTileClassName(index, previewCount)}`}
+                                              onClick={(event) =>
+                                                openImageViewer(
+                                                  post.photos ?? [],
+                                                  index,
+                                                  post.title,
+                                                  event,
+                                                )
+                                              }
+                                            >
+                                              <img
+                                                src={photo}
+                                                alt={`${post.title} photo ${index + 1}`}
+                                                className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                                              />
+                                              {index === previewCount - 1 &&
+                                              hiddenPhotoCount > 0 ? (
+                                                <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl font-semibold text-white backdrop-blur-[2px]">
+                                                  +{hiddenPhotoCount}
+                                                </span>
+                                              ) : null}
+                                            </button>
+                                          );
+                                        })}
+                                    </div>
+                                  ) : (
+                                    <div className="relative overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4]">
                                       <button
-                                        key={`${post.id}-grid-photo-${index}`}
                                         type="button"
-                                        className={`group relative overflow-hidden rounded-[22px] bg-[#eadfd6] ${getFeedPhotoGridTileClassName(index, previewCount)}`}
-                                        onClick={(event) => openImageViewer(post.photos ?? [], index, post.title, event)}
+                                        className="block w-full"
+                                        onClick={(event) =>
+                                          openImageViewer(
+                                            post.photos ?? [],
+                                            getPhotoIndex(
+                                              post.id,
+                                              post.photos?.length ?? 0,
+                                            ),
+                                            post.title,
+                                            event,
+                                          )
+                                        }
                                       >
                                         <img
-                                          src={photo}
-                                          alt={`${post.title} photo ${index + 1}`}
-                                          className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                                          src={
+                                            post.photos[
+                                              getPhotoIndex(
+                                                post.id,
+                                                post.photos.length,
+                                              )
+                                            ]
+                                          }
+                                          alt={`${post.title} photo ${getPhotoIndex(post.id, post.photos.length) + 1}`}
+                                          className="h-[320px] w-full object-cover md:h-[420px]"
                                         />
-                                        {index === previewCount - 1 && hiddenPhotoCount > 0 ? (
-                                          <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl font-semibold text-white backdrop-blur-[2px]">
-                                            +{hiddenPhotoCount}
-                                          </span>
-                                        ) : null}
                                       </button>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="relative overflow-hidden rounded-[28px] border border-outline-variant/10 bg-[#f3ebe4]">
-                                  <button
-                                    type="button"
-                                    className="block w-full"
-                                    onClick={(event) =>
-                                      openImageViewer(
-                                        post.photos ?? [],
-                                        getPhotoIndex(post.id, post.photos?.length ?? 0),
-                                        post.title,
-                                        event,
-                                      )}
-                                  >
-                                    <img
-                                      src={post.photos[getPhotoIndex(post.id, post.photos.length)]}
-                                      alt={`${post.title} photo ${getPhotoIndex(post.id, post.photos.length) + 1}`}
-                                      className="h-[320px] w-full object-cover md:h-[420px]"
-                                    />
-                                  </button>
-                                  {post.photos.length > 1 && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          shiftPostPhoto(post.id, post.photos?.length ?? 0, "prev");
-                                        }}
-                                        aria-label="Previous image"
-                                      >
-                                        <span className="material-symbols-outlined">chevron_left</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          shiftPostPhoto(post.id, post.photos?.length ?? 0, "next");
-                                        }}
-                                        aria-label="Next image"
-                                      >
-                                        <span className="material-symbols-outlined">chevron_right</span>
-                                      </button>
-                                      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
-                                        {post.photos.map((_, index) => (
+                                      {post.photos.length > 1 && (
+                                        <>
                                           <button
-                                            key={`${post.id}-photo-dot-${index}`}
                                             type="button"
-                                            className={`h-2.5 w-2.5 rounded-full transition-all ${
-                                              index === getPhotoIndex(post.id, post.photos!.length)
-                                                ? "bg-white"
-                                                : "bg-white/45 hover:bg-white/70"
-                                            }`}
-                                            aria-label={`View image ${index + 1}`}
+                                            className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
                                             onClick={(event) => {
                                               event.stopPropagation();
-                                              setPostPhotoIndices((prev) => ({
-                                                ...prev,
-                                                [String(post.id)]: index,
-                                              }));
+                                              shiftPostPhoto(
+                                                post.id,
+                                                post.photos?.length ?? 0,
+                                                "prev",
+                                              );
                                             }}
-                                          />
-                                        ))}
-                                      </div>
-                                    </>
+                                            aria-label="Previous image"
+                                          >
+                                            <span className="material-symbols-outlined">
+                                              chevron_left
+                                            </span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              shiftPostPhoto(
+                                                post.id,
+                                                post.photos?.length ?? 0,
+                                                "next",
+                                              );
+                                            }}
+                                            aria-label="Next image"
+                                          >
+                                            <span className="material-symbols-outlined">
+                                              chevron_right
+                                            </span>
+                                          </button>
+                                          <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
+                                            {post.photos.map((_, index) => (
+                                              <button
+                                                key={`${post.id}-photo-dot-${index}`}
+                                                type="button"
+                                                className={`h-2.5 w-2.5 rounded-full transition-all ${
+                                                  index ===
+                                                  getPhotoIndex(
+                                                    post.id,
+                                                    post.photos!.length,
+                                                  )
+                                                    ? "bg-white"
+                                                    : "bg-white/45 hover:bg-white/70"
+                                                }`}
+                                                aria-label={`View image ${index + 1}`}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  setPostPhotoIndices(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [String(post.id)]: index,
+                                                    }),
+                                                  );
+                                                }}
+                                              />
+                                            ))}
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               )}
-                            </div>
-                          )}
 
-                          {post.attachments && post.attachments.length > 0 && (
-                            <div
-                              className={`rounded-2xl px-4 py-1 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-[#fff8f3]"}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                              }}
-                              onKeyDown={(event) => {
-                                event.stopPropagation();
-                              }}
-                            >
-                              <AttachmentList attachments={post.attachments} />
-                            </div>
-                          )}
+                              {post.attachments &&
+                                post.attachments.length > 0 && (
+                                  <div
+                                    className={`rounded-2xl px-4 py-1 ${isDarkMode ? "border border-[#3b3732] bg-[#262321]" : "border border-[#ecd8cf] bg-[#fff8f3]"}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                    }}
+                                    onKeyDown={(event) => {
+                                      event.stopPropagation();
+                                    }}
+                                  >
+                                    <AttachmentList
+                                      attachments={post.attachments}
+                                    />
+                                  </div>
+                                )}
 
-                          <div className="flex items-center justify-between border-t border-outline-variant/10 pt-4 text-outline">
-                            <div className="flex items-center gap-8">
-                              <button
-                                className="flex items-center gap-2 transition-colors hover:text-[#a14b2f]"
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleReact(post.id);
-                                }}
-                                disabled={reactingPostIds.includes(post.id)}
-                              >
-                                <AnimatedHeartIcon liked={likedPostIds.includes(post.id)} />
-                                <span className="text-xs font-bold uppercase tracking-widest">
-                                  {post.reaction ?? 0}
-                                </span>
-                              </button>
-                              <button
-                                className="flex items-center gap-2 text-on-surface transition-colors hover:text-[#a14b2f]"
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openCommentModal(post.id, event.currentTarget);
-                                }}
-                              >
-                                <span className="material-symbols-outlined">chat_bubble</span>
-                                <span className="text-xs font-bold uppercase tracking-widest">
-                                  {post.comment_count ?? 0}
-                                </span>
-                              </button>
+                              <div className="flex items-center justify-between border-t border-outline-variant/10 pt-4 text-outline">
+                                <div className="flex items-center gap-8">
+                                  <button
+                                    className="flex items-center gap-2 transition-colors hover:text-[#a14b2f]"
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleReact(post.id);
+                                    }}
+                                    disabled={reactingPostIds.includes(post.id)}
+                                  >
+                                    <AnimatedHeartIcon
+                                      liked={likedPostIds.includes(post.id)}
+                                    />
+                                    <span className="text-xs font-bold uppercase tracking-widest">
+                                      {post.reaction ?? 0}
+                                    </span>
+                                  </button>
+                                  <button
+                                    className="flex items-center gap-2 text-on-surface transition-colors hover:text-[#a14b2f]"
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openCommentModal(
+                                        post.id,
+                                        event.currentTarget,
+                                      );
+                                    }}
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      chat_bubble
+                                    </span>
+                                    <span className="text-xs font-bold uppercase tracking-widest">
+                                      {post.comment_count ?? 0}
+                                    </span>
+                                  </button>
+                                </div>
+                                <button
+                                  className="transition-colors hover:text-on-surface"
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleBookmarked(post.id);
+                                  }}
+                                  title="Bookmark announcement"
+                                >
+                                  <AnimatedBookmarkIcon
+                                    bookmarked={bookmarkedPostIds.includes(
+                                      post.id,
+                                    )}
+                                    animate={bookmarkAnimatingPostIds.includes(
+                                      post.id,
+                                    )}
+                                  />
+                                </button>
+                              </div>
                             </div>
-                            <button
-                              className="transition-colors hover:text-on-surface"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                toggleBookmarked(post.id);
-                              }}
-                              title="Bookmark announcement"
-                            >
-                              <AnimatedBookmarkIcon
-                                bookmarked={bookmarkedPostIds.includes(post.id)}
-                                animate={bookmarkAnimatingPostIds.includes(post.id)}
-                              />
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    </Card>
-                  );
-                  })}
-                  {showCaughtUpFooter ? (
-                    <NewsFeedCaughtUpFooter isDarkMode={isDarkMode} isEmpty={false} />
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
-          <div className={`min-w-0 ${departmentLayout ? "md:-mt-20" : "xl:col-span-4"}`}>
-            <div className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}>
-            {departmentLayout && (
-              <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
-                <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                  <span className="material-symbols-outlined text-white/75">search</span>
-                  <input
-                    aria-label="Temporary news search"
-                    className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-center placeholder:text-white/55"
-                    placeholder={copy.searchPlaceholder}
-                    readOnly
-                  />
-                </div>
-              </section>
-            )}
-            {departmentLayout && (
-              <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
-                <div className="flex flex-col items-center gap-4 text-center">
-                  <div className="mx-auto max-w-[17rem]">
-                    <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
-                      {copy.badge}
-                    </span>
-                    <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">ResilienceHub Temporary News Desk</h2>
-                    <p className="mt-3 text-sm leading-relaxed text-white/80">
-                      {copy.intro}
-                    </p>
-                  </div>
-
-                  <div className="grid w-full max-w-[17rem] gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                        Active advisories
-                      </p>
-                      <p className="mt-2 font-headline text-4xl">{loading ? "..." : String(readinessCount).padStart(2, "0")}</p>
-                      <p className="mt-1 text-xs text-white/70">Live alerts, warnings, and situational reports</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                        Coordination mode
-                      </p>
-                      <p className="mt-2 font-headline text-2xl">Steady Watch</p>
-                      <p className="mt-1 text-xs text-white/70">Preparedness bulletin enabled</p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-            <Card className={warmPanelClassName}>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Active Readiness
-              </p>
-              <div className="mt-5 space-y-5">
-                {readinessPosts.length === 0 ? (
-                  <div className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}>
-                    <p className="text-sm leading-relaxed text-on-surface-variant">
-                      Published summaries for Alert, Warning, and Situational Report posts will appear here once departments publish them.
-                    </p>
-                  </div>
-                ) : (
-                  readinessPosts.map((post) => (
-                    <div
-                      key={post.id}
-                      className={`group cursor-default rounded-2xl p-4 transition-shadow hover:shadow-sm ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}
-                    >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
-                        {readinessCategoryLabels[post.category as keyof typeof readinessCategoryLabels] ?? post.category.replace("_", " ")}
-                      </p>
-                      <p className="mt-2 text-lg leading-tight text-on-surface transition-colors group-hover:text-[#a14b2f]">
-                        {summarizePostContent(post.content)}
-                      </p>
-                      <p className="mt-2 text-xs text-outline">{buildReadinessMeta(post)}</p>
-                    </div>
-                  ))
+                          </article>
+                        </Card>
+                      );
+                    })}
+                    {showCaughtUpFooter ? (
+                      <NewsFeedCaughtUpFooter
+                        isDarkMode={isDarkMode}
+                        isEmpty={false}
+                      />
+                    ) : null}
+                  </>
                 )}
               </div>
-            </Card>
-
-            <Card className={warmPanelClassName}>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Who to follow
-              </p>
-              <div className="mt-5 space-y-4">
-                {followDepartments.length === 0 ? (
-                  <div className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}>
-                    <p className="text-sm leading-relaxed text-on-surface-variant">
-                      Department accounts will appear here once profiles are available in the directory.
-                    </p>
-                  </div>
-                ) : (
-                  followDepartments.map((department) => {
-                    const publisherPath = `/departments/${department.user_id}`;
-                    const profileImage = department.profile_picture || department.profile_photo;
-
-                    return (
-                      <Link
-                        key={department.id}
-                        className="flex items-center gap-3 rounded-2xl transition-colors hover:bg-[#fffaf6]"
-                        to={publisherPath}
-                      >
-                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${getFollowAccent(department.type)} text-[#5b3427] shadow-sm`}>
-                          {profileImage ? (
-                            <img
-                              alt={`${department.name} profile`}
-                              className="h-full w-full object-cover"
-                              src={profileImage}
-                            />
-                          ) : (
-                            <span className="material-symbols-outlined text-[22px]">{getFollowSymbol(department.type)}</span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-base font-semibold text-on-surface">{department.name}</p>
-                          <p className="truncate text-sm text-on-surface-variant">{formatDepartmentHandle(department.name)}</p>
-                        </div>
-                        <span className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724] text-[#f0e2d6] hover:bg-[#332f2b]" : "border border-[#d7c1b5] bg-white text-[#5f4f46] hover:bg-[#f8efe8]"}`}>
-                          Follow
+            </div>
+            <div
+              className={`min-w-0 ${departmentLayout ? "" : "xl:col-span-4"}`}
+            >
+              <div
+                className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}
+              >
+                {departmentLayout && (
+                  <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
+                    <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                      <span className="material-symbols-outlined text-white/75">
+                        search
+                      </span>
+                      <input
+                        aria-label="Temporary news search"
+                        className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-center placeholder:text-white/55"
+                        placeholder={copy.searchPlaceholder}
+                        readOnly
+                      />
+                    </div>
+                  </section>
+                )}
+                {departmentLayout && (
+                  <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div className="mx-auto max-w-[17rem]">
+                        <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
+                          {copy.badge}
                         </span>
-                      </Link>
-                    );
-                  })
+                        <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">
+                          ResilienceHub Temporary News Desk
+                        </h2>
+                        <p className="mt-3 text-sm leading-relaxed text-white/80">
+                          {copy.intro}
+                        </p>
+                      </div>
+
+                      <div className="grid w-full max-w-[17rem] gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                            Active advisories
+                          </p>
+                          <p className="mt-2 font-headline text-4xl">
+                            {loading
+                              ? "..."
+                              : String(readinessCount).padStart(2, "0")}
+                          </p>
+                          <p className="mt-1 text-xs text-white/70">
+                            Live alerts, warnings, and situational reports
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
+                            Coordination mode
+                          </p>
+                          <p className="mt-2 font-headline text-2xl">
+                            Steady Watch
+                          </p>
+                          <p className="mt-1 text-xs text-white/70">
+                            Preparedness bulletin enabled
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
                 )}
-              </div>
-              {followDepartments.length > 0 && (
-                <button
-                  type="button"
-                  className="mt-5 text-sm font-medium text-[#a14b2f] transition-colors hover:text-[#7b3822]"
-                >
-                  Show more
-                </button>
-              )}
-            </Card>
+                <Card className={warmPanelClassName}>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    Active Readiness
+                  </p>
+                  <div className="mt-5 space-y-5">
+                    {readinessPosts.length === 0 ? (
+                      <div
+                        className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}
+                      >
+                        <p className="text-sm leading-relaxed text-on-surface-variant">
+                          Published summaries for Alert, Warning, and
+                          Situational Report posts will appear here once
+                          departments publish them.
+                        </p>
+                      </div>
+                    ) : (
+                      readinessPosts.map((post) => (
+                        <div
+                          key={post.id}
+                          className={`group cursor-default rounded-2xl p-4 transition-shadow hover:shadow-sm ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}
+                        >
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                            {readinessCategoryLabels[
+                              post.category as keyof typeof readinessCategoryLabels
+                            ] ?? post.category.replace("_", " ")}
+                          </p>
+                          <p className="mt-2 text-lg leading-tight text-on-surface transition-colors group-hover:text-[#a14b2f]">
+                            {summarizePostContent(post.content)}
+                          </p>
+                          <p className="mt-2 text-xs text-outline">
+                            {buildReadinessMeta(post)}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
 
-            <Card className={warmPanelClassName}>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Training Hub
-              </p>
-              <h3 className="mt-3 text-2xl text-on-surface">NIMS Webinar Registration</h3>
-              <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-                Register for Friday&apos;s preparedness webinar to keep this temporary News feed aligned
-                with the project&apos;s response coordination goals.
-              </p>
-              <Button type="button" variant="secondary" className="mt-5 w-full">
-                Register Now
-              </Button>
-            </Card>
+                <Card className={warmPanelClassName}>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    Who to follow
+                  </p>
+                  <div className="mt-5 space-y-4">
+                    {followDepartments.length === 0 ? (
+                      <div
+                        className={`rounded-2xl p-4 ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724]" : "border border-[#ecd8cf] bg-[#f7efe7]"}`}
+                      >
+                        <p className="text-sm leading-relaxed text-on-surface-variant">
+                          Department accounts will appear here once profiles are
+                          available in the directory.
+                        </p>
+                      </div>
+                    ) : (
+                      followDepartments.map((department) => {
+                        const publisherPath = `/departments/${department.user_id}`;
+                        const profileImage =
+                          department.profile_picture ||
+                          department.profile_photo;
 
-            <Card className={warmPanelClassName}>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Quick Access
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {footerLinks.map((link) => (
-                  <span
-                    key={link}
-                    className={`rounded-full px-3 py-2 text-xs ${warmTabClassName}`}
+                        return (
+                          <Link
+                            key={department.id}
+                            className="flex items-center gap-3 rounded-2xl transition-colors hover:bg-[#fffaf6]"
+                            to={publisherPath}
+                          >
+                            <div
+                              className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${getFollowAccent(department.type)} text-[#5b3427] shadow-sm`}
+                            >
+                              {profileImage ? (
+                                <img
+                                  alt={`${department.name} profile`}
+                                  className="h-full w-full object-cover"
+                                  src={profileImage}
+                                />
+                              ) : (
+                                <span className="material-symbols-outlined text-[22px]">
+                                  {getFollowSymbol(department.type)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-base font-semibold text-on-surface">
+                                {department.name}
+                              </p>
+                              <p className="truncate text-sm text-on-surface-variant">
+                                {formatDepartmentHandle(department.name)}
+                              </p>
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${isDarkMode ? "border border-[#3b3732] bg-[#2a2724] text-[#f0e2d6] hover:bg-[#332f2b]" : "border border-[#d7c1b5] bg-white text-[#5f4f46] hover:bg-[#f8efe8]"}`}
+                            >
+                              Follow
+                            </span>
+                          </Link>
+                        );
+                      })
+                    )}
+                  </div>
+                  {followDepartments.length > 0 && (
+                    <button
+                      type="button"
+                      className="mt-5 text-sm font-medium text-[#a14b2f] transition-colors hover:text-[#7b3822]"
+                    >
+                      Show more
+                    </button>
+                  )}
+                </Card>
+
+                <Card className={warmPanelClassName}>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    Training Hub
+                  </p>
+                  <h3 className="mt-3 text-2xl text-on-surface">
+                    NIMS Webinar Registration
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+                    Register for Friday&apos;s preparedness webinar to keep this
+                    temporary News feed aligned with the project&apos;s response
+                    coordination goals.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-5 w-full"
                   >
-                    {link}
-                  </span>
-                ))}
+                    Register Now
+                  </Button>
+                </Card>
+
+                <Card className={warmPanelClassName}>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    Quick Access
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {footerLinks.map((link) => (
+                      <span
+                        key={link}
+                        className={`rounded-full px-3 py-2 text-xs ${warmTabClassName}`}
+                      >
+                        {link}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-4 text-xs text-outline">
+                    Temporary News feed page added from the supplied HTML
+                    layout.
+                  </p>
+                </Card>
               </div>
-              <p className="mt-4 text-xs text-outline">
-                Temporary News feed page added from the supplied HTML layout.
-              </p>
-            </Card>
             </div>
           </div>
-      </div>
-      </div>
+        </div>
 
-      {activeImageViewer && (
-        <div className="fixed inset-0 z-[72] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md md:p-8">
-          <button
-            type="button"
-            className="absolute left-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-            aria-label="Close image viewer"
-            onClick={() => setActiveImageViewer(null)}
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
-
-          {activeImageViewer.photos.length > 1 && (
+        {activeImageViewer && (
+          <div className="fixed inset-0 z-[72] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md md:p-8">
             <button
               type="button"
-              className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-              aria-label="Previous image"
-              onClick={() => shiftImageViewer("prev")}
+              className="absolute left-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+              aria-label="Close image viewer"
+              onClick={() => setActiveImageViewer(null)}
             >
-              <span className="material-symbols-outlined">arrow_back</span>
+              <span className="material-symbols-outlined">close</span>
             </button>
-          )}
 
-          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col items-center justify-center gap-4">
-            <img
-              src={activeImageViewer.photos[activeImageViewer.index]}
-              alt={`${activeImageViewer.title} image ${activeImageViewer.index + 1}`}
-              className="max-h-[78vh] w-auto max-w-full rounded-[28px] object-contain shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
-            />
             {activeImageViewer.photos.length > 1 && (
-              <div className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
-                {activeImageViewer.index + 1} / {activeImageViewer.photos.length}
-              </div>
+              <button
+                type="button"
+                className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                aria-label="Previous image"
+                onClick={() => shiftImageViewer("prev")}
+              >
+                <span className="material-symbols-outlined">arrow_back</span>
+              </button>
+            )}
+
+            <div className="flex max-h-[90vh] w-full max-w-6xl flex-col items-center justify-center gap-4">
+              <img
+                src={activeImageViewer.photos[activeImageViewer.index]}
+                alt={`${activeImageViewer.title} image ${activeImageViewer.index + 1}`}
+                className="max-h-[78vh] w-auto max-w-full rounded-[28px] object-contain shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
+              />
+              {activeImageViewer.photos.length > 1 && (
+                <div className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm">
+                  {activeImageViewer.index + 1} /{" "}
+                  {activeImageViewer.photos.length}
+                </div>
+              )}
+            </div>
+
+            {activeImageViewer.photos.length > 1 && (
+              <button
+                type="button"
+                className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                aria-label="Next image"
+                onClick={() => shiftImageViewer("next")}
+              >
+                <span className="material-symbols-outlined">arrow_forward</span>
+              </button>
             )}
           </div>
+        )}
 
-          {activeImageViewer.photos.length > 1 && (
-            <button
-              type="button"
-              className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-              aria-label="Next image"
-              onClick={() => shiftImageViewer("next")}
+        {activeCommentPost && (
+          <div className="dispatch-comment-overlay fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+            <div
+              className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
+              style={
+                {
+                  "--dispatch-comment-from-x": `${commentModalOrigin.x}px`,
+                  "--dispatch-comment-from-y": `${commentModalOrigin.y}px`,
+                } as CSSProperties
+              }
             >
-              <span className="material-symbols-outlined">arrow_forward</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {activeCommentPost && (
-        <div className="dispatch-comment-overlay fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div
-            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
-            style={
-              {
-                "--dispatch-comment-from-x": `${commentModalOrigin.x}px`,
-                "--dispatch-comment-from-y": `${commentModalOrigin.y}px`,
-              } as CSSProperties
-            }
-          >
               {(() => {
                 const publisherPath = `/departments/${activeCommentPost.uploader}`;
                 return (
-              <div className={`flex items-center gap-4 px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
-                <DepartmentHoverPreview
-                  className="shrink-0"
-                  department={activeCommentPost.department}
-                  panelClassName="left-1/2 -translate-x-1/2"
-                  profilePath={publisherPath}
-                >
-                  <Link
-                    aria-label={`Open ${activeCommentPost.department?.name ?? "department"} profile`}
-                    className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest text-[#a14b2f] transition-transform duration-200 ease-out group-hover/publisher:scale-[1.04]"
-                    onClick={() => setActiveCommentPostId(null)}
-                    to={publisherPath}
+                  <div
+                    className={`flex items-center gap-4 px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}
                   >
-                    {activeCommentPost.department?.profile_picture ? (
-                      <img
-                        alt={`${activeCommentPost.department.name} profile`}
-                        className="h-full w-full object-cover"
-                        src={activeCommentPost.department.profile_picture}
-                      />
-                    ) : (
-                      <span className="material-symbols-outlined">campaign</span>
-                    )}
-                  </Link>
-                </DepartmentHoverPreview>
-                <DepartmentHoverPreview
-                  className="inline-flex min-w-0 max-w-full"
-                  department={activeCommentPost.department}
-                  panelClassName="left-1/2 -translate-x-1/2"
-                  profilePath={publisherPath}
-                >
-                  <Link
-                    className="inline-flex min-w-0 flex-col items-start"
-                    onClick={() => setActiveCommentPostId(null)}
-                    to={publisherPath}
-                  >
-                    <p className="text-base font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
-                      {activeCommentPost.department?.name ?? "Department Update"}
-                    </p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
-                      {new Date(activeCommentPost.created_at).toLocaleString()}
-                    </p>
-                  </Link>
-                </DepartmentHoverPreview>
-                {activeCommentLocationLabel ? (
-                  <span className={`ml-auto inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}>
-                    <span className="material-symbols-outlined text-[14px]">location_on</span>
-                    <span className="truncate normal-case tracking-normal">{activeCommentLocationLabel}</span>
-                  </span>
-                ) : null}
-                <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}>
-                  <span className="material-symbols-outlined text-[14px]">
-                    {(categoryStyles[activeCommentPost.category] ?? { icon: "article" }).icon}
-                  </span>
-                  {activeCommentPost.category.replace("_", " ")}
-                </span>
-                <button
-                  className={`rounded-full p-2 transition-colors hover:text-on-surface ${warmTabClassName}`}
-                  type="button"
-                  onClick={() => setActiveCommentPostId(null)}
-                >
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
+                    <DepartmentHoverPreview
+                      className="shrink-0"
+                      department={activeCommentPost.department}
+                      panelClassName="left-1/2 -translate-x-1/2"
+                      profilePath={publisherPath}
+                    >
+                      <Link
+                        aria-label={`Open ${activeCommentPost.department?.name ?? "department"} profile`}
+                        className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest text-[#a14b2f] transition-transform duration-200 ease-out group-hover/publisher:scale-[1.04]"
+                        onClick={() => setActiveCommentPostId(null)}
+                        to={publisherPath}
+                      >
+                        {activeCommentPost.department?.profile_picture ? (
+                          <img
+                            alt={`${activeCommentPost.department.name} profile`}
+                            className="h-full w-full object-cover"
+                            src={activeCommentPost.department.profile_picture}
+                          />
+                        ) : (
+                          <span className="material-symbols-outlined">
+                            campaign
+                          </span>
+                        )}
+                      </Link>
+                    </DepartmentHoverPreview>
+                    <DepartmentHoverPreview
+                      className="inline-flex min-w-0 max-w-full"
+                      department={activeCommentPost.department}
+                      panelClassName="left-1/2 -translate-x-1/2"
+                      profilePath={publisherPath}
+                    >
+                      <Link
+                        className="inline-flex min-w-0 flex-col items-start"
+                        onClick={() => setActiveCommentPostId(null)}
+                        to={publisherPath}
+                      >
+                        <p className="text-base font-semibold text-on-surface transition-colors duration-200 ease-out group-hover/publisher:text-[#a14b2f]">
+                          {activeCommentPost.department?.name ??
+                            "Department Update"}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-outline transition-opacity duration-200 ease-out group-hover/publisher:opacity-55">
+                          {new Date(
+                            activeCommentPost.created_at,
+                          ).toLocaleString()}
+                        </p>
+                      </Link>
+                    </DepartmentHoverPreview>
+                    {activeCommentLocationLabel ? (
+                      <span
+                        className={`ml-auto inline-flex max-w-[260px] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] ${warmTabClassName}`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          location_on
+                        </span>
+                        <span className="truncate normal-case tracking-normal">
+                          {activeCommentLocationLabel}
+                        </span>
+                      </span>
+                    ) : null}
+                    <span
+                      className={`ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${warmTabClassName}`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">
+                        {
+                          (
+                            categoryStyles[activeCommentPost.category] ?? {
+                              icon: "article",
+                            }
+                          ).icon
+                        }
+                      </span>
+                      {activeCommentPost.category.replace("_", " ")}
+                    </span>
+                    <button
+                      className={`rounded-full p-2 transition-colors hover:text-on-surface ${warmTabClassName}`}
+                      type="button"
+                      onClick={() => setActiveCommentPostId(null)}
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
                 );
               })()}
 
-            <div className="min-h-0 overflow-y-auto">
-              <article className="p-8 pt-6">
-                <div className="space-y-5">
-                  <div>
-                    <h3 className="text-3xl text-on-surface">{activeCommentPost.title}</h3>
+              <div className="min-h-0 overflow-y-auto">
+                <article className="p-8 pt-6">
+                  <div className="space-y-5">
+                    <div>
+                      <h3 className="text-3xl text-on-surface">
+                        {activeCommentPost.title}
+                      </h3>
+                    </div>
+
+                    <p className="text-[1.125rem] leading-[1.6] text-on-surface whitespace-pre-wrap">
+                      {activeCommentPost.content}
+                    </p>
+
+                    {activeCommentPost.photos &&
+                      activeCommentPost.photos.length > 0 && (
+                        <>
+                          {activeCommentPost.photos.length >= 4 ? (
+                            <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-[24px] border border-outline-variant/10 bg-[#f3ebe4] p-2">
+                              {activeCommentPost.photos.map((photo, index) => (
+                                <button
+                                  key={`detail-grid-photo-${index}`}
+                                  type="button"
+                                  className={`group relative overflow-hidden rounded-[20px] bg-[#eadfd6] ${getFeedPhotoGridTileClassName(index, activeCommentPost.photos!.length)}`}
+                                  onClick={(event) =>
+                                    openImageViewer(
+                                      activeCommentPost.photos ?? [],
+                                      index,
+                                      activeCommentPost.title,
+                                      event,
+                                    )
+                                  }
+                                >
+                                  <img
+                                    src={photo}
+                                    alt={`${activeCommentPost.title} photo ${index + 1}`}
+                                    className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="relative overflow-hidden rounded-[24px] border border-outline-variant/10 bg-[#f3ebe4]">
+                              <button
+                                type="button"
+                                className="block w-full"
+                                onClick={(event) =>
+                                  openImageViewer(
+                                    activeCommentPost.photos ?? [],
+                                    getPhotoIndex(
+                                      activeCommentPost.id,
+                                      activeCommentPost.photos?.length ?? 0,
+                                    ),
+                                    activeCommentPost.title,
+                                    event,
+                                  )
+                                }
+                              >
+                                <img
+                                  src={
+                                    activeCommentPost.photos[
+                                      getPhotoIndex(
+                                        activeCommentPost.id,
+                                        activeCommentPost.photos.length,
+                                      )
+                                    ]
+                                  }
+                                  alt={activeCommentPost.title}
+                                  className="block h-auto w-full"
+                                />
+                              </button>
+                              {activeCommentPost.photos.length > 1 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                    onClick={() =>
+                                      shiftPostPhoto(
+                                        activeCommentPost.id,
+                                        activeCommentPost.photos?.length ?? 0,
+                                        "prev",
+                                      )
+                                    }
+                                    aria-label="Previous image"
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      chevron_left
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                    onClick={() =>
+                                      shiftPostPhoto(
+                                        activeCommentPost.id,
+                                        activeCommentPost.photos?.length ?? 0,
+                                        "next",
+                                      )
+                                    }
+                                    aria-label="Next image"
+                                  >
+                                    <span className="material-symbols-outlined">
+                                      chevron_right
+                                    </span>
+                                  </button>
+                                  <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
+                                    {activeCommentPost.photos.map(
+                                      (_, index) => (
+                                        <button
+                                          key={`detail-photo-dot-${index}`}
+                                          type="button"
+                                          className={`h-2.5 w-2.5 rounded-full transition-all ${
+                                            index ===
+                                            getPhotoIndex(
+                                              activeCommentPost.id,
+                                              activeCommentPost.photos!.length,
+                                            )
+                                              ? "bg-white"
+                                              : "bg-white/45 hover:bg-white/70"
+                                          }`}
+                                          aria-label={`View image ${index + 1}`}
+                                          onClick={() =>
+                                            setPostPhotoIndices((prev) => ({
+                                              ...prev,
+                                              [String(activeCommentPost.id)]:
+                                                index,
+                                            }))
+                                          }
+                                        />
+                                      ),
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                    <div className="flex items-center justify-between border-y border-outline-variant/10 py-4">
+                      <div className="flex items-center gap-8">
+                        <button
+                          className="group flex items-center gap-2 text-on-surface-variant transition-colors hover:text-[#a14b2f]"
+                          type="button"
+                          onClick={() => void handleReact(activeCommentPost.id)}
+                          disabled={reactingPostIds.includes(
+                            activeCommentPost.id,
+                          )}
+                        >
+                          <AnimatedHeartIcon
+                            liked={likedPostIds.includes(activeCommentPost.id)}
+                          />
+                          <span className="text-xs font-bold uppercase tracking-widest">
+                            {activeCommentPost.reaction ?? 0}
+                          </span>
+                        </button>
+                        <button
+                          className="group flex items-center gap-2 text-on-surface transition-colors"
+                          type="button"
+                        >
+                          <span className="material-symbols-outlined">
+                            chat_bubble
+                          </span>
+                          <span className="text-xs font-bold uppercase tracking-widest">
+                            {activeCommentPost.comment_count ?? comments.length}
+                          </span>
+                        </button>
+                      </div>
+                      <button
+                        className="text-on-surface-variant transition-colors hover:text-on-surface"
+                        type="button"
+                        onClick={() => toggleBookmarked(activeCommentPost.id)}
+                      >
+                        <AnimatedBookmarkIcon
+                          bookmarked={bookmarkedPostIds.includes(
+                            activeCommentPost.id,
+                          )}
+                          animate={bookmarkAnimatingPostIds.includes(
+                            activeCommentPost.id,
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </article>
+
+                <section
+                  className={`px-8 py-10 ${isDarkMode ? "bg-[#1f1d1b]" : "bg-[#f7efe7]"}`}
+                >
+                  <h4 className="mb-8 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                    Response Thread
+                  </h4>
+
+                  <div className="mb-10 flex gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest">
+                      <span className="material-symbols-outlined text-on-surface-variant">
+                        person
+                      </span>
+                    </div>
+                    <div className="relative flex-grow">
+                      <textarea
+                        value={commentDraft}
+                        onChange={(event) =>
+                          setCommentDraft(event.target.value)
+                        }
+                        className="w-full resize-none rounded-lg border-none bg-surface-container-highest p-3 text-sm placeholder:text-on-surface-variant/50 focus:ring-1 focus:ring-primary/20"
+                        placeholder="Add your perspective..."
+                        rows={1}
+                      />
+                      <button
+                        className="absolute right-3 top-2.5 text-[#a14b2f] transition-colors hover:text-[#914024]"
+                        type="button"
+                        onClick={() => void handleSubmitComment()}
+                        disabled={commentSubmitting}
+                      >
+                        <span className="material-symbols-outlined text-xl">
+                          send
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
-                  <p className="text-[1.125rem] leading-[1.6] text-on-surface whitespace-pre-wrap">
-                    {activeCommentPost.content}
-                  </p>
-
-                  {activeCommentPost.photos && activeCommentPost.photos.length > 0 && (
-                    <>
-                      {activeCommentPost.photos.length >= 4 ? (
-                        <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-[24px] border border-outline-variant/10 bg-[#f3ebe4] p-2">
-                          {activeCommentPost.photos.map((photo, index) => (
-                            <button
-                              key={`detail-grid-photo-${index}`}
-                              type="button"
-                              className={`group relative overflow-hidden rounded-[20px] bg-[#eadfd6] ${getFeedPhotoGridTileClassName(index, activeCommentPost.photos!.length)}`}
-                              onClick={(event) =>
-                                openImageViewer(activeCommentPost.photos ?? [], index, activeCommentPost.title, event)
-                              }
-                            >
-                              <img
-                                src={photo}
-                                alt={`${activeCommentPost.title} photo ${index + 1}`}
-                                className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="relative overflow-hidden rounded-[24px] border border-outline-variant/10 bg-[#f3ebe4]">
-                          <button
-                            type="button"
-                            className="block w-full"
-                            onClick={(event) =>
-                              openImageViewer(
-                                activeCommentPost.photos ?? [],
-                                getPhotoIndex(activeCommentPost.id, activeCommentPost.photos?.length ?? 0),
-                                activeCommentPost.title,
-                                event,
-                              )}
-                          >
-                            <img
-                              src={activeCommentPost.photos[getPhotoIndex(activeCommentPost.id, activeCommentPost.photos.length)]}
-                              alt={activeCommentPost.title}
-                              className="block h-auto w-full"
-                            />
-                          </button>
-                          {activeCommentPost.photos.length > 1 && (
-                            <>
-                              <button
-                                type="button"
-                                className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-                                onClick={() => shiftPostPhoto(activeCommentPost.id, activeCommentPost.photos?.length ?? 0, "prev")}
-                                aria-label="Previous image"
-                              >
-                                <span className="material-symbols-outlined">chevron_left</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-                                onClick={() => shiftPostPhoto(activeCommentPost.id, activeCommentPost.photos?.length ?? 0, "next")}
-                                aria-label="Next image"
-                              >
-                                <span className="material-symbols-outlined">chevron_right</span>
-                              </button>
-                              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/35 px-3 py-2 text-white/90 backdrop-blur-sm">
-                                {activeCommentPost.photos.map((_, index) => (
-                                  <button
-                                    key={`detail-photo-dot-${index}`}
-                                    type="button"
-                                    className={`h-2.5 w-2.5 rounded-full transition-all ${
-                                      index === getPhotoIndex(activeCommentPost.id, activeCommentPost.photos!.length)
-                                        ? "bg-white"
-                                        : "bg-white/45 hover:bg-white/70"
-                                    }`}
-                                    aria-label={`View image ${index + 1}`}
-                                    onClick={() =>
-                                      setPostPhotoIndices((prev) => ({
-                                        ...prev,
-                                        [String(activeCommentPost.id)]: index,
-                                      }))
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </>
+                  {commentError && (
+                    <div className="mb-6 rounded-md border border-error/20 bg-error-container/20 px-4 py-3 text-sm text-error">
+                      {commentError}
+                    </div>
                   )}
 
-                  <div className="flex items-center justify-between border-y border-outline-variant/10 py-4">
-                    <div className="flex items-center gap-8">
-                      <button
-                        className="group flex items-center gap-2 text-on-surface-variant transition-colors hover:text-[#a14b2f]"
-                        type="button"
-                        onClick={() => void handleReact(activeCommentPost.id)}
-                        disabled={reactingPostIds.includes(activeCommentPost.id)}
-                      >
-                        <AnimatedHeartIcon liked={likedPostIds.includes(activeCommentPost.id)} />
-                        <span className="text-xs font-bold uppercase tracking-widest">
-                          {activeCommentPost.reaction ?? 0}
-                        </span>
-                      </button>
-                      <button className="group flex items-center gap-2 text-on-surface transition-colors" type="button">
-                        <span className="material-symbols-outlined">chat_bubble</span>
-                        <span className="text-xs font-bold uppercase tracking-widest">
-                          {activeCommentPost.comment_count ?? comments.length}
-                        </span>
-                      </button>
-                    </div>
-                    <button
-                      className="text-on-surface-variant transition-colors hover:text-on-surface"
-                      type="button"
-                      onClick={() => toggleBookmarked(activeCommentPost.id)}
-                    >
-                      <AnimatedBookmarkIcon
-                        bookmarked={bookmarkedPostIds.includes(activeCommentPost.id)}
-                        animate={bookmarkAnimatingPostIds.includes(activeCommentPost.id)}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-              </article>
-
-              <section className={`px-8 py-10 ${isDarkMode ? "bg-[#1f1d1b]" : "bg-[#f7efe7]"}`}>
-                <h4 className="mb-8 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-                  Response Thread
-                </h4>
-
-                <div className="mb-10 flex gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest">
-                    <span className="material-symbols-outlined text-on-surface-variant">person</span>
-                  </div>
-                  <div className="relative flex-grow">
-                    <textarea
-                      value={commentDraft}
-                      onChange={(event) => setCommentDraft(event.target.value)}
-                      className="w-full resize-none rounded-lg border-none bg-surface-container-highest p-3 text-sm placeholder:text-on-surface-variant/50 focus:ring-1 focus:ring-primary/20"
-                      placeholder="Add your perspective..."
-                      rows={1}
-                    />
-                    <button
-                      className="absolute right-3 top-2.5 text-[#a14b2f] transition-colors hover:text-[#914024]"
-                      type="button"
-                      onClick={() => void handleSubmitComment()}
-                      disabled={commentSubmitting}
-                    >
-                      <span className="material-symbols-outlined text-xl">send</span>
-                    </button>
-                  </div>
-                </div>
-
-                {commentError && (
-                  <div className="mb-6 rounded-md border border-error/20 bg-error-container/20 px-4 py-3 text-sm text-error">
-                    {commentError}
-                  </div>
-                )}
-
-                <div className="space-y-8">
-                  {commentsLoading ? (
-                    <p className="text-sm text-on-surface-variant">Loading comments...</p>
-                  ) : comments.length === 0 ? (
-                    <p className="text-sm text-on-surface-variant">No comments yet. Start the conversation.</p>
-                  ) : comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest">
-                        <span className="material-symbols-outlined text-on-surface-variant">person</span>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-baseline gap-3">
-                          <span className="text-sm font-semibold text-on-surface">{comment.user_name}</span>
-                          <span className="text-[10px] font-medium text-on-surface-variant/60">
-                            {new Date(comment.created_at).toLocaleString()}
-                          </span>
+                  <div className="space-y-8">
+                    {commentsLoading ? (
+                      <p className="text-sm text-on-surface-variant">
+                        Loading comments...
+                      </p>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-on-surface-variant">
+                        No comments yet. Start the conversation.
+                      </p>
+                    ) : (
+                      comments.map((comment) => (
+                        <div key={comment.id} className="flex gap-4">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-highest">
+                            <span className="material-symbols-outlined text-on-surface-variant">
+                              person
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-baseline gap-3">
+                              <span className="text-sm font-semibold text-on-surface">
+                                {comment.user_name}
+                              </span>
+                              <span className="text-[10px] font-medium text-on-surface-variant/60">
+                                {new Date(comment.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-on-surface">
+                              {comment.comment}
+                            </p>
+                            <div className="flex gap-4 pt-1">
+                              <button
+                                className="text-[10px] font-bold uppercase tracking-widest text-outline transition-colors hover:text-[#a14b2f]"
+                                type="button"
+                              >
+                                Like
+                              </button>
+                              <button
+                                className="text-[10px] font-bold uppercase tracking-widest text-outline transition-colors hover:text-[#a14b2f]"
+                                type="button"
+                              >
+                                Reply
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm leading-relaxed text-on-surface">{comment.comment}</p>
-                        <div className="flex gap-4 pt-1">
-                          <button className="text-[10px] font-bold uppercase tracking-widest text-outline transition-colors hover:text-[#a14b2f]" type="button">
-                            Like
-                          </button>
-                          <button className="text-[10px] font-bold uppercase tracking-widest text-outline transition-colors hover:text-[#a14b2f]" type="button">
-                            Reply
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      ))
+                    )}
 
-                  <div className="flex justify-center pt-4 text-[10px] font-bold uppercase tracking-widest text-outline">
-                    {`${comments.length} comment${comments.length === 1 ? "" : "s"}`}
-                    {currentUser ? ` • signed in as ${currentUser.full_name ?? currentUser.email}` : ""}
+                    <div className="flex justify-center pt-4 text-[10px] font-bold uppercase tracking-widest text-outline">
+                      {`${comments.length} comment${comments.length === 1 ? "" : "s"}`}
+                      {currentUser
+                        ? ` • signed in as ${currentUser.full_name ?? currentUser.email}`
+                        : ""}
+                    </div>
                   </div>
-                </div>
-              </section>
+                </section>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {canPost && isCreatePostOpen && (
-        <div className="dispatch-comment-overlay fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div
-            className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
-            style={
-              {
-                "--dispatch-comment-from-x": `${createModalOrigin.x}px`,
-                "--dispatch-comment-from-y": `${createModalOrigin.y}px`,
-              } as CSSProperties
-            }
-          >
-            <div className="flex items-center gap-4 border-b border-white/12 bg-gradient-to-r from-[#d98d63] via-[#bf6e49] to-[#a86446] px-8 py-6 text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]">
+        {canPost && isCreatePostOpen && (
+          <div className="dispatch-comment-overlay fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+            <div
+              className={`dispatch-comment-modal relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
+              style={
+                {
+                  "--dispatch-comment-from-x": `${createModalOrigin.x}px`,
+                  "--dispatch-comment-from-y": `${createModalOrigin.y}px`,
+                } as CSSProperties
+              }
+            >
+              <div className="flex items-center gap-4 border-b border-white/12 bg-gradient-to-r from-[#d98d63] via-[#bf6e49] to-[#a86446] px-8 py-6 text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)]">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-white/14 text-white shadow-[0_10px_22px_-16px_rgba(69,32,17,0.45)]">
                   <span className="material-symbols-outlined">edit_square</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base font-semibold text-white">Department Command Desk</p>
+                  <p className="text-base font-semibold text-white">
+                    Department Command Desk
+                  </p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">
                     Publish from the temporary news feed
                   </p>
@@ -2461,130 +2940,151 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                 </button>
               </div>
 
-            <div className="min-h-0 overflow-y-auto">
-              <article className="p-8 pt-6">
-                <div className="mb-8">
-                  <p className="font-headline text-3xl leading-tight text-on-surface">
-                    Create a public announcement without leaving the feed.
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-                    This keeps the same publishing flow, uploads, and location checks, but places the form in the temporary modal layout from the supplied reference.
-                  </p>
-                  <div className="mt-5 border-t border-[#ead0c3] pt-5">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
-                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">campaign</span>
-                        Public bulletin
-                      </span>
-                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
-                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">pin_drop</span>
-                        Location required
-                      </span>
-                      <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
-                        <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">perm_media</span>
-                        Media ready
-                      </span>
+              <div className="min-h-0 overflow-y-auto">
+                <article className="p-8 pt-6">
+                  <div className="mb-8">
+                    <p className="font-headline text-3xl leading-tight text-on-surface">
+                      Create a public announcement without leaving the feed.
+                    </p>
+                    <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+                      This keeps the same publishing flow, uploads, and location
+                      checks, but places the form in the temporary modal layout
+                      from the supplied reference.
+                    </p>
+                    <div className="mt-5 border-t border-[#ead0c3] pt-5">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                          <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">
+                            campaign
+                          </span>
+                          Public bulletin
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                          <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">
+                            pin_drop
+                          </span>
+                          Location required
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#ecd8cf] bg-[#fffaf6] px-3 py-2 text-[11px] font-medium text-[#7a6558]">
+                          <span className="material-symbols-outlined text-[15px] text-[#a14b2f]">
+                            perm_media
+                          </span>
+                          Media ready
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
+                  <DepartmentCreatePostForm
+                    onCancel={closeCreatePostModal}
+                    onSuccess={async () => {
+                      closeCreatePostModal();
+                      await fetchPosts(false);
+                    }}
+                  />
+                </article>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteConfirmPost && (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+            <div
+              className={`w-full max-w-md rounded-[28px] p-6 ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
+            >
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                Delete post
+              </p>
+              <h3 className="mt-3 text-2xl text-on-surface">
+                Are you sure you want to delete this post?
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+                This will remove the announcement, its comments, its reaction
+                records, and the related feed data connected to it.
+              </p>
+              {deleteError && (
+                <div className="mt-4 rounded-2xl border border-[#d8b7aa] bg-[#fff1e9] px-4 py-3 text-sm text-[#89391e]">
+                  {deleteError}
+                </div>
+              )}
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className={`rounded-full px-5 py-3 text-sm font-semibold ${warmTabClassName}`}
+                  onClick={() => {
+                    if (deletingPostId !== deleteConfirmPost.id) {
+                      setDeleteConfirmPost(null);
+                      setDeleteError(null);
+                    }
+                  }}
+                  disabled={deletingPostId === deleteConfirmPost.id}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-[#a14b2f] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-70"
+                  onClick={() => void handleDeletePost()}
+                  disabled={deletingPostId === deleteConfirmPost.id}
+                >
+                  {deletingPostId === deleteConfirmPost.id
+                    ? "Deleting..."
+                    : "Delete post"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editPost && (
+          <div className="fixed inset-0 z-[74] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+            <div
+              className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}
+            >
+              <div
+                className={`flex items-center justify-between px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}
+              >
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+                    Edit post
+                  </p>
+                  <h3 className="mt-2 text-2xl text-on-surface">
+                    Update this announcement
+                  </h3>
+                </div>
+                <button
+                  className={`rounded-full p-2 transition-colors hover:text-on-surface ${warmTabClassName}`}
+                  type="button"
+                  onClick={() => setEditPost(null)}
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="min-h-0 overflow-y-auto px-8 py-6">
                 <DepartmentCreatePostForm
-                  onCancel={closeCreatePostModal}
+                  mode="edit"
+                  postId={editPost.id}
+                  initialValues={{
+                    title: editPost.title,
+                    content: editPost.content,
+                    category: editPost.category,
+                    location: editPost.location ?? "",
+                    post_kind: editPost.post_kind ?? "standard",
+                    assessment_details: editPost.assessment_details ?? null,
+                  }}
+                  submitLabel="Save changes"
+                  onCancel={() => setEditPost(null)}
                   onSuccess={async () => {
-                    closeCreatePostModal();
+                    setEditPost(null);
                     await fetchPosts(false);
                   }}
                 />
-              </article>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteConfirmPost && (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`w-full max-w-md rounded-[28px] p-6 ${popupSurfaceClassName} ${popupPanelShadowClassName}`}>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
-              Delete post
-            </p>
-            <h3 className="mt-3 text-2xl text-on-surface">Are you sure you want to delete this post?</h3>
-            <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-              This will remove the announcement, its comments, its reaction records, and the related feed data connected to it.
-            </p>
-            {deleteError && (
-              <div className="mt-4 rounded-2xl border border-[#d8b7aa] bg-[#fff1e9] px-4 py-3 text-sm text-[#89391e]">
-                {deleteError}
               </div>
-            )}
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className={`rounded-full px-5 py-3 text-sm font-semibold ${warmTabClassName}`}
-                onClick={() => {
-                  if (deletingPostId !== deleteConfirmPost.id) {
-                    setDeleteConfirmPost(null);
-                    setDeleteError(null);
-                  }
-                }}
-                disabled={deletingPostId === deleteConfirmPost.id}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-full bg-[#a14b2f] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-70"
-                onClick={() => void handleDeletePost()}
-                disabled={deletingPostId === deleteConfirmPost.id}
-              >
-                {deletingPostId === deleteConfirmPost.id ? "Deleting..." : "Delete post"}
-              </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {editPost && (
-        <div className="fixed inset-0 z-[74] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
-          <div className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl ${popupSurfaceClassName} ${popupPanelShadowClassName}`}>
-            <div className={`flex items-center justify-between px-8 py-6 backdrop-blur-sm ${popupHeaderClassName}`}>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
-                  Edit post
-                </p>
-                <h3 className="mt-2 text-2xl text-on-surface">Update this announcement</h3>
-              </div>
-              <button
-                className={`rounded-full p-2 transition-colors hover:text-on-surface ${warmTabClassName}`}
-                type="button"
-                onClick={() => setEditPost(null)}
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div className="min-h-0 overflow-y-auto px-8 py-6">
-              <DepartmentCreatePostForm
-                mode="edit"
-                postId={editPost.id}
-                initialValues={{
-                  title: editPost.title,
-                  content: editPost.content,
-                  category: editPost.category,
-                  location: editPost.location ?? "",
-                  post_kind: editPost.post_kind ?? "standard",
-                  assessment_details: editPost.assessment_details ?? null,
-                }}
-                submitLabel="Save changes"
-                onCancel={() => setEditPost(null)}
-                onSuccess={async () => {
-                  setEditPost(null);
-                  await fetchPosts(false);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+        )}
       </AppShell>
     </>
   );

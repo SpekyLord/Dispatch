@@ -37,6 +37,71 @@ const registrationHighlights = [
   "Shared feed, mesh, and notification surfaces after sign-in",
 ] as const;
 
+const roleCardMeta = {
+  citizen: {
+    icon: "person",
+    description:
+      "Create a citizen account for reporting, feed access, and mesh-aware monitoring.",
+  },
+  department: {
+    icon: "apartment",
+    description:
+      "Include organization, type, contact, address, and area coverage for verification.",
+  },
+} as const;
+
+function createDeterministicRandom(seed: number) {
+  let current = seed >>> 0;
+
+  return () => {
+    current = (current * 1664525 + 1013904223) >>> 0;
+    return current / 4294967295;
+  };
+}
+
+function buildStarShadow(
+  seed: number,
+  count: number,
+  color: string,
+  maxX = 2200,
+  maxY = 1400,
+  loopHeight = 1600,
+) {
+  const random = createDeterministicRandom(seed);
+
+  return Array.from({ length: count }, () => {
+    const x = Math.round(random() * maxX);
+    const y = Math.round(random() * maxY);
+    return [`${x}px ${y}px ${color}`, `${x}px ${y + loopHeight}px ${color}`];
+  })
+    .flat()
+    .join(", ");
+}
+
+const registerStarLayers = [
+  {
+    animation: "registerStarsFloatA 52s linear infinite",
+    blur: "drop-shadow(0 0 5px rgba(214,120,60,0.28))",
+    opacity: 0.96,
+    shadow: buildStarShadow(11, 220, "rgba(201,109,52,0.98)"),
+    size: 1.8,
+  },
+  {
+    animation: "registerStarsFloatB 78s linear infinite",
+    blur: "drop-shadow(0 0 7px rgba(230,146,86,0.24))",
+    opacity: 0.82,
+    shadow: buildStarShadow(27, 140, "rgba(229,144,78,0.86)"),
+    size: 2.6,
+  },
+  {
+    animation: "registerStarsFloatC 108s linear infinite",
+    blur: "drop-shadow(0 0 11px rgba(238,171,116,0.24))",
+    opacity: 0.72,
+    shadow: buildStarShadow(53, 88, "rgba(244,184,130,0.8)"),
+    size: 3.6,
+  },
+] as const;
+
 export function RegisterPage() {
   const navigate = useNavigate();
   const setSession = useSessionStore((state) => state.setSession);
@@ -74,10 +139,13 @@ export function RegisterPage() {
         body.area_of_responsibility = areaOfResponsibility;
       }
 
-      const response = await apiRequest<RegisterResponse>("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      const response = await apiRequest<RegisterResponse>(
+        "/api/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      );
 
       if (response.access_token) {
         setSession({
@@ -102,270 +170,570 @@ export function RegisterPage() {
         },
       });
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Registration failed.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Registration failed.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(217,141,99,0.18),_transparent_30%),linear-gradient(180deg,#fcf7f2_0%,#f6eee6_100%)] text-on-surface">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col px-6 py-6 lg:px-10">
-        <header className="flex items-center justify-between rounded-[28px] border border-[#ecd8cf] bg-[#fff8f3]/90 px-6 py-4 shadow-[0_18px_40px_rgba(161,75,47,0.08)] backdrop-blur">
-          <div>
-            <Link className="font-headline text-3xl italic text-on-surface" to="/">
+    <div className="relative isolate min-h-screen overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#fdf8f3_36%,#f7e6d8_68%,#efc3a6_100%)] text-on-surface">
+      <style>{`
+        @keyframes registerStarsFloatA {
+          from {
+            transform: translate3d(0, 0, 0);
+          }
+          to {
+            transform: translate3d(0, -1600px, 0);
+          }
+        }
+
+        @keyframes registerStarsFloatB {
+          from {
+            transform: translate3d(0, 0, 0);
+          }
+          to {
+            transform: translate3d(0, -1600px, 0);
+          }
+        }
+
+        @keyframes registerStarsFloatC {
+          from {
+            transform: translate3d(0, 0, 0);
+          }
+          to {
+            transform: translate3d(0, -1600px, 0);
+          }
+        }
+      `}</style>
+
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.72)_0%,rgba(255,255,255,0.14)_24%,transparent_52%)]" />
+        {registerStarLayers.map((layer) => (
+          <div
+            key={layer.animation}
+            className="absolute left-0 top-0"
+            style={{
+              animation: layer.animation,
+              boxShadow: layer.shadow,
+              filter: layer.blur,
+              height: `${layer.size}px`,
+              opacity: layer.opacity,
+              willChange: "transform",
+              width: `${layer.size}px`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <header className="bg-surface-container/90 backdrop-blur-sm">
+          <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-5">
+            <span className="text-2xl font-headline italic text-on-surface">
               Dispatch
-            </Link>
-            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#a14b2f]">
-              Account Provisioning
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              className="rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-[#7b6b62] transition-colors hover:bg-[#f2e7de]"
-              to="/feed"
-            >
-              View Feed
-            </Link>
-            <Link
-              className="rounded-full bg-[#a14b2f] px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-white transition-colors hover:bg-[#89391e]"
-              to="/auth/login"
-            >
-              Log in
-            </Link>
+            </span>
+            <nav className="hidden items-center gap-8 md:flex">
+              <Link
+                to="/feed"
+                className="text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface"
+              >
+                Feed
+              </Link>
+              <Link
+                to="/auth/login"
+                className="text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface"
+              >
+                Sign In
+              </Link>
+            </nav>
           </div>
         </header>
 
-        <main className="flex flex-1 items-center py-8 lg:py-10">
-          <div className="grid w-full gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-            <section className="relative overflow-hidden rounded-[36px] border border-[#d7b19b] bg-[linear-gradient(155deg,#fff2ea_0%,#f0d7c7_36%,#cf825b_100%)] px-7 py-8 text-on-surface shadow-[0_28px_60px_rgba(122,58,37,0.15)] lg:px-10 lg:py-10">
-              <div className="absolute right-[-70px] top-[-50px] h-56 w-56 rounded-full bg-white/35 blur-3xl" />
-              <div className="absolute bottom-[-80px] left-[-20px] h-60 w-60 rounded-full bg-[#d98d63]/22 blur-3xl" />
-              <div className="relative max-w-xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-[#d7b19b] bg-white/55 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.24em] text-[#a14b2f]">
-                  <span className="material-symbols-outlined text-[16px]">verified_user</span>
-                  Guided Onboarding
-                </div>
-                <h1 className="mt-6 font-headline text-5xl italic leading-[0.92] lg:text-6xl">
-                  Build your Dispatch access with the same warm feed language.
-                </h1>
-                <p className="mt-5 max-w-lg text-base leading-7 text-[#5f4f46]">
-                  Create a citizen or department account, carry the full verification context forward, and keep auth connected to the same backend response contract used by mobile.
-                </p>
+        <main className="mx-auto flex w-full max-w-[1380px] flex-1 items-center px-5 py-6 lg:px-8 lg:py-8">
+          <div className="w-full rounded-[38px] border border-[#ead9cd] bg-[linear-gradient(180deg,#fbf5ef_0%,#f7efe7_100%)] p-3.5 shadow-[0_14px_28px_-12px_rgba(56,36,27,0.28),0_18px_38px_-20px_rgba(56,36,27,0.24)] lg:p-3.5">
+            <div className="grid gap-3.5 lg:grid-cols-[0.9fr_1.02fr]">
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(160deg,#c97c53_0%,#9c5d41_48%,#5a4138_100%)] px-5 py-5 text-white shadow-[0_22px_48px_rgba(49,27,19,0.18)] lg:min-h-[600px] lg:px-6 lg:py-6">
+                <div className="absolute inset-y-0 left-0 w-1/2 bg-[radial-gradient(circle_at_left,rgba(255,255,255,0.1),transparent_72%)]" />
+                <div className="absolute right-[-80px] top-[-50px] h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute bottom-[-110px] left-[10%] h-60 w-60 rounded-full bg-[#f5d7c6]/12 blur-3xl" />
 
-                <div className="mt-8 grid gap-3">
-                  {registrationHighlights.map((highlight) => (
-                    <div
-                      key={highlight}
-                      className="rounded-[24px] border border-[#d7b19b] bg-white/55 px-4 py-4 backdrop-blur-sm"
+                <div className="relative flex h-full flex-col">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-headline text-[1.8rem] italic leading-none text-white">
+                        DISPATCHER
+                      </p>
+                      <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-white/62">
+                        Field Access Portal
+                      </p>
+                    </div>
+
+                    <Link
+                      className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/82 transition-colors hover:bg-white/16"
+                      to="/"
                     >
-                      <p className="text-sm leading-6 text-[#5f4f46]">{highlight}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[36px] border border-[#ecd8cf] bg-[#fff8f3] p-7 shadow-[0_26px_50px_rgba(104,79,67,0.12)] lg:p-9">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#a14b2f]">
-                    Registration
-                  </p>
-                  <h2 className="mt-3 font-headline text-4xl leading-none text-on-surface">
-                    Create account
-                  </h2>
-                  <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-                    Choose your role and fill the fields required for access routing.
-                  </p>
-                </div>
-                <div className="hidden rounded-[22px] border border-[#ecd8cf] bg-[#f7efe7] px-4 py-3 text-right sm:block">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a14b2f]">
-                    Roles
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-on-surface">Citizen / Department</p>
-                </div>
-              </div>
-
-              {error ? (
-                <div className="mt-6 rounded-[22px] border border-[#d8b7aa] bg-[#fff1e9] px-4 py-4 text-sm leading-6 text-[#89391e]">
-                  {error}
-                </div>
-              ) : null}
-
-              <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
-                <div>
-                  <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]">
-                    Account type
-                  </label>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {(["citizen", "department"] as const).map((value) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setRole(value)}
-                        className={`rounded-[20px] border px-4 py-4 text-left transition-colors ${
-                          role === value
-                            ? "border-[#a14b2f] bg-[#fff1e9] text-on-surface"
-                            : "border-[#ecd8cf] bg-[#f7efe7] text-[#6f625b] hover:bg-[#f2e7de]"
-                        }`}
-                      >
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#a14b2f]">
-                          {value}
-                        </p>
-                        <p className="mt-2 text-sm leading-6">
-                          {value === "department"
-                            ? "Include organization, type, contact, address, and area coverage for verification."
-                            : "Create a citizen account for reporting, feed access, and mesh-aware monitoring."}
-                        </p>
-                      </button>
-                    ))}
+                      Back to website
+                      <span className="material-symbols-outlined text-[15px]">
+                        arrow_outward
+                      </span>
+                    </Link>
                   </div>
-                </div>
 
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="fullName">
-                      Full name
-                    </label>
-                    <input
-                      id="fullName"
-                      type="text"
-                      className="aegis-input"
-                      placeholder="Juan Dela Cruz"
-                      value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="regEmail">
-                      Email address
-                    </label>
-                    <input
-                      id="regEmail"
-                      type="email"
-                      required
-                      className="aegis-input"
-                      placeholder="j.doe@dispatch.org"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="regPassword">
-                      Password
-                    </label>
-                    <input
-                      id="regPassword"
-                      type="password"
-                      required
-                      minLength={6}
-                      className="aegis-input"
-                      placeholder="••••••••••••"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                    />
-                  </div>
-                </div>
+                  <div className="mt-auto pb-1 pt-10">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
+                      Provisioning flow
+                    </p>
+                    <h1 className="mt-3 max-w-[15ch] font-headline text-[2.5rem] italic leading-[0.92] text-white lg:text-[3.2rem]">
+                      Build Dispatch access with the same warm feed language.
+                    </h1>
+                    <p className="mt-3.5 max-w-[25rem] text-[14px] leading-6 text-white/82">
+                      Create a citizen or department account, carry the full
+                      verification context forward, and keep auth connected to
+                      the same backend response contract used by mobile.
+                    </p>
 
-                {role === "department" ? (
-                  <div className="rounded-[28px] border border-[#ecd8cf] bg-[#f7efe7] p-5">
-                    <div className="mb-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#a14b2f]">
-                        Department verification fields
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[#6f625b]">
-                        These values are sent directly to the backend so municipality review can approve or reject the department profile without missing context.
-                      </p>
-                    </div>
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="orgName">
-                          Organization name
-                        </label>
-                        <input
-                          id="orgName"
-                          type="text"
-                          required
-                          className="aegis-input"
-                          placeholder="Bureau of Emergency Management"
-                          value={orgName}
-                          onChange={(event) => setOrgName(event.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="deptType">
-                          Department type
-                        </label>
-                        <select
-                          id="deptType"
-                          className="aegis-input cursor-pointer"
-                          value={deptType}
-                          onChange={(event) => setDeptType(event.target.value)}
+                    <div className="mt-5 space-y-2.5">
+                      {registrationHighlights.map((highlight) => (
+                        <div
+                          key={highlight}
+                          className="rounded-[18px] border border-white/14 bg-white/10 px-3.5 py-2.5 backdrop-blur-sm"
                         >
-                          {DEPARTMENT_TYPES.map((departmentType) => (
-                            <option key={departmentType.value} value={departmentType.value}>
-                              {departmentType.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="contactNumber">
-                          Contact number
-                        </label>
-                        <input
-                          id="contactNumber"
-                          type="tel"
-                          className="aegis-input"
-                          placeholder="+63 9XX XXX XXXX"
-                          value={contactNumber}
-                          onChange={(event) => setContactNumber(event.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="areaResp">
-                          Area of responsibility
-                        </label>
-                        <input
-                          id="areaResp"
-                          type="text"
-                          className="aegis-input"
-                          placeholder="North district"
-                          value={areaOfResponsibility}
-                          onChange={(event) => setAreaOfResponsibility(event.target.value)}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-[#7b6b62]" htmlFor="deptAddress">
-                          Address
-                        </label>
-                        <input
-                          id="deptAddress"
-                          type="text"
-                          className="aegis-input"
-                          placeholder="742 Field Command Avenue"
-                          value={address}
-                          onChange={(event) => setAddress(event.target.value)}
-                        />
-                      </div>
+                          <p className="text-[13px] leading-[1.35rem] text-white/88">
+                            {highlight}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 flex gap-2">
+                      <span className="h-1.5 w-12 rounded-full bg-white/88" />
+                      <span className="h-1.5 w-12 rounded-full bg-white/34" />
+                      <span className="h-1.5 w-12 rounded-full bg-white/20" />
                     </div>
                   </div>
-                ) : null}
+                </div>
+              </section>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-[18px] bg-[#a14b2f] px-5 py-4 text-sm font-bold uppercase tracking-[0.22em] text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading ? "Creating account..." : "Create Account"}
-                </button>
-              </form>
-            </section>
+              <section className="rounded-[28px] bg-[linear-gradient(180deg,#fbf5ef_0%,#f7efe7_100%)] p-[18px] text-[#2f221d] lg:p-5">
+                <div className="flex h-full flex-col">
+                  <div className="min-w-0">
+                    <h2 className="text-center font-sans text-[2.1rem] font-semibold leading-[0.96] text-[#2f221d]">
+                      Create an account
+                    </h2>
+                    <p className="mt-2 text-center text-[13px] leading-5 text-[#6f625b]">
+                      Already have an account?{" "}
+                      <Link
+                        className="font-semibold text-[#a14b2f] underline-offset-4 transition-colors hover:text-[#89391e] hover:underline"
+                        to="/auth/login"
+                      >
+                        Log in
+                      </Link>
+                    </p>
+                  </div>
+
+                  {error ? (
+                    <div className="mt-6 rounded-[22px] border border-[#d08e77] bg-[#6d4134]/55 px-4 py-4 text-sm leading-6 text-[#ffe4d7]">
+                      {error}
+                    </div>
+                  ) : null}
+
+                  <form className="mt-4 space-y-3.5" onSubmit={handleSubmit}>
+                    <div className="rounded-[22px] bg-[#f8f1ea] p-3.5 shadow-[0_10px_22px_-12px_rgba(120,78,58,0.18),0_5px_5px_0_#00000010] sm:p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ead9cd] bg-[#fffdf9] text-[#a14b2f]">
+                          <span className="material-symbols-outlined text-[18px]">
+                            dashboard_customize
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#a14b2f]">
+                            Choose access
+                          </p>
+                          <p className="mt-1 text-sm leading-6 text-[#6f625b]">
+                            Pick the route that matches how this account will
+                            enter Dispatch.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
+                        {(["citizen", "department"] as const).map((value) => {
+                          const isActive = role === value;
+
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              aria-pressed={isActive}
+                              onClick={() => setRole(value)}
+                              className={`rounded-[20px] border px-4 py-4 text-left transition-all ${
+                                isActive
+                                  ? "border-[#dca488] bg-[#fff8f3] text-[#2f221d] shadow-[0_10px_22px_-12px_rgba(0,0,0,0.45),0_5px_5px_0_#00000026]"
+                                  : "border-[#ead9cd] bg-[#fffdf9] text-[#6f625b] hover:bg-[#fcf6f1]"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                                    isActive
+                                      ? "bg-[#f4dfd3] text-[#a14b2f]"
+                                      : "bg-[#f4ebe4] text-[#b26848]"
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-[18px]">
+                                    {roleCardMeta[value].icon}
+                                  </span>
+                                </div>
+
+                                <div className="min-w-0">
+                                  <p
+                                    className={`text-[11px] font-bold uppercase tracking-[0.22em] ${
+                                      isActive
+                                        ? "text-[#a14b2f]"
+                                        : "text-[#b26848]"
+                                    }`}
+                                  >
+                                    {value}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {role === "citizen" ? (
+                      <div className="rounded-[24px] bg-[#f8f1ea] p-4 shadow-[0_10px_22px_-12px_rgba(120,78,58,0.18),0_5px_5px_0_#00000010] sm:p-5">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ead9cd] bg-[#fffdf9] text-[#a14b2f]">
+                            <span className="material-symbols-outlined text-[18px]">
+                              badge
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#a14b2f]">
+                              Identity details
+                            </p>
+                            <p className="mt-1 text-sm leading-6 text-[#6f625b]">
+                              Enter the core credentials used to provision
+                              access.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                person
+                              </span>
+                              <input
+                                id="fullName"
+                                type="text"
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Full name"
+                                value={fullName}
+                                onChange={(event) =>
+                                  setFullName(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                mail
+                              </span>
+                              <input
+                                id="regEmail"
+                                type="email"
+                                required
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Email address"
+                                value={email}
+                                onChange={(event) =>
+                                  setEmail(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] md:col-span-2">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                lock
+                              </span>
+                              <input
+                                id="regPassword"
+                                type="password"
+                                required
+                                minLength={6}
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(event) =>
+                                  setPassword(event.target.value)
+                                }
+                              />
+                              <span className="material-symbols-outlined text-[18px] text-[#c4b1a4]">
+                                visibility_off
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {role === "department" ? (
+                      <div className="rounded-[24px] bg-[#f8f1ea] p-4 shadow-[0_10px_22px_-12px_rgba(120,78,58,0.18),0_5px_5px_0_#00000010] sm:p-5">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#ead9cd] bg-[#fffdf9] text-[#a14b2f]">
+                            <span className="material-symbols-outlined text-[18px]">
+                              domain_verification
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#a14b2f]">
+                              Department verification
+                            </p>
+                            <p className="mt-1 text-sm leading-6 text-[#6f625b]">
+                              These details travel with the registration request
+                              so municipality review has the full operating
+                              context upfront.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] md:col-span-2">
+                            <label
+                              className="block text-[11px] font-bold uppercase tracking-[0.2em] text-[#8f7568]"
+                              htmlFor="orgName"
+                            >
+                              Organization name
+                            </label>
+                            <div className="mt-2 flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                apartment
+                              </span>
+                              <input
+                                id="orgName"
+                                type="text"
+                                required
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Bureau of Emergency Management"
+                                value={orgName}
+                                onChange={(event) =>
+                                  setOrgName(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                mail
+                              </span>
+                              <input
+                                id="regEmail"
+                                type="email"
+                                required
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Email address"
+                                value={email}
+                                onChange={(event) =>
+                                  setEmail(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                call
+                              </span>
+                              <input
+                                id="contactNumber"
+                                type="tel"
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Contact number"
+                                value={contactNumber}
+                                onChange={(event) =>
+                                  setContactNumber(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] md:col-span-2">
+                            <div className="flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                lock
+                              </span>
+                              <input
+                                id="regPassword"
+                                type="password"
+                                required
+                                minLength={6}
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(event) =>
+                                  setPassword(event.target.value)
+                                }
+                              />
+                              <span className="material-symbols-outlined text-[18px] text-[#c4b1a4]">
+                                visibility_off
+                              </span>
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <label
+                              className="block text-[11px] font-bold uppercase tracking-[0.2em] text-[#8f7568]"
+                              htmlFor="deptType"
+                            >
+                              Department type
+                            </label>
+                            <div className="mt-2 flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                category
+                              </span>
+                              <select
+                                id="deptType"
+                                className="min-w-0 flex-1 cursor-pointer appearance-none border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none"
+                                value={deptType}
+                                onChange={(event) =>
+                                  setDeptType(event.target.value)
+                                }
+                              >
+                                {DEPARTMENT_TYPES.map((departmentType) => (
+                                  <option
+                                    key={departmentType.value}
+                                    value={departmentType.value}
+                                    className="bg-[#fffdf9] text-[#2f221d]"
+                                  >
+                                    {departmentType.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="material-symbols-outlined text-[18px] text-[#c4b1a4]">
+                                expand_more
+                              </span>
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            <label
+                              className="block text-[11px] font-bold uppercase tracking-[0.2em] text-[#8f7568]"
+                              htmlFor="areaResp"
+                            >
+                              Area of responsibility
+                            </label>
+                            <div className="mt-2 flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                public
+                              </span>
+                              <input
+                                id="areaResp"
+                                type="text"
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="North district"
+                                value={areaOfResponsibility}
+                                onChange={(event) =>
+                                  setAreaOfResponsibility(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-[20px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] md:col-span-2">
+                            <label
+                              className="block text-[11px] font-bold uppercase tracking-[0.2em] text-[#8f7568]"
+                              htmlFor="deptAddress"
+                            >
+                              Address
+                            </label>
+                            <div className="mt-2 flex items-center gap-3">
+                              <span className="material-symbols-outlined text-[18px] text-[#b26848]">
+                                location_on
+                              </span>
+                              <input
+                                id="deptAddress"
+                                type="text"
+                                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#2f221d] outline-none placeholder:text-[#b9a79b]"
+                                placeholder="742 Field Command Avenue"
+                                value={address}
+                                onChange={(event) =>
+                                  setAddress(event.target.value)
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-[24px] bg-[#f8f1ea] p-4 shadow-[0_10px_22px_-12px_rgba(120,78,58,0.18),0_5px_5px_0_#00000010] sm:p-5">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="inline-flex w-full items-center justify-center rounded-[10px] bg-[#a14b2f] px-5 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {loading ? "Creating account..." : "Create account"}
+                      </button>
+
+                      {role === "citizen" ? (
+                        <>
+                          <div className="mt-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-[#e3d3c6]" />
+                            <span className="text-[11px] text-[#9a8578]">
+                              Or register with
+                            </span>
+                            <span className="h-px flex-1 bg-[#e3d3c6]" />
+                          </div>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center gap-3 rounded-[10px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 text-sm text-[#4a3a33] transition-colors hover:bg-[#fcf6f1]"
+                            >
+                              <span className="text-base font-semibold text-[#ea4335]">
+                                G
+                              </span>
+                              Google
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center gap-3 rounded-[10px] border border-[#ead9cd] bg-[#fffdf9] px-4 py-3 text-sm text-[#4a3a33] transition-colors hover:bg-[#fcf6f1]"
+                            >
+                              <span className="material-symbols-outlined text-[18px] text-[#4a3a33]">
+                                apple
+                              </span>
+                              Apple
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </form>
+                </div>
+              </section>
+            </div>
           </div>
         </main>
+
+        <footer className="border-t border-outline-variant/15 bg-surface-container/90 backdrop-blur-sm">
+          <div className="mx-auto flex w-full max-w-[1440px] flex-col items-center justify-between px-12 py-7 md:flex-row">
+            <div className="mb-4 font-headline italic text-on-surface md:mb-0">
+              Dispatch
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">
+              &copy; 2026 Dispatch. Community-driven crisis management.
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );
 }
-

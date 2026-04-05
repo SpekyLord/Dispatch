@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 import { useAppShellTheme } from "@/components/layout/app-shell-theme";
 import { AppShell } from "@/components/layout/app-shell";
+import { DepartmentPageHero } from "@/components/layout/department-page-hero";
 import { LocationMap } from "@/components/maps/location-map";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -110,7 +111,10 @@ function getReportCopy(report: DeptReport) {
   }
 
   if (!rawTitle) {
-    return { headline: rawDescription || fallbackHeadline, summary: null as string | null };
+    return {
+      headline: rawDescription || fallbackHeadline,
+      summary: null as string | null,
+    };
   }
 
   if (!rawDescription) {
@@ -121,8 +125,10 @@ function getReportCopy(report: DeptReport) {
   const normalizedDescription = normalizeComparableText(rawDescription);
   const looksDuplicated =
     normalizedTitle === normalizedDescription ||
-    (normalizedTitle.length > 12 && normalizedDescription.startsWith(normalizedTitle)) ||
-    (normalizedDescription.length > 12 && normalizedTitle.startsWith(normalizedDescription));
+    (normalizedTitle.length > 12 &&
+      normalizedDescription.startsWith(normalizedTitle)) ||
+    (normalizedDescription.length > 12 &&
+      normalizedTitle.startsWith(normalizedDescription));
 
   if (looksDuplicated) {
     return { headline: rawTitle, summary: null as string | null };
@@ -139,7 +145,9 @@ function parseCoordinateLocation(location?: string | null) {
     return null;
   }
 
-  const match = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  const match = location
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (!match) {
     return null;
   }
@@ -231,7 +239,10 @@ function formatTimelineTimestamp(value: string) {
 }
 
 function resolveReportCoordinates(report: DeptReport) {
-  if (typeof report.latitude === "number" && typeof report.longitude === "number") {
+  if (
+    typeof report.latitude === "number" &&
+    typeof report.longitude === "number"
+  ) {
     return { lat: report.latitude, lng: report.longitude };
   }
 
@@ -239,7 +250,10 @@ function resolveReportCoordinates(report: DeptReport) {
 }
 
 function getReportCoordinateSource(report: DeptReport) {
-  if (typeof report.latitude === "number" && typeof report.longitude === "number") {
+  if (
+    typeof report.latitude === "number" &&
+    typeof report.longitude === "number"
+  ) {
     return `${report.latitude}, ${report.longitude}`;
   }
 
@@ -250,9 +264,14 @@ function getReportCoordinateSource(report: DeptReport) {
   return null;
 }
 
-function getReportLocationLabel(report: DeptReport, resolvedLocations: Record<string, string>) {
+function getReportLocationLabel(
+  report: DeptReport,
+  resolvedLocations: Record<string, string>,
+) {
   const directAddress =
-    report.address && !parseCoordinateLocation(report.address) ? report.address.trim() : null;
+    report.address && !parseCoordinateLocation(report.address)
+      ? report.address.trim()
+      : null;
 
   if (directAddress) {
     return directAddress;
@@ -260,15 +279,22 @@ function getReportLocationLabel(report: DeptReport, resolvedLocations: Record<st
 
   const coordinateSource = getReportCoordinateSource(report);
   if (coordinateSource) {
-    return resolvedLocations[coordinateSource] ?? formatCoordinateFallback(coordinateSource);
+    return (
+      resolvedLocations[coordinateSource] ??
+      formatCoordinateFallback(coordinateSource)
+    );
   }
 
   return "Field location pending";
 }
 
 function IncidentMapPulse({ isDarkMode }: { isDarkMode: boolean }) {
-  const circleBorderColor = isDarkMode ? "rgba(255, 200, 170, 0.72)" : "rgba(255, 166, 120, 0.78)";
-  const circleGlowColor = isDarkMode ? "rgba(255, 182, 145, 0.75)" : "rgba(235, 134, 84, 0.62)";
+  const circleBorderColor = isDarkMode
+    ? "rgba(255, 200, 170, 0.72)"
+    : "rgba(255, 166, 120, 0.78)";
+  const circleGlowColor = isDarkMode
+    ? "rgba(255, 182, 145, 0.75)"
+    : "rgba(235, 134, 84, 0.62)";
 
   return (
     <div
@@ -342,8 +368,12 @@ function IncidentBoardMapPreview({
   const shellClassName = mobile
     ? "relative h-[120px] overflow-hidden rounded-[20px] border border-[#ead8cb]"
     : "absolute inset-y-0 right-0 hidden overflow-hidden md:block md:w-[42%] md:z-[1]";
-  const overlayTabBorderClassName = isDarkMode ? "border-white/10" : "border-[#ead9cc]/95";
-  const overlayTabLabelClassName = isDarkMode ? "text-white/36" : "text-[#b38f79]";
+  const overlayTabBorderClassName = isDarkMode
+    ? "border-white/10"
+    : "border-[#ead9cc]/95";
+  const overlayTabLabelClassName = isDarkMode
+    ? "text-white/36"
+    : "text-[#b38f79]";
   const overlayTabStyle = {
     background: isDarkMode
       ? "linear-gradient(90deg, rgba(24, 24, 23, 0.99) 0%, rgba(24, 24, 23, 0.96) 56%, rgba(24, 24, 23, 0.72) 78%, rgba(24, 24, 23, 0.22) 92%, rgba(24, 24, 23, 0) 100%)"
@@ -351,7 +381,10 @@ function IncidentBoardMapPreview({
   };
 
   return (
-    <div className={shellClassName} data-testid={`report-map-preview-${report.id}`}>
+    <div
+      className={shellClassName}
+      data-testid={`report-map-preview-${report.id}`}
+    >
       {coordinates ? (
         <>
           <div className="absolute inset-y-0 left-[9%] z-0 w-[138%] [&_.leaflet-control-container]:hidden [&_.leaflet-marker-icon]:drop-shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
@@ -372,7 +405,9 @@ function IncidentBoardMapPreview({
               <div className="absolute inset-y-0 left-0 w-[48%] bg-[linear-gradient(180deg,rgba(255,248,243,0.34),rgba(255,248,243,0.10))]" />
               <div className="absolute inset-y-4 left-4 w-px bg-white/28" />
               <div className="relative flex h-full items-center px-5">
-                <span className={`text-[8px] font-bold uppercase tracking-[0.32em] ${overlayTabLabelClassName}`}>
+                <span
+                  className={`text-[8px] font-bold uppercase tracking-[0.32em] ${overlayTabLabelClassName}`}
+                >
                   Map Feed
                 </span>
               </div>
@@ -388,7 +423,9 @@ function IncidentBoardMapPreview({
       ) : (
         <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f7ede5,#e8d7c9)]">
           <div className="text-center">
-            <span className="material-symbols-outlined text-[32px] text-[#b05a36]">map</span>
+            <span className="material-symbols-outlined text-[32px] text-[#b05a36]">
+              map
+            </span>
             <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#8a5a43]">
               Location feed pending
             </p>
@@ -408,9 +445,13 @@ function IncidentBoardCard({
   isDarkMode: boolean;
   resolvedLocations: Record<string, string>;
 }) {
-  const statusStyle =
-    statusStyles[report.status] ?? { bg: "bg-surface-container-highest", text: "text-on-surface-variant" };
-  const severityStyle = severityColors[report.severity] ?? "text-on-surface-variant bg-surface-container";
+  const statusStyle = statusStyles[report.status] ?? {
+    bg: "bg-surface-container-highest",
+    text: "text-on-surface-variant",
+  };
+  const severityStyle =
+    severityColors[report.severity] ??
+    "text-on-surface-variant bg-surface-container";
   const ownAction = report.current_response?.action;
   const locationLabel = getReportLocationLabel(report, resolvedLocations);
   const categoryIcon = categoryIcons[report.category] ?? "emergency";
@@ -440,7 +481,9 @@ function IncidentBoardCard({
 
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#f2e2d7] text-[#b25e39] shadow-[0_10px_22px_-18px_rgba(166,92,58,0.55)]">
-                  <span className="material-symbols-outlined text-[16px]">{categoryIcon}</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    {categoryIcon}
+                  </span>
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -480,7 +523,9 @@ function IncidentBoardCard({
                   <span className="rounded-full bg-[#f1e4da] px-2.5 py-1 font-semibold capitalize text-[#85563f]">
                     {labelize(report.category)}
                   </span>
-                  <span className={`rounded-full px-2.5 py-1 font-semibold capitalize ${statusStyle.bg} ${statusStyle.text}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-1 font-semibold capitalize ${statusStyle.bg} ${statusStyle.text}`}
+                  >
                     {labelize(report.status)}
                   </span>
                   {report.is_escalated && (
@@ -489,9 +534,13 @@ function IncidentBoardCard({
                     </span>
                   )}
                   {ownAction && (
-                    <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                      ownAction === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                        ownAction === "accepted"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
                       You {ownAction}
                     </span>
                   )}
@@ -505,13 +554,19 @@ function IncidentBoardCard({
               <span>{report.response_summary.pending} pending</span>
               <span className="ml-auto inline-flex items-center gap-1 text-[#b35e38]">
                 View incident details
-                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                <span className="material-symbols-outlined text-[14px]">
+                  arrow_forward
+                </span>
               </span>
             </div>
           </div>
 
           <div className="relative z-10 px-5 pb-5 md:hidden">
-            <IncidentBoardMapPreview isDarkMode={isDarkMode} mobile report={report} />
+            <IncidentBoardMapPreview
+              isDarkMode={isDarkMode}
+              mobile
+              report={report}
+            />
           </div>
         </article>
       </Card>
@@ -544,13 +599,16 @@ function IncidentTimelineBlock({ report }: { report: DeptReport }) {
 
 export function DepartmentReportsPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
+  const department = useSessionStore((state) => state.department);
   const { isDarkMode } = useAppShellTheme();
   const [reports, setReports] = useState<DeptReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
+  const [resolvedLocations, setResolvedLocations] = useState<
+    Record<string, string>
+  >({});
   const resolvingLocationsRef = useRef(new Set<string>());
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === "undefined") {
@@ -572,7 +630,9 @@ export function DepartmentReportsPage() {
     if (statusFilter) params.set("status", statusFilter);
     if (categoryFilter) params.set("category", categoryFilter);
     const qs = params.toString();
-    return apiRequest<{ reports: DeptReport[] }>(`/api/departments/reports${qs ? `?${qs}` : ""}`)
+    return apiRequest<{ reports: DeptReport[] }>(
+      `/api/departments/reports${qs ? `?${qs}` : ""}`,
+    )
       .then((res) => setReports(res.reports))
       .catch(() => {})
       .finally(() => {
@@ -583,7 +643,9 @@ export function DepartmentReportsPage() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void fetchReports(); }, [statusFilter, categoryFilter]);
+  useEffect(() => {
+    void fetchReports();
+  }, [statusFilter, categoryFilter]);
 
   useEffect(() => {
     const reportSubscription = subscribeToTable(
@@ -619,7 +681,10 @@ export function DepartmentReportsPage() {
     });
 
     coordinateSources.forEach((location) => {
-      if (resolvedLocations[location] || resolvingLocationsRef.current.has(location)) {
+      if (
+        resolvedLocations[location] ||
+        resolvingLocationsRef.current.has(location)
+      ) {
         return;
       }
 
@@ -645,7 +710,9 @@ export function DepartmentReportsPage() {
           };
 
           const summary =
-            summarizeResolvedLocation(data) || data.display_name || formatCoordinateFallback(location);
+            summarizeResolvedLocation(data) ||
+            data.display_name ||
+            formatCoordinateFallback(location);
 
           setResolvedLocations((current) => ({
             ...current,
@@ -715,7 +782,9 @@ export function DepartmentReportsPage() {
       labelize(report.severity),
     ];
 
-    return searchableParts.some((value) => value?.toLowerCase().includes(normalizedSearchQuery));
+    return searchableParts.some((value) =>
+      value?.toLowerCase().includes(normalizedSearchQuery),
+    );
   });
 
   const filterTabBaseClassName =
@@ -727,7 +796,14 @@ export function DepartmentReportsPage() {
 
   return (
     <AppShell subtitle="Incident response" title="Incident Board">
-      <div className="-mt-6 mb-4 border-b border-[#ead8cc]" />
+      <DepartmentPageHero
+        dataTestId="department-reports-hero"
+        department={department}
+        eyebrow="Incident Response"
+        headingTone="soft-light"
+        icon="assignment"
+        title="Incident Board"
+      />
 
       <div className="mb-8 flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -736,7 +812,9 @@ export function DepartmentReportsPage() {
               {incidentStatusFilterOptions.map((option) => (
                 <button
                   className={`${filterTabBaseClassName} ${
-                    statusFilter === option.value ? activeFilterTabClassName : inactiveFilterTabClassName
+                    statusFilter === option.value
+                      ? activeFilterTabClassName
+                      : inactiveFilterTabClassName
                   }`}
                   key={option.value || "all-statuses"}
                   onClick={() => setStatusFilter(option.value)}
@@ -754,19 +832,26 @@ export function DepartmentReportsPage() {
                 value={categoryFilter}
               >
                 {incidentCategoryFilterOptions.map((option) => (
-                  <option key={option.value || "all-categories"} value={option.value}>
+                  <option
+                    key={option.value || "all-categories"}
+                    value={option.value}
+                  >
                     {option.label}
                   </option>
                 ))}
               </select>
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9b826f]">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  expand_more
+                </span>
               </span>
             </label>
 
             <label className="relative block min-w-0 lg:w-[220px] xl:w-[260px]">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a08373]">
-                <span className="material-symbols-outlined text-[17px]">search</span>
+                <span className="material-symbols-outlined text-[17px]">
+                  search
+                </span>
               </span>
               <input
                 className="h-11 w-full rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-10 pr-4 text-[14px] text-[#4d2b1e] outline-none transition-colors placeholder:text-[#a08373] focus:border-[#c98d71]"
@@ -781,14 +866,19 @@ export function DepartmentReportsPage() {
           <div className="flex shrink-0 items-center gap-3">
             <Button
               className="h-11 rounded-full border border-[#e3d3c6] bg-[#fff8f3] px-[18px] text-[#7a6558] hover:bg-[#f3e8de]"
-              onClick={() => { void fetchReports(); }}
+              onClick={() => {
+                void fetchReports();
+              }}
               variant="ghost"
             >
-              <span className="material-symbols-outlined mr-1 text-[16px]">refresh</span>
+              <span className="material-symbols-outlined mr-1 text-[16px]">
+                refresh
+              </span>
               Refresh
             </Button>
             <span className="text-xs font-semibold text-[#8a776b]">
-              Showing {visibleReports.length} report{visibleReports.length !== 1 ? "s" : ""}
+              Showing {visibleReports.length} report
+              {visibleReports.length !== 1 ? "s" : ""}
             </span>
           </div>
         </div>
@@ -801,13 +891,21 @@ export function DepartmentReportsPage() {
         </Card>
       ) : reports.length === 0 ? (
         <Card className="py-16 text-center">
-          <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">inbox</span>
-          <p className="text-on-surface-variant">No reports match the current filters.</p>
+          <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">
+            inbox
+          </span>
+          <p className="text-on-surface-variant">
+            No reports match the current filters.
+          </p>
         </Card>
       ) : visibleReports.length === 0 ? (
         <Card className="py-16 text-center">
-          <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">search_off</span>
-          <p className="text-on-surface-variant">No reports match the current filters or search.</p>
+          <span className="material-symbols-outlined mb-4 block text-5xl text-outline-variant">
+            search_off
+          </span>
+          <p className="text-on-surface-variant">
+            No reports match the current filters or search.
+          </p>
         </Card>
       ) : !isDesktopLayout ? (
         <div className="space-y-6">

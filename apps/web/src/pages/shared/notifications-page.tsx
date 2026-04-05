@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { DepartmentPageHero } from "@/components/layout/department-page-hero";
 import { Card } from "@/components/ui/card";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { Button } from "@/components/ui/button";
@@ -152,9 +153,11 @@ function NotificationBoardCard({
     iconClassName: "text-[#9c684f]",
   };
   const typeLabel =
-    notificationTypeLabels[notification.type] ?? (labelize(notification.type) || "Notification");
+    notificationTypeLabels[notification.type] ??
+    (labelize(notification.type) || "Notification");
   const compactTitle = notification.title?.trim() || typeLabel;
-  const compactMessage = notification.message?.trim() || "Tap to review this notification.";
+  const compactMessage =
+    notification.message?.trim() || "Tap to review this notification.";
   const compactContextLabel =
     notification.reference_type === "report" && notification.reference_id
       ? `Report #${String(notification.reference_id).slice(0, 8)}`
@@ -168,7 +171,9 @@ function NotificationBoardCard({
       onClick={() => void onOpen(notification)}
       type="button"
     >
-      <Card className={`cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 ${notificationCardShadowClassName} transition-all duration-200 hover:-translate-y-0.5 ${notificationCardHoverShadowClassName}`}>
+      <Card
+        className={`cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 ${notificationCardShadowClassName} transition-all duration-200 hover:-translate-y-0.5 ${notificationCardHoverShadowClassName}`}
+      >
         <article className="relative flex min-h-[98px] items-center overflow-hidden px-4 py-3 md:min-h-[88px] md:px-5">
           {!notification.is_read ? (
             <span className="absolute inset-y-0 left-0 w-1.5 bg-[linear-gradient(180deg,#d97757,#b35e38)]" />
@@ -185,7 +190,9 @@ function NotificationBoardCard({
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#a56a50]">
-                <span className={`rounded-full px-2 py-1 ${typeStyle.pillClassName}`}>
+                <span
+                  className={`rounded-full px-2 py-1 ${typeStyle.pillClassName}`}
+                >
                   {typeLabel}
                 </span>
                 <span className="rounded-full border border-[#e8d8cb] bg-[#fbf4ee] px-2 py-1 text-[#9f7b65]">
@@ -218,7 +225,9 @@ function NotificationBoardCard({
               ) : null}
               {target ? (
                 <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#ead7c7] bg-[#fffaf6] text-[#b35e38] md:inline-flex">
-                  <span className="material-symbols-outlined text-[16px]">arrow_outward</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    arrow_outward
+                  </span>
                 </span>
               ) : null}
             </div>
@@ -229,7 +238,11 @@ function NotificationBoardCard({
   );
 }
 
-function NotificationTimelineBlock({ notification }: { notification: Notification }) {
+function NotificationTimelineBlock({
+  notification,
+}: {
+  notification: Notification;
+}) {
   const timelineTimestamp = formatTimelineTimestamp(notification.created_at);
 
   return (
@@ -256,11 +269,16 @@ export function NotificationsPage() {
   const navigate = useNavigate();
   const accessToken = useSessionStore((state) => state.accessToken);
   const userRole = useSessionStore((state) => state.user?.role);
+  const department = useSessionStore((state) => state.department);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<(typeof notificationStatusFilterOptions)[number]["value"]>("all");
-  const [categoryFilter, setCategoryFilter] = useState<(typeof notificationCategoryFilterOptions)[number]["value"]>("all");
+  const [statusFilter, setStatusFilter] =
+    useState<(typeof notificationStatusFilterOptions)[number]["value"]>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<(typeof notificationCategoryFilterOptions)[number]["value"]>(
+      "all",
+    );
   const [searchQuery, setSearchQuery] = useState("");
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === "undefined") {
@@ -304,12 +322,15 @@ export function NotificationsPage() {
       }
 
       const typeLabel =
-        notificationTypeLabels[notification.type] ?? labelize(notification.type);
+        notificationTypeLabels[notification.type] ??
+        labelize(notification.type);
       const searchText = [
         notification.title,
         notification.message,
         typeLabel,
-        notification.reference_type ? labelize(notification.reference_type) : "",
+        notification.reference_type
+          ? labelize(notification.reference_type)
+          : "",
       ]
         .join(" ")
         .toLowerCase();
@@ -323,7 +344,9 @@ export function NotificationsPage() {
       setLoading(true);
     }
 
-    return apiRequest<{ notifications: Notification[]; unread_count: number }>("/api/notifications")
+    return apiRequest<{ notifications: Notification[]; unread_count: number }>(
+      "/api/notifications",
+    )
       .then((res) => {
         setNotifications(res.notifications);
         setUnreadCount(res.unread_count);
@@ -392,7 +415,9 @@ export function NotificationsPage() {
   async function markRead(id: string) {
     const prev = notifications;
     const prevCount = unreadCount;
-    setNotifications((ns) => ns.map((n) => n.id === id ? { ...n, is_read: true } : n));
+    setNotifications((ns) =>
+      ns.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
+    );
     setUnreadCount((c) => Math.max(0, c - 1));
     try {
       await apiRequest(`/api/notifications/${id}/read`, { method: "PUT" });
@@ -431,7 +456,16 @@ export function NotificationsPage() {
 
   return (
     <AppShell subtitle="Stay informed" title="Notifications">
-      <div className="-mt-6 mb-4 border-b border-[#ead8cc]" />
+      {userRole === "department" ? (
+        <DepartmentPageHero
+          dataTestId="department-notifications-hero"
+          department={department}
+          eyebrow="Operational Alerts"
+          headingTone="soft-light"
+          icon="notifications"
+          title="Notifications"
+        />
+      ) : null}
 
       <div className="mb-8 flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -442,7 +476,9 @@ export function NotificationsPage() {
                   key={option.value}
                   type="button"
                   className={`${filterTabBaseClassName} ${
-                    statusFilter === option.value ? activeFilterTabClassName : inactiveFilterTabClassName
+                    statusFilter === option.value
+                      ? activeFilterTabClassName
+                      : inactiveFilterTabClassName
                   }`}
                   onClick={() => setStatusFilter(option.value)}
                 >
@@ -456,7 +492,8 @@ export function NotificationsPage() {
                 className="h-11 min-w-[146px] appearance-none rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-3.5 pr-9 text-[13px] font-medium text-[#6f625b] outline-none transition-colors focus:border-[#c98d71]"
                 onChange={(event) =>
                   setCategoryFilter(
-                    event.target.value as (typeof notificationCategoryFilterOptions)[number]["value"],
+                    event.target
+                      .value as (typeof notificationCategoryFilterOptions)[number]["value"],
                   )
                 }
                 value={categoryFilter}
@@ -468,13 +505,17 @@ export function NotificationsPage() {
                 ))}
               </select>
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#9b826f]">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  expand_more
+                </span>
               </span>
             </label>
 
             <label className="relative block min-w-0 lg:w-[240px] xl:w-[280px]">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a08373]">
-                <span className="material-symbols-outlined text-[17px]">search</span>
+                <span className="material-symbols-outlined text-[17px]">
+                  search
+                </span>
               </span>
               <input
                 className="h-11 w-full rounded-[12px] border border-[#e3d3c6] bg-[#fff8f3] pl-10 pr-4 text-[14px] text-[#4d2b1e] outline-none transition-colors placeholder:text-[#a08373] focus:border-[#c98d71]"
@@ -493,7 +534,9 @@ export function NotificationsPage() {
                 onClick={markAllRead}
                 variant="ghost"
               >
-                <span className="material-symbols-outlined mr-1 text-[16px]">done_all</span>
+                <span className="material-symbols-outlined mr-1 text-[16px]">
+                  done_all
+                </span>
                 Mark all read
               </Button>
             )}
@@ -504,11 +547,14 @@ export function NotificationsPage() {
               }}
               variant="ghost"
             >
-              <span className="material-symbols-outlined mr-1 text-[16px]">refresh</span>
+              <span className="material-symbols-outlined mr-1 text-[16px]">
+                refresh
+              </span>
               Refresh
             </Button>
             <span className="text-xs font-semibold text-[#8a776b]">
-              Showing {visibleNotifications.length} notification{visibleNotifications.length !== 1 ? "s" : ""}
+              Showing {visibleNotifications.length} notification
+              {visibleNotifications.length !== 1 ? "s" : ""}
             </span>
           </div>
         </div>
@@ -521,13 +567,19 @@ export function NotificationsPage() {
         </Card>
       ) : notifications.length === 0 ? (
         <Card className="py-16 text-center">
-          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">notifications_off</span>
+          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">
+            notifications_off
+          </span>
           <p className="text-on-surface-variant">No notifications yet.</p>
         </Card>
       ) : visibleNotifications.length === 0 ? (
         <Card className="py-16 text-center">
-          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">search_off</span>
-          <p className="text-on-surface-variant">No notifications match the current filters or search.</p>
+          <span className="material-symbols-outlined text-5xl text-outline-variant mb-4 block">
+            search_off
+          </span>
+          <p className="text-on-surface-variant">
+            No notifications match the current filters or search.
+          </p>
         </Card>
       ) : !isDesktopLayout ? (
         <div className="space-y-3">
@@ -558,7 +610,10 @@ export function NotificationsPage() {
           <aside className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
             <div className="space-y-3">
               {visibleNotifications.map((notification) => (
-                <NotificationTimelineBlock key={notification.id} notification={notification} />
+                <NotificationTimelineBlock
+                  key={notification.id}
+                  notification={notification}
+                />
               ))}
             </div>
           </aside>
@@ -588,7 +643,10 @@ function getNotificationTarget(
     }
   }
 
-  if (notification.reference_type === "department" && userRole === "department") {
+  if (
+    notification.reference_type === "department" &&
+    userRole === "department"
+  ) {
     return "/department/profile";
   }
 

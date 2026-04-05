@@ -1,4 +1,11 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
 import { LocationMap } from "@/components/maps/location-map";
@@ -74,7 +81,9 @@ function parseCoordinateLocation(location?: string | null) {
     return null;
   }
 
-  const match = location.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  const match = location
+    .trim()
+    .match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
 
   if (!match) {
     return null;
@@ -164,7 +173,9 @@ function readShownEmergencyAlertIds(storageKey: string) {
     }
 
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
   } catch {
     return [];
   }
@@ -201,9 +212,14 @@ function DepartmentEmergencyAlert({
 }) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [activeReport, setActiveReport] = useState<EmergencyReportPreview | null>(null);
-  const [activeNotificationId, setActiveNotificationId] = useState<string | null>(null);
-  const [resolvedLocations, setResolvedLocations] = useState<Record<string, string>>({});
+  const [activeReport, setActiveReport] =
+    useState<EmergencyReportPreview | null>(null);
+  const [activeNotificationId, setActiveNotificationId] = useState<
+    string | null
+  >(null);
+  const [resolvedLocations, setResolvedLocations] = useState<
+    Record<string, string>
+  >({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const resolvingLocationsRef = useRef(new Set<string>());
@@ -211,76 +227,102 @@ function DepartmentEmergencyAlert({
   const shownNotificationIdsRef = useRef<string[] | null>(null);
 
   if (shownNotificationIdsRef.current === null) {
-    shownNotificationIdsRef.current = readShownEmergencyAlertIds(shownNotificationStorageKey);
+    shownNotificationIdsRef.current = readShownEmergencyAlertIds(
+      shownNotificationStorageKey,
+    );
   }
 
-  const rememberNotificationAsShown = useCallback((notificationId: string) => {
-    const currentShownIds = shownNotificationIdsRef.current ?? [];
-    if (currentShownIds.includes(notificationId)) {
-      return;
-    }
+  const rememberNotificationAsShown = useCallback(
+    (notificationId: string) => {
+      const currentShownIds = shownNotificationIdsRef.current ?? [];
+      if (currentShownIds.includes(notificationId)) {
+        return;
+      }
 
-    const nextShownIds = [...currentShownIds, notificationId];
-    shownNotificationIdsRef.current = nextShownIds;
-    writeShownEmergencyAlertIds(shownNotificationStorageKey, nextShownIds);
-  }, [shownNotificationStorageKey]);
+      const nextShownIds = [...currentShownIds, notificationId];
+      shownNotificationIdsRef.current = nextShownIds;
+      writeShownEmergencyAlertIds(shownNotificationStorageKey, nextShownIds);
+    },
+    [shownNotificationStorageKey],
+  );
 
-  const getEmergencyNotifications = useCallback((notificationList: NotificationRecord[] | undefined) => {
-    return (notificationList ?? [])
-      .filter(
+  const getEmergencyNotifications = useCallback(
+    (notificationList: NotificationRecord[] | undefined) => {
+      return (notificationList ?? [])
+        .filter(
+          (notification) =>
+            !notification.is_read &&
+            notification.type === "new_report" &&
+            notification.reference_type === "report" &&
+            notification.reference_id,
+        )
+        .sort((left, right) => {
+          const leftTime = new Date(left.created_at).getTime();
+          const rightTime = new Date(right.created_at).getTime();
+          return rightTime - leftTime;
+        });
+    },
+    [],
+  );
+
+  const pickNextEmergencyNotificationId = useCallback(
+    (
+      notificationList: NotificationRecord[],
+      currentNotificationId: string | null,
+    ) => {
+      const emergencyNotifications =
+        getEmergencyNotifications(notificationList);
+
+      if (
+        currentNotificationId &&
+        emergencyNotifications.some(
+          (notification) => notification.id === currentNotificationId,
+        )
+      ) {
+        return currentNotificationId;
+      }
+
+      const nextNotification = emergencyNotifications.find(
         (notification) =>
-          !notification.is_read &&
-          notification.type === "new_report" &&
-          notification.reference_type === "report" &&
-          notification.reference_id,
-      )
-      .sort((left, right) => {
-        const leftTime = new Date(left.created_at).getTime();
-        const rightTime = new Date(right.created_at).getTime();
-        return rightTime - leftTime;
-      });
-  }, []);
+          !(shownNotificationIdsRef.current ?? []).includes(notification.id),
+      );
 
-  const pickNextEmergencyNotificationId = useCallback((
-    notificationList: NotificationRecord[],
-    currentNotificationId: string | null,
-  ) => {
-    const emergencyNotifications = getEmergencyNotifications(notificationList);
+      if (!nextNotification) {
+        return null;
+      }
 
-    if (currentNotificationId && emergencyNotifications.some((notification) => notification.id === currentNotificationId)) {
-      return currentNotificationId;
-    }
-
-    const nextNotification = emergencyNotifications.find(
-      (notification) => !(shownNotificationIdsRef.current ?? []).includes(notification.id),
-    );
-
-    if (!nextNotification) {
-      return null;
-    }
-
-    rememberNotificationAsShown(nextNotification.id);
-    return nextNotification.id;
-  }, [getEmergencyNotifications, rememberNotificationAsShown]);
+      rememberNotificationAsShown(nextNotification.id);
+      return nextNotification.id;
+    },
+    [getEmergencyNotifications, rememberNotificationAsShown],
+  );
 
   const activeNotification = useMemo(
-    () => notifications.find((notification) => notification.id === activeNotificationId) ?? null,
+    () =>
+      notifications.find(
+        (notification) => notification.id === activeNotificationId,
+      ) ?? null,
     [activeNotificationId, notifications],
   );
 
   let coordinateSource: string | null = null;
   if (activeReport?.address && parseCoordinateLocation(activeReport.address)) {
     coordinateSource = activeReport.address.trim();
-  } else if (activeReport?.latitude != null && activeReport?.longitude != null) {
-    coordinateSource = String(activeReport.latitude) + ", " + String(activeReport.longitude);
+  } else if (
+    activeReport?.latitude != null &&
+    activeReport?.longitude != null
+  ) {
+    coordinateSource =
+      String(activeReport.latitude) + ", " + String(activeReport.longitude);
   }
 
-  const locationLabel = activeReport?.address && !parseCoordinateLocation(activeReport.address)
-    ? activeReport.address
-    : coordinateSource
-      ? resolvedLocations[coordinateSource] ?? formatCoordinateFallback(coordinateSource)
-      : "Field location pending";
-
+  const locationLabel =
+    activeReport?.address && !parseCoordinateLocation(activeReport.address)
+      ? activeReport.address
+      : coordinateSource
+        ? (resolvedLocations[coordinateSource] ??
+          formatCoordinateFallback(coordinateSource))
+        : "Field location pending";
 
   useEffect(() => {
     audioRef.current = new Audio("/sounds/critical-report-alert.mp3");
@@ -314,14 +356,19 @@ function DepartmentEmergencyAlert({
 
   useEffect(() => {
     const fetchNotifications = () =>
-      fetchShellJson<{ notifications?: NotificationRecord[] }>("/api/notifications")
+      fetchShellJson<{ notifications?: NotificationRecord[] }>(
+        "/api/notifications",
+      )
         .then((response) => {
           const nextNotifications = Array.isArray(response.notifications)
             ? response.notifications
             : [];
           setNotifications(nextNotifications);
           setActiveNotificationId((currentNotificationId) =>
-            pickNextEmergencyNotificationId(nextNotifications, currentNotificationId),
+            pickNextEmergencyNotificationId(
+              nextNotifications,
+              currentNotificationId,
+            ),
           );
         })
         .catch(() => {
@@ -356,7 +403,9 @@ function DepartmentEmergencyAlert({
       return;
     }
 
-    void fetchShellJson<{ report?: EmergencyReportPreview }>(`/api/reports/${activeNotification.reference_id}`)
+    void fetchShellJson<{ report?: EmergencyReportPreview }>(
+      `/api/reports/${activeNotification.reference_id}`,
+    )
       .then((response) => {
         setActiveReport(response.report ?? null);
       })
@@ -366,7 +415,11 @@ function DepartmentEmergencyAlert({
   }, [accessToken, activeNotification?.reference_id]);
 
   useEffect(() => {
-    if (!coordinateSource || resolvedLocations[coordinateSource] || resolvingLocationsRef.current.has(coordinateSource)) {
+    if (
+      !coordinateSource ||
+      resolvedLocations[coordinateSource] ||
+      resolvingLocationsRef.current.has(coordinateSource)
+    ) {
       return;
     }
 
@@ -392,7 +445,9 @@ function DepartmentEmergencyAlert({
         };
 
         const summary =
-          summarizeResolvedLocation(data) || data.display_name || formatCoordinateFallback(coordinateSource);
+          summarizeResolvedLocation(data) ||
+          data.display_name ||
+          formatCoordinateFallback(coordinateSource);
 
         setResolvedLocations((current) => ({
           ...current,
@@ -431,7 +486,9 @@ function DepartmentEmergencyAlert({
   async function markNotificationRead(notificationId: string) {
     setNotifications((current) =>
       current.map((notification) =>
-        notification.id === notificationId ? { ...notification, is_read: true } : notification,
+        notification.id === notificationId
+          ? { ...notification, is_read: true }
+          : notification,
       ),
     );
 
@@ -454,9 +511,13 @@ function DepartmentEmergencyAlert({
     setActiveNotificationId((currentNotificationId) =>
       pickNextEmergencyNotificationId(
         notifications.map((notification) =>
-          notification.id === activeNotification.id ? { ...notification, is_read: true } : notification,
+          notification.id === activeNotification.id
+            ? { ...notification, is_read: true }
+            : notification,
         ),
-        currentNotificationId === activeNotification.id ? null : currentNotificationId,
+        currentNotificationId === activeNotification.id
+          ? null
+          : currentNotificationId,
       ),
     );
     navigate(`/department/reports/${activeNotification.reference_id}`);
@@ -470,7 +531,9 @@ function DepartmentEmergencyAlert({
     setActiveNotificationId((currentNotificationId) =>
       pickNextEmergencyNotificationId(
         notifications,
-        currentNotificationId === activeNotification.id ? null : currentNotificationId,
+        currentNotificationId === activeNotification.id
+          ? null
+          : currentNotificationId,
       ),
     );
   }
@@ -491,11 +554,16 @@ function DepartmentEmergencyAlert({
     ? "border-[#433c36] bg-[#2a2623]"
     : "border-[#ecd8cf] bg-[#f7efe7]";
   const mutedTextClassName = isDarkMode ? "text-[#cdbeb1]" : "text-[#7b6b62]";
-  const elapsedLabel = formatElapsedTime(activeReport?.created_at ?? activeNotification.created_at, nowMs);
+  const elapsedLabel = formatElapsedTime(
+    activeReport?.created_at ?? activeNotification.created_at,
+    nowMs,
+  );
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
-      <div className={`w-full max-w-[640px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}>
+      <div
+        className={`w-full max-w-[640px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}
+      >
         <div className={`relative border-b px-6 py-5 ${headerToneClassName}`}>
           <button
             aria-label="Dismiss emergency alert"
@@ -510,7 +578,9 @@ function DepartmentEmergencyAlert({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white/80">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/14">
-                  <span className="material-symbols-outlined text-[15px]">local_fire_department</span>
+                  <span className="material-symbols-outlined text-[15px]">
+                    local_fire_department
+                  </span>
                 </span>
                 System Priority: Alpha
               </div>
@@ -519,8 +589,12 @@ function DepartmentEmergencyAlert({
               </h3>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">Elapsed Time</p>
-              <p className="mt-1 text-[2rem] leading-none sm:text-[2.15rem]">{elapsedLabel}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">
+                Elapsed Time
+              </p>
+              <p className="mt-1 text-[2rem] leading-none sm:text-[2.15rem]">
+                {elapsedLabel}
+              </p>
             </div>
           </div>
         </div>
@@ -528,30 +602,58 @@ function DepartmentEmergencyAlert({
         <div className="space-y-5 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>Incident ID</p>
+              <p
+                className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}
+              >
+                Incident ID
+              </p>
               <p className="mt-1 font-headline text-[2rem] leading-none">
-                #{(activeReport?.id ?? activeNotification.reference_id ?? "pending").slice(0, 8)}
+                #
+                {(
+                  activeReport?.id ??
+                  activeNotification.reference_id ??
+                  "pending"
+                ).slice(0, 8)}
               </p>
             </div>
             <div className="text-right">
-              <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>Severity</p>
-              <p className="mt-1 text-[1.4rem] font-semibold text-[#d97757]">• {severityLabel}</p>
+              <p
+                className={`text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}
+              >
+                Severity
+              </p>
+              <p className="mt-1 text-[1.4rem] font-semibold text-[#d97757]">
+                • {severityLabel}
+              </p>
             </div>
           </div>
 
-          <div className={`rounded-[24px] border px-5 py-4 ${insetCardClassName}`}>
-            <p className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}>
-              <span className="material-symbols-outlined text-[16px] text-[#d97757]">location_on</span>
+          <div
+            className={`rounded-[24px] border px-5 py-4 ${insetCardClassName}`}
+          >
+            <p
+              className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] ${mutedTextClassName}`}
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#d97757]">
+                location_on
+              </span>
               Primary Location
             </p>
-            <p className="mt-2 font-headline text-[1.85rem] leading-[0.95]">{locationLabel}</p>
+            <p className="mt-2 font-headline text-[1.85rem] leading-[0.95]">
+              {locationLabel}
+            </p>
             <p className={`mt-2 text-[15px] leading-6 ${mutedTextClassName}`}>
-              {summarizeText(activeReport?.description || activeNotification.message, 106) ||
+              {summarizeText(
+                activeReport?.description || activeNotification.message,
+                106,
+              ) ||
                 "Emergency report forwarded from citizen intake. Open the full incident detail for response routing."}
             </p>
           </div>
 
-          <div className={`overflow-hidden rounded-[24px] border ${insetCardClassName}`}>
+          <div
+            className={`overflow-hidden rounded-[24px] border ${insetCardClassName}`}
+          >
             {activeReport?.latitude !== undefined &&
             activeReport?.latitude !== null &&
             activeReport?.longitude !== undefined &&
@@ -573,7 +675,9 @@ function DepartmentEmergencyAlert({
             ) : (
               <div className="flex h-[190px] items-center justify-center bg-[linear-gradient(135deg,#efe4db,#dac4b8)]">
                 <div className="text-center">
-                  <span className="material-symbols-outlined text-4xl text-[#b55a36]">crisis_alert</span>
+                  <span className="material-symbols-outlined text-4xl text-[#b55a36]">
+                    crisis_alert
+                  </span>
                   <p className="mt-2 text-xs font-bold uppercase tracking-[0.22em] text-[#8a4c31]">
                     Incident Visual Placeholder
                   </p>
@@ -588,12 +692,16 @@ function DepartmentEmergencyAlert({
             type="button"
           >
             View Full Incident Details
-            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+            <span className="material-symbols-outlined text-[18px]">
+              arrow_forward
+            </span>
           </button>
 
           <div
             className={`flex flex-wrap items-center justify-between gap-3 border-t px-1 pt-1 text-[10px] font-bold uppercase tracking-[0.2em] ${
-              isDarkMode ? "border-white/10 text-white/45" : "border-[#ecd8cf] text-[#a79a92]"
+              isDarkMode
+                ? "border-white/10 text-white/45"
+                : "border-[#ecd8cf] text-[#a79a92]"
             }`}
           >
             <span>Authenticated operative access only</span>
@@ -609,24 +717,53 @@ function DepartmentEmergencyAlert({
 const roleNavItems: Record<string, NavItem[]> = {
   citizen: [
     { to: "/citizen", labelKey: "nav.myReports", icon: "description" },
-    { to: "/citizen/report/new", labelKey: "nav.newReport", icon: "add_circle" },
+    {
+      to: "/citizen/report/new",
+      labelKey: "nav.newReport",
+      icon: "add_circle",
+    },
     { to: "/citizen/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
-    { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
+    {
+      to: "/notifications",
+      labelKey: "nav.notifications",
+      icon: "notifications",
+    },
     { to: "/profile", labelKey: "nav.profile", icon: "person" },
   ],
   department: [
     { to: "/department", labelKey: "nav.dashboard", icon: "dashboard" },
-    { to: "/department/reports", labelKey: "nav.incidentBoard", icon: "assignment" },
-    { to: "/department/news-feed?compose=1", labelKey: "nav.createPost", icon: "edit_square", highlightActive: false },
-    { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
+    {
+      to: "/department/reports",
+      labelKey: "nav.incidentBoard",
+      icon: "assignment",
+    },
+    {
+      to: "/department/news-feed?compose=1",
+      labelKey: "nav.createPost",
+      icon: "edit_square",
+      highlightActive: false,
+    },
+    {
+      to: "/notifications",
+      labelKey: "nav.notifications",
+      icon: "notifications",
+    },
     { to: "/department/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
     { to: "/department/profile", labelKey: "nav.profile", icon: "person" },
   ],
   municipality: [
     { to: "/municipality", labelKey: "nav.overview", icon: "dashboard" },
     { to: "/municipality/reports", labelKey: "nav.reports", icon: "summarize" },
-    { to: "/municipality/analytics", labelKey: "nav.analytics", icon: "analytics" },
-    { to: "/municipality/assessments", labelKey: "nav.assessments", icon: "assessment" },
+    {
+      to: "/municipality/analytics",
+      labelKey: "nav.analytics",
+      icon: "analytics",
+    },
+    {
+      to: "/municipality/assessments",
+      labelKey: "nav.assessments",
+      icon: "assessment",
+    },
     {
       to: "/municipality/reports/escalated",
       labelKey: "nav.escalations",
@@ -637,10 +774,22 @@ const roleNavItems: Record<string, NavItem[]> = {
       labelKey: "nav.verification",
       icon: "verified_user",
     },
-    { to: "/municipality/departments", labelKey: "nav.departments", icon: "domain" },
+    {
+      to: "/municipality/departments",
+      labelKey: "nav.departments",
+      icon: "domain",
+    },
     { to: "/municipality/mesh", labelKey: "nav.meshSar", icon: "cell_tower" },
-    { to: "/municipality/news-feed", labelKey: "nav.newsFeed", icon: "campaign" },
-    { to: "/notifications", labelKey: "nav.notifications", icon: "notifications" },
+    {
+      to: "/municipality/news-feed",
+      labelKey: "nav.newsFeed",
+      icon: "campaign",
+    },
+    {
+      to: "/notifications",
+      labelKey: "nav.notifications",
+      icon: "notifications",
+    },
     { to: "/profile", labelKey: "nav.profile", icon: "person" },
   ],
 };
@@ -663,7 +812,12 @@ const roleSidebarTitle: Record<
   },
 };
 
-export function AppShell({ title, subtitle, children, hidePageHeading = false }: AppShellProps) {
+export function AppShell({
+  title,
+  subtitle,
+  children,
+  hidePageHeading = false,
+}: AppShellProps) {
   const navigate = useNavigate();
   const signOut = useSessionStore((state) => state.signOut);
   const user = useSessionStore((state) => state.user);
@@ -672,9 +826,11 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
   const { locale, setLocale, t } = useLocale();
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { isDarkMode, setIsDarkMode } = useAppShellTheme();
   const isHeadlessTestEnv =
-    typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom");
+    typeof navigator !== "undefined" &&
+    navigator.userAgent.toLowerCase().includes("jsdom");
 
   const navItems = user
     ? (roleNavItems[user.role] ?? []).map((item) => ({
@@ -693,6 +849,14 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
         if (!config) {
           return { title: "Dispatch", subtitle: "" };
         }
+
+        if (user.role === "department") {
+          return {
+            title: "DISPATCHER",
+            subtitle: t(config.titleKey),
+          };
+        }
+
         return {
           title: t(config.titleKey),
           subtitle: t(config.subtitleKey),
@@ -700,21 +864,26 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
       })()
     : { title: "Dispatch", subtitle: "" };
 
-  const profileRoute = user?.role === "department" ? "/department/profile" : "/profile";
+  const profileRoute =
+    user?.role === "department" ? "/department/profile" : "/profile";
   const profileName =
     user?.role === "department"
-      ? department?.name ?? user?.full_name ?? user?.email ?? "Dispatch User"
-      : user?.full_name ?? user?.email ?? "Dispatch User";
+      ? (department?.name ?? user?.full_name ?? user?.email ?? "Dispatch User")
+      : (user?.full_name ?? user?.email ?? "Dispatch User");
   const profileHandleSource =
     user?.role === "department"
-      ? department?.name ?? user?.full_name ?? user?.email ?? "dispatch"
-      : user?.full_name ?? user?.email ?? "dispatch";
-  const profileHandle = `@${profileHandleSource
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 18) || "dispatch"}`;
+      ? (department?.name ?? user?.full_name ?? user?.email ?? "dispatch")
+      : (user?.full_name ?? user?.email ?? "dispatch");
+  const profileHandle = `@${
+    profileHandleSource
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 18) || "dispatch"
+  }`;
   const profileImage =
-    department?.profile_picture || department?.profile_photo || user?.avatar_url;
+    department?.profile_picture ||
+    department?.profile_photo ||
+    user?.avatar_url;
   const profileInitial = (profileName.trim().charAt(0) || "D").toUpperCase();
 
   function openSignOutConfirm() {
@@ -746,154 +915,134 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
   }
 
   return (
-      <div className={cn("dispatch-shell min-h-screen", isDarkMode ? "dispatch-shell-dark bg-[#181817]" : "bg-surface")}>
-      <header className="fixed left-0 right-0 top-0 z-50 flex w-full items-center justify-between bg-gradient-to-r from-[#d98d63] via-[#bf6e49] to-[#a86446] px-8 py-4">
-        <div className="flex items-center">
-          <Link className="text-2xl font-headline italic text-white" to="/">
-            Dispatch
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div
-            aria-label="Theme mode"
-            className="hidden items-center gap-1 rounded-full border border-white/20 bg-white/90 px-1 py-1 shadow-sm sm:flex"
-            role="group"
-          >
-            <button
-              aria-pressed={!isDarkMode}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest transition-colors",
-                !isDarkMode
-                  ? "bg-[#D97757] text-white"
-                  : "text-on-surface-variant hover:bg-surface-container-high",
-              )}
-              onClick={() => setIsDarkMode(false)}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[14px]">light_mode</span>
-              Light
-            </button>
-            <button
-              aria-pressed={isDarkMode}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest transition-colors",
-                isDarkMode
-                  ? "bg-[#D97757] text-white"
-                  : "text-on-surface-variant hover:bg-surface-container-high",
-              )}
-              onClick={() => setIsDarkMode(true)}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[14px]">dark_mode</span>
-              Dark
-            </button>
-          </div>
-
-          <div
-            aria-label={t("shell.language")}
-            className="hidden items-center gap-1 rounded-full border border-white/20 bg-white/90 px-1 py-1 shadow-sm sm:flex"
-            role="group"
-          >
-            {(["en", "fil"] as const).map((option) => (
-              <button
-                key={option}
-                aria-pressed={locale === option}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest transition-colors",
-                  locale === option
-                    ? "bg-[#D97757] text-white"
-                    : "text-on-surface-variant hover:bg-surface-container-high",
-                )}
-                onClick={() => setLocale(option)}
-                type="button"
-              >
-                {option === "en" ? t("shell.english") : t("shell.filipino")}
-              </button>
-            ))}
-          </div>
-
-          {user ? (
-            <>
-              <span className="hidden text-xs font-bold uppercase tracking-widest text-white/80 sm:inline-block">
-                {user.full_name ?? user.email}
-              </span>
-              <button
-                className="rounded-lg p-2 transition-colors hover:bg-white/10"
-                onClick={openSignOutConfirm}
-                title={t("shell.signOut")}
-                type="button"
-              >
-                <span className="material-symbols-outlined text-white/85">
-                  logout
-                </span>
-              </button>
-              <button
-                className="rounded-lg p-2 transition-colors hover:bg-white/10"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-white/85">
-                  account_circle
-                </span>
-              </button>
-            </>
-          ) : (
-            <Link
-              className="text-sm font-medium text-white/85 transition-colors hover:text-white"
-              to="/auth/login"
-            >
-              {t("shell.signIn")}
-            </Link>
-          )}
-        </div>
-      </header>
+    <div
+      className={cn(
+        "dispatch-shell min-h-screen",
+        isDarkMode ? "dispatch-shell-dark bg-[#181817]" : "bg-surface",
+      )}
+    >
+      <header className="hidden" />
 
       {/* ── Side Nav Bar (desktop only) ── */}
       {/* ── Main Content ── */}
-      <main className="min-h-screen pt-20">
-        <div className={cn("mx-auto px-8 pb-8 pt-3", user ? "max-w-[1500px] lg:pl-[21rem]" : "max-w-[1200px]")}>
+      <main className="min-h-screen">
+        <div
+          className={cn(
+            "mx-auto px-8 pb-8 pt-6",
+            user
+              ? isSidebarCollapsed
+                ? "max-w-[1500px] lg:pl-[9.5rem]"
+                : "max-w-[1500px] lg:pl-[21rem]"
+              : "max-w-[1200px]",
+          )}
+        >
           {user && (
             <aside
               className={cn(
-                "hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-24 lg:flex lg:h-[calc(100vh-8rem)] lg:w-[18rem] lg:flex-col lg:px-6 lg:pb-8 lg:pt-6",
+                "hidden lg:fixed lg:left-[max(2rem,calc(50%-750px+2rem))] lg:top-6 lg:flex lg:h-[calc(100vh-3rem)] lg:flex-col lg:pb-8 lg:pt-6",
+                isSidebarCollapsed
+                  ? "lg:w-[6.25rem] lg:px-3"
+                  : "lg:w-[18rem] lg:px-6",
                 isDarkMode
                   ? "lg:border-r lg:border-white/10 lg:bg-[#181817]"
                   : "lg:border-r lg:border-outline-variant/15 lg:bg-surface",
               )}
             >
-              <div className="mb-8 px-4">
-                <h2 className={cn("font-headline text-3xl italic", isDarkMode ? "text-white" : "text-on-surface")}>
-                  {sidebarMeta.title}
-                </h2>
-                <p className={cn("mt-1 text-xs font-medium uppercase tracking-widest", isDarkMode ? "text-white/60" : "text-on-surface-variant")}>
-                  {sidebarMeta.subtitle}
-                </p>
+              <div
+                className={cn(
+                  "mb-8 flex items-start justify-between gap-2",
+                  isSidebarCollapsed ? "px-2" : "px-4",
+                )}
+              >
+                {!isSidebarCollapsed ? (
+                  <div>
+                    <h2
+                      className={cn(
+                        "font-headline text-3xl italic",
+                        isDarkMode ? "text-white" : "text-on-surface",
+                      )}
+                    >
+                      {sidebarMeta.title}
+                    </h2>
+                    <p
+                      className={cn(
+                        "mt-1 text-xs font-medium uppercase tracking-widest",
+                        isDarkMode
+                          ? "text-white/60"
+                          : "text-on-surface-variant",
+                      )}
+                    >
+                      {sidebarMeta.subtitle}
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-2xl text-lg font-semibold",
+                      isDarkMode
+                        ? "bg-white/8 text-[#f2a27b]"
+                        : "bg-[#f7ede5] text-[#a86446]",
+                    )}
+                  >
+                    D
+                  </div>
+                )}
+                <button
+                  aria-label={
+                    isSidebarCollapsed
+                      ? "Expand navigation"
+                      : "Collapse navigation"
+                  }
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                    isDarkMode
+                      ? "text-white/70 hover:bg-white/8 hover:text-white"
+                      : "text-[#a86446] hover:bg-[#f7ede5]",
+                  )}
+                  onClick={() => setIsSidebarCollapsed((current) => !current)}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSidebarCollapsed
+                      ? "keyboard_double_arrow_right"
+                      : "keyboard_double_arrow_left"}
+                  </span>
+                </button>
               </div>
 
               <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-2">
-                {desktopNavItems.map((item) => (
+                {desktopNavItems.map((item) =>
                   item.highlightActive === false ? (
                     <Link
                       key={item.to}
+                      aria-label={item.label}
                       className={cn(
-                        "flex items-center gap-4 rounded-xl px-4 py-3.5 text-lg font-medium transition-all duration-200",
+                        "flex rounded-xl py-3.5 transition-all duration-200",
+                        isSidebarCollapsed
+                          ? "justify-center px-0"
+                          : "items-center gap-4 px-4 text-lg font-medium",
                         isDarkMode
                           ? "text-white/72 hover:bg-white/6 hover:text-white"
                           : "text-on-surface-variant hover:bg-[#d98d63]/18 hover:text-[#a86446] hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
                       )}
+                      title={isSidebarCollapsed ? item.label : undefined}
                       to={item.to}
                     >
                       <span className="material-symbols-outlined text-[26px]">
                         {item.icon}
                       </span>
-                      {item.label}
+                      {!isSidebarCollapsed ? item.label : null}
                     </Link>
                   ) : (
                     <NavLink
                       key={item.to}
+                      aria-label={item.label}
                       className={({ isActive }) =>
                         cn(
-                          "flex items-center gap-4 rounded-xl px-4 py-3.5 text-lg font-medium transition-all duration-200",
+                          "flex rounded-xl py-3.5 transition-all duration-200",
+                          isSidebarCollapsed
+                            ? "justify-center px-0"
+                            : "items-center gap-4 px-4 text-lg font-medium",
                           isActive
                             ? isDarkMode
                               ? "bg-white/10 text-[#f2a27b] shadow-sm"
@@ -908,22 +1057,31 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
                         item.to === "/department" ||
                         item.to === "/municipality"
                       }
+                      title={isSidebarCollapsed ? item.label : undefined}
                       to={item.to}
                     >
                       <span className="material-symbols-outlined text-[26px]">
                         {item.icon}
                       </span>
-                      {item.label}
+                      {!isSidebarCollapsed ? item.label : null}
                     </NavLink>
-                  )
-                ))}
+                  ),
+                )}
               </nav>
 
-              <div className={cn("mt-auto pt-5", isDarkMode ? "border-t border-white/10" : "border-t border-outline-variant/10")}>
+              <div
+                className={cn(
+                  "mt-auto pt-5",
+                  isDarkMode
+                    ? "border-t border-white/10"
+                    : "border-t border-outline-variant/10",
+                )}
+              >
                 <NavLink
                   className={({ isActive }) =>
                     cn(
-                      "flex w-full items-center gap-4 rounded-2xl px-4 py-3 transition-all duration-200",
+                      "flex w-full items-center rounded-2xl py-3 transition-all duration-200",
+                      isSidebarCollapsed ? "justify-center px-2" : "gap-4 px-4",
                       isActive
                         ? isDarkMode
                           ? "bg-white/10 shadow-sm"
@@ -933,6 +1091,7 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
                           : "hover:bg-[#d98d63]/16 hover:shadow-[0_10px_24px_rgba(168,100,70,0.12)]",
                     )
                   }
+                  title={isSidebarCollapsed ? profileName : undefined}
                   to={profileRoute}
                 >
                   {profileImage ? (
@@ -942,57 +1101,349 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
                       src={profileImage}
                     />
                   ) : (
-                    <div className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold ring-1",
-                      isDarkMode
-                        ? "bg-[#d98d63]/25 text-[#ffd8c4] ring-white/15"
-                        : "bg-[#d98d63]/20 text-[#a86446] ring-outline-variant/20",
-                    )}>
+                    <div
+                      className={cn(
+                        "flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold ring-1",
+                        isDarkMode
+                          ? "bg-[#d98d63]/25 text-[#ffd8c4] ring-white/15"
+                          : "bg-[#d98d63]/20 text-[#a86446] ring-outline-variant/20",
+                      )}
+                    >
                       {profileInitial}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("truncate text-base font-semibold", isDarkMode ? "text-white" : "text-on-surface")}>
-                      {profileName}
-                    </p>
-                    <p className={cn("truncate text-sm", isDarkMode ? "text-white/60" : "text-on-surface-variant")}>
-                      {profileHandle}
-                    </p>
-                  </div>
-                  <button
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200",
-                      isDarkMode
-                        ? "text-white/70 hover:bg-white/8 hover:text-white"
-                        : "text-on-surface-variant hover:bg-[#d98d63]/22 hover:text-[#a86446]",
-                    )}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      openSignOutConfirm();
-                    }}
-                    title={t("shell.signOut")}
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[24px]">
-                      logout
-                    </span>
-                  </button>
+                  {!isSidebarCollapsed ? (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "truncate text-base font-semibold",
+                            isDarkMode ? "text-white" : "text-on-surface",
+                          )}
+                        >
+                          {profileName}
+                        </p>
+                        <p
+                          className={cn(
+                            "truncate text-sm",
+                            isDarkMode
+                              ? "text-white/60"
+                              : "text-on-surface-variant",
+                          )}
+                        >
+                          {profileHandle}
+                        </p>
+                      </div>
+                      <button
+                        className={cn(
+                          "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200",
+                          isDarkMode
+                            ? "text-white/70 hover:bg-white/8 hover:text-white"
+                            : "text-on-surface-variant hover:bg-[#d98d63]/22 hover:text-[#a86446]",
+                        )}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openSignOutConfirm();
+                        }}
+                        title={t("shell.signOut")}
+                        type="button"
+                      >
+                        <span className="material-symbols-outlined text-[24px]">
+                          logout
+                        </span>
+                      </button>
+                    </>
+                  ) : null}
                 </NavLink>
               </div>
             </aside>
           )}
 
-          {!hidePageHeading && (
+          {user ? (
+            <section
+              className={cn(
+                "mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[24px] px-4 py-3 shadow-[0_14px_30px_rgba(95,66,44,0.08)]",
+                isDarkMode ? "bg-[#221f1c]" : "bg-[#fffdfa]",
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-[10px] border transition-colors",
+                    isDarkMode
+                      ? "border-white/10 text-white/70 hover:bg-white/8 hover:text-white"
+                      : "border-[#ead9cc] text-[#9b826f] hover:bg-[#f7ede5] hover:text-[#a86446]",
+                  )}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    chevron_left
+                  </span>
+                </button>
+                <button
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-[10px] border transition-colors",
+                    isDarkMode
+                      ? "border-white/10 text-white/70 hover:bg-white/8 hover:text-white"
+                      : "border-[#ead9cc] text-[#9b826f] hover:bg-[#f7ede5] hover:text-[#a86446]",
+                  )}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    chevron_right
+                  </span>
+                </button>
+                <div className="min-w-0 pl-1">
+                  <p
+                    className={cn(
+                      "truncate text-[12px] font-medium",
+                      isDarkMode ? "text-white/65" : "text-[#8d705f]",
+                    )}
+                  >
+                    Pages /{" "}
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        isDarkMode ? "text-white" : "text-[#3b2a24]",
+                      )}
+                    >
+                      {title}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <label className="relative hidden min-w-0 lg:block lg:w-[280px]">
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2",
+                      isDarkMode ? "text-white/40" : "text-[#b19788]",
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      search
+                    </span>
+                  </span>
+                  <input
+                    className={cn(
+                      "h-9 w-full rounded-full border pl-9 pr-4 text-[12px] outline-none transition-colors",
+                      isDarkMode
+                        ? "border-white/10 bg-[#2b2723] text-white placeholder:text-white/35"
+                        : "border-[#ead9cc] bg-[#fffaf5] text-[#4d3b33] placeholder:text-[#b19788]",
+                    )}
+                    placeholder="Search here, categories, or more..."
+                    type="search"
+                  />
+                </label>
+
+                <Link
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full border transition-colors",
+                    isDarkMode
+                      ? "border-white/10 text-white/72 hover:bg-white/8 hover:text-white"
+                      : "border-[#ead9cc] text-[#8d705f] hover:bg-[#f7ede5] hover:text-[#a86446]",
+                  )}
+                  title={t("nav.notifications")}
+                  to="/notifications"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    notifications
+                  </span>
+                </Link>
+
+                <details className="relative">
+                  <summary
+                    className={cn(
+                      "flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full border transition-colors",
+                      isDarkMode
+                        ? "border-white/10 text-white/72 hover:bg-white/8 hover:text-white"
+                        : "border-[#ead9cc] text-[#8d705f] hover:bg-[#f7ede5] hover:text-[#a86446]",
+                    )}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      tune
+                    </span>
+                  </summary>
+                  <div
+                    className={cn(
+                      "absolute right-0 top-[calc(100%+0.75rem)] z-20 w-[260px] rounded-[22px] border p-4 shadow-[0_18px_40px_rgba(95,66,44,0.14)]",
+                      isDarkMode
+                        ? "border-white/10 bg-[#221f1c]"
+                        : "border-[#ead9cc] bg-[#fffdfa]",
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "text-[10px] font-bold uppercase tracking-[0.22em]",
+                        isDarkMode ? "text-white/55" : "text-[#8d705f]",
+                      )}
+                    >
+                      Display Mode
+                    </p>
+                    <div
+                      aria-label="Theme mode"
+                      className={cn(
+                        "mt-2 flex items-center gap-1 rounded-full border px-1 py-1",
+                        isDarkMode
+                          ? "border-white/10 bg-white/5"
+                          : "border-[#ead9cc] bg-[#fffaf5]",
+                      )}
+                      role="group"
+                    >
+                      <button
+                        aria-pressed={!isDarkMode}
+                        className={cn(
+                          "inline-flex flex-1 items-center justify-center gap-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-colors",
+                          !isDarkMode
+                            ? "bg-[#D97757] text-white"
+                            : isDarkMode
+                              ? "text-white/70 hover:bg-white/8 hover:text-white"
+                              : "text-on-surface-variant hover:bg-[#f4ebe3]",
+                        )}
+                        onClick={() => setIsDarkMode(false)}
+                        type="button"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          light_mode
+                        </span>
+                        Light
+                      </button>
+                      <button
+                        aria-pressed={isDarkMode}
+                        className={cn(
+                          "inline-flex flex-1 items-center justify-center gap-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-colors",
+                          isDarkMode
+                            ? "bg-[#D97757] text-white"
+                            : isDarkMode
+                              ? "text-white/70 hover:bg-white/8 hover:text-white"
+                              : "text-on-surface-variant hover:bg-[#f4ebe3]",
+                        )}
+                        onClick={() => setIsDarkMode(true)}
+                        type="button"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          dark_mode
+                        </span>
+                        Dark
+                      </button>
+                    </div>
+
+                    <p
+                      className={cn(
+                        "mt-4 text-[10px] font-bold uppercase tracking-[0.22em]",
+                        isDarkMode ? "text-white/55" : "text-[#8d705f]",
+                      )}
+                    >
+                      {t("shell.language")}
+                    </p>
+                    <div
+                      aria-label={t("shell.language")}
+                      className={cn(
+                        "mt-2 flex items-center gap-1 rounded-full border px-1 py-1",
+                        isDarkMode
+                          ? "border-white/10 bg-white/5"
+                          : "border-[#ead9cc] bg-[#fffaf5]",
+                      )}
+                      role="group"
+                    >
+                      {(["en", "fil"] as const).map((option) => (
+                        <button
+                          key={option}
+                          aria-pressed={locale === option}
+                          className={cn(
+                            "flex-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-colors",
+                            locale === option
+                              ? "bg-[#D97757] text-white"
+                              : isDarkMode
+                                ? "text-white/70 hover:bg-white/8 hover:text-white"
+                                : "text-on-surface-variant hover:bg-[#f4ebe3]",
+                          )}
+                          onClick={() => setLocale(option)}
+                          type="button"
+                        >
+                          {option === "en"
+                            ? t("shell.english")
+                            : t("shell.filipino")}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div
+                      className={cn(
+                        "mt-4 flex items-center gap-2 border-t pt-4",
+                        isDarkMode ? "border-white/10" : "border-[#efe2d8]",
+                      )}
+                    >
+                      <Link
+                        className={cn(
+                          "inline-flex flex-1 items-center justify-center rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-colors",
+                          isDarkMode
+                            ? "bg-white/8 text-white/78 hover:bg-white/12 hover:text-white"
+                            : "bg-[#f7ede5] text-[#8d705f] hover:bg-[#f1e2d7] hover:text-[#a86446]",
+                        )}
+                        to={profileRoute}
+                      >
+                        Profile
+                      </Link>
+                      <button
+                        className="inline-flex flex-1 items-center justify-center rounded-full bg-[#a14b2f] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-[#89391e]"
+                        onClick={() => openSignOutConfirm()}
+                        type="button"
+                      >
+                        {t("shell.signOut")}
+                      </button>
+                    </div>
+                  </div>
+                </details>
+
+                <Link
+                  className="flex h-9 w-9 items-center justify-center"
+                  title={profileName}
+                  to={profileRoute}
+                >
+                  {profileImage ? (
+                    <img
+                      alt={profileName}
+                      className="h-9 w-9 rounded-full object-cover ring-1 ring-outline-variant/20"
+                      src={profileImage}
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ring-1",
+                        isDarkMode
+                          ? "bg-[#d98d63]/25 text-[#ffd8c4] ring-white/15"
+                          : "bg-[#d98d63]/20 text-[#a86446] ring-outline-variant/20",
+                      )}
+                    >
+                      {profileInitial}
+                    </div>
+                  )}
+                </Link>
+              </div>
+            </section>
+          ) : !hidePageHeading ? (
             <section className="mb-10">
-              <p className={cn("mb-2 text-xs font-bold uppercase tracking-widest", isDarkMode ? "text-[#f2a27b]" : "text-[#D97757]")}>
+              <p
+                className={cn(
+                  "mb-2 text-xs font-bold uppercase tracking-widest",
+                  isDarkMode ? "text-[#f2a27b]" : "text-[#D97757]",
+                )}
+              >
                 {subtitle}
               </p>
-              <h1 className={cn("font-headline text-4xl font-bold tracking-tight lg:text-5xl", isDarkMode ? "text-white" : "text-on-surface")}>
+              <h1
+                className={cn(
+                  "font-headline text-4xl font-bold tracking-tight lg:text-5xl",
+                  isDarkMode ? "text-white" : "text-on-surface",
+                )}
+              >
                 {title}
               </h1>
             </section>
-          )}
+          ) : null}
           {children}
         </div>
       </main>
@@ -1042,11 +1493,15 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
       )}
 
       {user && (
-        <nav className={cn(
-          "hide-scrollbar glass-panel fixed bottom-0 left-0 right-0 z-50 flex items-center gap-4 overflow-x-auto border-t px-4 py-3 lg:hidden",
-          isDarkMode ? "border-white/10 bg-[#181817]/95" : "border-outline-variant/10",
-        )}>
-          {navItems.map((item) => (
+        <nav
+          className={cn(
+            "hide-scrollbar glass-panel fixed bottom-0 left-0 right-0 z-50 flex items-center gap-4 overflow-x-auto border-t px-4 py-3 lg:hidden",
+            isDarkMode
+              ? "border-white/10 bg-[#181817]/95"
+              : "border-outline-variant/10",
+          )}
+        >
+          {navItems.map((item) =>
             item.highlightActive === false ? (
               <Link
                 key={item.to}
@@ -1069,7 +1524,11 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
                 className={({ isActive }) =>
                   cn(
                     "flex min-w-[72px] flex-col items-center gap-1",
-                    isActive ? "text-[#D97757]" : isDarkMode ? "text-white/65" : "text-on-surface-variant",
+                    isActive
+                      ? "text-[#D97757]"
+                      : isDarkMode
+                        ? "text-white/65"
+                        : "text-on-surface-variant",
                   )
                 }
                 to={item.to}
@@ -1081,22 +1540,10 @@ export function AppShell({ title, subtitle, children, hidePageHeading = false }:
                   {item.label}
                 </span>
               </NavLink>
-            )
-          ))}
+            ),
+          )}
         </nav>
       )}
-      </div>
+    </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

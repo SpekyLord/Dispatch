@@ -228,7 +228,7 @@ export function LoginPage() {
         <header className="bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-5">
             <Link to="/" aria-label="Dispatch home">
-              <DispatchLogo className="h-12 w-12" />
+              <DispatchLogo className="h-12 w-[82px]" />
             </Link>
             <nav className="hidden items-center gap-8 md:flex">
               <Link
@@ -276,7 +276,7 @@ export function LoginPage() {
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <DispatchLogo className="h-14 w-14 rounded-[20px]" />
+                      <DispatchLogo className="h-14 w-[92px] rounded-[20px]" />
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-white/62">
                         Field Access Portal
                       </p>
@@ -468,7 +468,7 @@ export function LoginPage() {
 
         <footer className="bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-4 text-[11px] tracking-[0.22em] text-on-surface-variant">
-            <DispatchLogo className="h-10 w-10" />
+            <DispatchLogo className="h-10 w-[68px]" />
             <span>© 2026 Dispatch. Community-driven crisis management.</span>
           </div>
         </footer>

@@ -115,7 +115,7 @@ export function LandingPage() {
         <header className="bg-surface-container w-full">
           <div className="flex justify-between items-center w-full px-12 py-6 max-w-[1440px] mx-auto">
             <Link to="/" aria-label="Dispatch home">
-              <DispatchLogo className="h-12 w-12" />
+              <DispatchLogo className="h-12 w-[82px]" />
             </Link>
             <nav className="hidden md:flex items-center gap-8">
               <Link
@@ -193,7 +193,7 @@ export function LandingPage() {
         <footer className="border-t border-outline-variant/15 bg-surface-container/90 backdrop-blur-sm">
           <div className="w-full px-12 py-8 flex flex-col md:flex-row justify-between items-center max-w-[1440px] mx-auto">
             <div className="mb-4 md:mb-0">
-              <DispatchLogo className="h-10 w-10" />
+              <DispatchLogo className="h-10 w-[68px]" />
             </div>
             <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">
               &copy; 2026 Dispatch. Community-driven crisis management.

@@ -380,6 +380,25 @@ def list_citizen_ble_chat_sessions():
     return jsonify({"sessions": sessions, "count": len(sessions)})
 
 
+@blueprint.get("/citizen-ble-chat-rooms")
+@require_role("citizen")
+def list_citizen_ble_chat_rooms():
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    rooms = svc.list_citizen_ble_chat_rooms(
+        viewer_user_id=current_user.id,
+        limit=_int_arg("limit", 50),
+    )
+    return jsonify({"rooms": rooms, "count": len(rooms)})
+
+
 @blueprint.post("/citizen-ble-chat-sessions/request")
 @require_role("citizen")
 def request_citizen_ble_chat_session():
@@ -402,6 +421,102 @@ def request_citizen_ble_chat_session():
         recipient_display_name=str(body.get("recipient_display_name") or "").strip(),
     )
     return jsonify({"session": session})
+
+
+@blueprint.post("/citizen-ble-chat-rooms/<path:room_id>/join")
+@require_role("citizen")
+def join_citizen_ble_chat_room(room_id: str):
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    room = svc.join_citizen_ble_chat_room(
+        room_id=room_id,
+        actor_user_id=current_user.id,
+        mesh_device_id=str(body.get("mesh_device_id") or "").strip(),
+        display_name=str(body.get("display_name") or "").strip(),
+    )
+    return jsonify({"room": room})
+
+
+@blueprint.post("/citizen-ble-chat-rooms/<path:room_id>/leave")
+@require_role("citizen")
+def leave_citizen_ble_chat_room(room_id: str):
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    room = svc.leave_citizen_ble_chat_room(
+        room_id=room_id,
+        actor_user_id=current_user.id,
+    )
+    return jsonify({"room": room})
+
+
+@blueprint.get("/citizen-ble-chat-rooms/<path:room_id>/messages")
+@require_role("citizen")
+def list_citizen_ble_chat_room_messages(room_id: str):
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    messages = svc.list_citizen_ble_chat_room_messages(
+        room_id=room_id,
+        actor_user_id=current_user.id,
+        limit=_int_arg("limit", 200),
+    )
+    return jsonify({"messages": messages, "count": len(messages)})
+
+
+@blueprint.post("/citizen-ble-chat-rooms/<path:room_id>/messages")
+@require_role("citizen")
+def create_citizen_ble_chat_room_message(room_id: str):
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    raw_expires_in_seconds = body.get("expires_in_seconds")
+    if raw_expires_in_seconds in (None, ""):
+        expires_in_seconds = 1800
+    else:
+        try:
+            expires_in_seconds = int(raw_expires_in_seconds)
+        except (TypeError, ValueError) as exc:
+            raise ApiError(
+                "expires_in_seconds must be an integer.",
+                status_code=HTTPStatus.BAD_REQUEST,
+                code="validation_error",
+            ) from exc
+    message = svc.create_citizen_ble_chat_room_message(
+        room_id=room_id,
+        actor_user_id=current_user.id,
+        author_display_name=str(body.get("author_display_name") or "").strip(),
+        body=str(body.get("body") or "").strip(),
+        expires_in_seconds=expires_in_seconds,
+    )
+    return jsonify({"message": message})
 
 
 @blueprint.post("/citizen-ble-chat-sessions/<path:session_id>/respond")
@@ -430,7 +545,10 @@ def respond_to_citizen_ble_chat_session(session_id: str):
         actor_user_id=current_user.id,
         accept=action == "accept",
     )
-    return jsonify({"session": session})
+    payload = {"session": session}
+    if isinstance(session, dict) and session.get("room") is not None:
+        payload["room"] = session["room"]
+    return jsonify(payload)
 
 
 @blueprint.post("/citizen-ble-chat-sessions/<path:session_id>/close")

@@ -1279,3 +1279,141 @@ class TestMeshMessageRoutes:
             data = resp.get_json()
             assert data["count"] == 1
             assert data["messages"][0]["id"] == "msg-thread-1"
+
+
+class TestCitizenBleChatRoomMessages:
+    def test_list_room_messages_returns_active_room_history_for_members(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen1@test.com", role="citizen"),
+            db_rows={
+                "citizen_ble_chat_rooms": [
+                    {
+                        "id": "room-1",
+                        "creator_user_id": "citizen-1",
+                        "status": "active",
+                        "created_at": "2026-04-07T00:00:00Z",
+                        "expires_at": "2099-04-07T01:00:00Z",
+                        "closed_at": None,
+                    }
+                ],
+                "citizen_ble_chat_room_members": [
+                    {
+                        "id": "member-1",
+                        "room_id": "room-1",
+                        "user_id": "citizen-1",
+                        "mesh_device_id": "mesh-1",
+                        "display_name": "Citizen One",
+                        "status": "active",
+                        "joined_at": "2026-04-07T00:00:00Z",
+                        "left_at": None,
+                    }
+                ],
+                "citizen_ble_chat_room_messages": [
+                    {
+                        "id": "room-msg-1",
+                        "room_id": "room-1",
+                        "author_user_id": "citizen-2",
+                        "author_display_name": "Citizen Two",
+                        "body": "Hello nearby room",
+                        "created_at": "2026-04-07T00:01:00Z",
+                        "expires_at": "2099-04-07T00:31:00Z",
+                    }
+                ],
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/citizen-ble-chat-rooms/room-1/messages",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["messages"][0]["id"] == "room-msg-1"
+            assert data["messages"][0]["body"] == "Hello nearby room"
+
+    def test_create_room_message_requires_active_membership(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen1@test.com", role="citizen"),
+            db_rows={
+                "citizen_ble_chat_rooms": [
+                    {
+                        "id": "room-2",
+                        "creator_user_id": "citizen-9",
+                        "status": "active",
+                        "created_at": "2026-04-07T00:00:00Z",
+                        "expires_at": "2099-04-07T01:00:00Z",
+                        "closed_at": None,
+                    }
+                ],
+                "citizen_ble_chat_room_members": [],
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.post(
+                "/api/mesh/citizen-ble-chat-rooms/room-2/messages",
+                headers={"Authorization": "Bearer valid-token"},
+                json={
+                    "author_display_name": "Citizen One",
+                    "body": "Can anyone hear me?",
+                },
+            )
+            assert resp.status_code == 403
+            data = resp.get_json()
+            assert data["error"]["code"] == "forbidden"
+
+    def test_create_room_message_persists_temporary_message_for_active_member(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen1@test.com", role="citizen"),
+            db_rows={
+                "citizen_ble_chat_rooms": [
+                    {
+                        "id": "room-3",
+                        "creator_user_id": "citizen-1",
+                        "status": "active",
+                        "created_at": "2026-04-07T00:00:00Z",
+                        "expires_at": "2099-04-07T01:00:00Z",
+                        "closed_at": None,
+                    }
+                ],
+                "citizen_ble_chat_room_members": [
+                    {
+                        "id": "member-3",
+                        "room_id": "room-3",
+                        "user_id": "citizen-1",
+                        "mesh_device_id": "mesh-1",
+                        "display_name": "Citizen One",
+                        "status": "active",
+                        "joined_at": "2026-04-07T00:00:00Z",
+                        "left_at": None,
+                    }
+                ],
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.post(
+                "/api/mesh/citizen-ble-chat-rooms/room-3/messages",
+                headers={"Authorization": "Bearer valid-token"},
+                json={
+                    "author_display_name": "Citizen One",
+                    "body": "Room check-in",
+                    "expires_in_seconds": 900,
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["message"]["room_id"] == "room-3"
+            assert data["message"]["author_user_id"] == "citizen-1"
+            assert data["message"]["body"] == "Room check-in"
+
+        message_inserts = [
+            (table, payload)
+            for table, payload in fake._inserts
+            if table == "citizen_ble_chat_room_messages"
+        ]
+        assert len(message_inserts) == 1
+        assert message_inserts[0][1]["room_id"] == "room-3"
+        assert message_inserts[0][1]["author_user_id"] == "citizen-1"

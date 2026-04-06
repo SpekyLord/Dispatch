@@ -152,6 +152,7 @@ class MeshInboxItem {
     required this.createdAt,
     this.threadId,
     this.sessionId,
+    this.roomId,
     this.recipientIdentifier,
     this.title,
     this.category,
@@ -163,6 +164,7 @@ class MeshInboxItem {
   final String recipientScope;
   final String? threadId;
   final String? sessionId;
+  final String? roomId;
   final String? recipientIdentifier;
   final String authorDisplayName;
   final String authorRole;
@@ -193,6 +195,7 @@ class MeshInboxItem {
           : (payload['recipientScope'] as String? ?? 'broadcast'),
       threadId: isPost ? null : payload['threadId'] as String?,
       sessionId: isPost ? null : payload['sessionId'] as String?,
+      roomId: isPost ? null : payload['roomId'] as String?,
       recipientIdentifier: isPost
           ? null
           : payload['recipientIdentifier'] as String?,
@@ -225,6 +228,7 @@ class MeshInboxItem {
       recipientScope: json['recipientScope'] as String? ?? 'broadcast',
       threadId: json['threadId'] as String?,
       sessionId: json['sessionId'] as String?,
+      roomId: json['roomId'] as String?,
       recipientIdentifier: json['recipientIdentifier'] as String?,
       authorDisplayName: json['authorDisplayName'] as String? ?? 'Unknown',
       authorRole: json['authorRole'] as String? ?? 'anonymous',
@@ -249,6 +253,7 @@ class MeshInboxItem {
       'recipientScope': recipientScope,
       'threadId': threadId,
       'sessionId': sessionId,
+      'roomId': roomId,
       'recipientIdentifier': recipientIdentifier,
       'authorDisplayName': authorDisplayName,
       'authorRole': authorRole,
@@ -280,6 +285,7 @@ class MeshInboxItem {
       recipientScope: recipientScope,
       threadId: threadId,
       sessionId: sessionId,
+      roomId: roomId,
       recipientIdentifier: recipientIdentifier,
       authorDisplayName: authorDisplayName,
       authorRole: authorRole,
@@ -417,6 +423,7 @@ class MeshTransportService extends ChangeNotifier {
       StreamController<MeshPacket>.broadcast();
   final Map<String, MeshPacket> _relayBacklog = {};
   final Map<String, Set<String>> _relayRecipientsByMessage = {};
+  Set<String> _activeEphemeralRoomIds = <String>{};
   DateTime? _lastSyncTime;
   bool _isDiscovering = false;
   bool _hasInternet = false;
@@ -483,22 +490,46 @@ class MeshTransportService extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  void setActiveEphemeralRoomIds(Iterable<String> roomIds) {
+    _activeEphemeralRoomIds = roomIds
+        .map((roomId) => roomId.trim())
+        .where((roomId) => roomId.isNotEmpty)
+        .toSet();
+    notifyListeners();
+  }
+
   bool hasPeerForDeviceId(String deviceId) {
-    final normalized = deviceId.trim();
-    if (normalized.isEmpty) {
-      return false;
-    }
-    return _peers.any((peer) => (peer.deviceId ?? '').trim() == normalized);
+    return peerForDeviceId(deviceId) != null;
   }
 
   bool hasPeerForMeshIdentityHash(String meshIdentityHash) {
+    return peerForMeshIdentityHash(meshIdentityHash) != null;
+  }
+
+  MeshPeer? peerForDeviceId(String deviceId) {
+    final normalized = deviceId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final peer in _peers) {
+      if ((peer.deviceId ?? '').trim() == normalized) {
+        return peer;
+      }
+    }
+    return null;
+  }
+
+  MeshPeer? peerForMeshIdentityHash(String meshIdentityHash) {
     final normalized = meshIdentityHash.trim().toUpperCase();
     if (normalized.isEmpty) {
-      return false;
+      return null;
     }
-    return _peers.any(
-      (peer) => (peer.meshIdentityHash ?? '').trim().toUpperCase() == normalized,
-    );
+    for (final peer in _peers) {
+      if ((peer.meshIdentityHash ?? '').trim().toUpperCase() == normalized) {
+        return peer;
+      }
+    }
+    return null;
   }
 
   DeviceLocationTrailPoint? lastSeenForDevice(String deviceFingerprint) {
@@ -736,8 +767,7 @@ class MeshTransportService extends ChangeNotifier {
       return false;
     }
 
-    final isDirectMessage = _isDirectMessage(packet);
-    final isPacketForThisDevice = _isPacketForThisDevice(packet);
+    final shouldRecordLocally = _shouldRecordPacketLocally(packet);
 
     _seenMessageIds.add(packet.messageId);
     packet.hopCount++;
@@ -748,7 +778,7 @@ class MeshTransportService extends ChangeNotifier {
 
     _rememberForRelay(packet);
     _recordLocationTrail(packet);
-    if (!isDirectMessage || isPacketForThisDevice) {
+    if (shouldRecordLocally) {
       _recordPacketInInbox(packet, authoredLocally: false);
       _packetController.add(packet);
     }
@@ -1169,6 +1199,15 @@ class MeshTransportService extends ChangeNotifier {
     }
   }
 
+  void clearRoom(String roomId) {
+    final originalLength = _inbox.length;
+    _inbox.removeWhere((item) => item.roomId == roomId);
+    if (_inbox.length != originalLength) {
+      unawaited(_persistInbox());
+      notifyListeners();
+    }
+  }
+
   void onPeerDiscovered(
     String endpointId,
     String deviceName, {
@@ -1498,10 +1537,34 @@ class MeshTransportService extends ChangeNotifier {
             'direct';
   }
 
+  bool _isRoomMessage(MeshPacket packet) {
+    return packet.payloadType == MeshPayloadType.meshMessage &&
+        (packet.payload['recipientScope'] as String? ?? '').toLowerCase() ==
+            'room';
+  }
+
   bool _isPacketForThisDevice(MeshPacket packet) {
     final recipient = packet.payload['recipientIdentifier'] as String?;
     if (recipient == null || recipient.isEmpty) return false;
     return recipient == _localDeviceId;
+  }
+
+  bool _isPacketForActiveRoom(MeshPacket packet) {
+    final roomId = packet.payload['roomId'] as String?;
+    if (roomId == null || roomId.isEmpty) {
+      return false;
+    }
+    return _activeEphemeralRoomIds.contains(roomId);
+  }
+
+  bool _shouldRecordPacketLocally(MeshPacket packet) {
+    if (_isDirectMessage(packet)) {
+      return _isPacketForThisDevice(packet);
+    }
+    if (_isRoomMessage(packet)) {
+      return _isPacketForActiveRoom(packet);
+    }
+    return true;
   }
 
   int _estimateReach() {
@@ -1599,6 +1662,7 @@ class MeshTransportService extends ChangeNotifier {
     required String threadId,
     required String recipientScope,
     String? recipientIdentifier,
+    String? roomId,
     required String body,
     required String authorDisplayName,
     required String authorRole,
@@ -1615,6 +1679,7 @@ class MeshTransportService extends ChangeNotifier {
         'threadId': threadId,
         'recipientScope': recipientScope,
         'recipientIdentifier': recipientIdentifier,
+        'roomId': roomId,
         'body': body,
         'authorDisplayName': authorDisplayName,
         'authorRole': authorRole,
@@ -1722,6 +1787,13 @@ class MeshTransportService extends ChangeNotifier {
 
   static String ephemeralSessionThreadId(String sessionId) {
     final digest = md5Hash('blechat:$sessionId');
+    return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
+        '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
+        '${digest.substring(20, 32)}';
+  }
+
+  static String roomThreadId(String roomId) {
+    final digest = md5Hash('bleroom:$roomId');
     return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
         '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
         '${digest.substring(20, 32)}';

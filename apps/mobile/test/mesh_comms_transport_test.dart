@@ -22,6 +22,25 @@ void main() {
       expect(packet.payload['authorOfflineToken'], 'token-123');
     });
 
+    test('creates a nearby room mesh message packet with room metadata', () {
+      final packet = MeshTransportService.createMeshMessagePacket(
+        deviceId: 'device-room-a',
+        threadId: MeshTransportService.roomThreadId('room-1'),
+        recipientScope: 'room',
+        roomId: 'room-1',
+        body: 'Everyone meet at the covered court.',
+        authorDisplayName: 'Citizen Sam',
+        authorRole: 'citizen',
+        sessionId: 'session-1',
+        ephemeral: true,
+      );
+
+      expect(packet.payload['recipientScope'], 'room');
+      expect(packet.payload['roomId'], 'room-1');
+      expect(packet.payload['sessionId'], 'session-1');
+      expect(packet.payload['ephemeral'], isTrue);
+    });
+
     test('creates a mesh post packet with the expected payload', () {
       final packet = MeshTransportService.createMeshPostPacket(
         deviceId: 'device-b',

@@ -494,6 +494,7 @@ class MeshService:
             "recipient_mesh_device_id": recipient_mesh_device_id.strip(),
             "requester_display_name": requester_display_name.strip(),
             "recipient_display_name": recipient_display_name.strip(),
+            "room_id": None,
             "status": "pending",
             "created_at": now.isoformat(),
             "expires_at": expires_at.isoformat(),
@@ -528,6 +529,209 @@ class MeshService:
             visible_rows.append(self._expire_ble_chat_session_if_needed(row))
         return [_serialize_citizen_ble_chat_session(row) for row in visible_rows]
 
+    def list_citizen_ble_chat_rooms(
+        self,
+        *,
+        viewer_user_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        del viewer_user_id
+        rows = self.client.db_query(
+            "citizen_ble_chat_rooms",
+            params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
+            use_service_role=True,
+        )
+        rooms: list[dict[str, Any]] = []
+        for row in rows:
+            normalized = self._expire_ble_chat_room_if_needed(row)
+            if str(normalized.get("status") or "") != "active":
+                continue
+            rooms.append(self._serialize_citizen_ble_chat_room(normalized))
+        return rooms
+
+    def join_citizen_ble_chat_room(
+        self,
+        *,
+        room_id: str,
+        actor_user_id: str,
+        mesh_device_id: str,
+        display_name: str,
+    ) -> dict[str, Any]:
+        if not mesh_device_id.strip():
+            raise ApiError(
+                "mesh_device_id is required.",
+                code="validation_error",
+                status_code=400,
+            )
+        room = self._expire_ble_chat_room_if_needed(self._get_ble_chat_room(room_id))
+        if str(room.get("status") or "") != "active":
+            raise ApiError(
+                "Nearby room is no longer active.",
+                code="not_found",
+                status_code=404,
+            )
+
+        existing = self.client.db_query(
+            "citizen_ble_chat_room_members",
+            params={
+                "select": "*",
+                "room_id": f"eq.{sanitize_postgrest_value(room_id)}",
+                "user_id": f"eq.{sanitize_postgrest_value(actor_user_id)}",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        payload = {
+            "room_id": room_id,
+            "user_id": actor_user_id,
+            "mesh_device_id": mesh_device_id.strip(),
+            "display_name": display_name.strip(),
+            "status": "active",
+            "joined_at": datetime.now(tz=UTC).isoformat(),
+            "left_at": None,
+        }
+        if existing:
+            self.client.db_update(
+                "citizen_ble_chat_room_members",
+                data=payload,
+                params={"id": f"eq.{sanitize_postgrest_value(str(existing[0].get('id') or ''))}"},
+                use_service_role=True,
+                return_repr=False,
+            )
+        else:
+            self.client.db_insert(
+                "citizen_ble_chat_room_members",
+                data={"id": str(uuid4()), **payload},
+                use_service_role=True,
+                return_repr=False,
+            )
+        self.client.db_update(
+            "citizen_ble_chat_rooms",
+            data={"expires_at": (datetime.now(tz=UTC) + timedelta(minutes=10)).isoformat()},
+            params={"id": f"eq.{sanitize_postgrest_value(room_id)}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        return self._serialize_citizen_ble_chat_room(self._get_ble_chat_room(room_id))
+
+    def leave_citizen_ble_chat_room(
+        self,
+        *,
+        room_id: str,
+        actor_user_id: str,
+    ) -> dict[str, Any]:
+        room = self._get_ble_chat_room(room_id)
+        existing = self.client.db_query(
+            "citizen_ble_chat_room_members",
+            params={
+                "select": "*",
+                "room_id": f"eq.{sanitize_postgrest_value(room_id)}",
+                "user_id": f"eq.{sanitize_postgrest_value(actor_user_id)}",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        if existing:
+            self.client.db_update(
+                "citizen_ble_chat_room_members",
+                data={
+                    "status": "left",
+                    "left_at": datetime.now(tz=UTC).isoformat(),
+                },
+                params={"id": f"eq.{sanitize_postgrest_value(str(existing[0].get('id') or ''))}"},
+                use_service_role=True,
+                return_repr=False,
+            )
+        updated_room = self._close_ble_room_if_empty(room_id) or room
+        return self._serialize_citizen_ble_chat_room(updated_room)
+
+    def list_citizen_ble_chat_room_messages(
+        self,
+        *,
+        room_id: str,
+        actor_user_id: str,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        room = self._expire_ble_chat_room_if_needed(self._get_ble_chat_room(room_id))
+        if str(room.get("status") or "") != "active":
+            return []
+        self._require_active_ble_chat_room_member(room_id, actor_user_id)
+        cutoff = datetime.now(tz=UTC).isoformat()
+        rows = self.client.db_query(
+            "citizen_ble_chat_room_messages",
+            params={
+                "select": "*",
+                "room_id": f"eq.{sanitize_postgrest_value(room_id)}",
+                "expires_at": f"gte.{cutoff}",
+                "order": "created_at.asc",
+                "limit": str(max(1, min(limit, 500))),
+            },
+            use_service_role=True,
+        )
+        return [_serialize_citizen_ble_chat_room_message(row) for row in rows]
+
+    def create_citizen_ble_chat_room_message(
+        self,
+        *,
+        room_id: str,
+        actor_user_id: str,
+        author_display_name: str,
+        body: str,
+        expires_in_seconds: int = 1800,
+    ) -> dict[str, Any]:
+        room = self._expire_ble_chat_room_if_needed(self._get_ble_chat_room(room_id))
+        if str(room.get("status") or "") != "active":
+            raise ApiError(
+                "Nearby room is no longer active.",
+                code="not_found",
+                status_code=404,
+            )
+        self._require_active_ble_chat_room_member(room_id, actor_user_id)
+        normalized_body = body.strip()
+        if not normalized_body or len(normalized_body) > 1000:
+            raise ApiError(
+                "Room message body must be 1 to 1000 characters.",
+                code="validation_error",
+                status_code=400,
+            )
+        normalized_display_name = author_display_name.strip()
+        if not normalized_display_name:
+            raise ApiError(
+                "author_display_name is required.",
+                code="validation_error",
+                status_code=400,
+            )
+        bounded_expires_in = max(60, min(expires_in_seconds, 3600))
+        now = datetime.now(tz=UTC)
+        rows = self.client.db_insert(
+            "citizen_ble_chat_room_messages",
+            data={
+                "id": str(uuid4()),
+                "room_id": room_id,
+                "author_user_id": actor_user_id,
+                "author_display_name": normalized_display_name,
+                "body": normalized_body,
+                "created_at": now.isoformat(),
+                "expires_at": (now + timedelta(seconds=bounded_expires_in)).isoformat(),
+            },
+            use_service_role=True,
+        )
+        inserted = rows[0] if rows else None
+        if not inserted:
+            raise ApiError(
+                "Unable to create room message.",
+                code="upstream_error",
+                status_code=502,
+            )
+        self.client.db_update(
+            "citizen_ble_chat_rooms",
+            data={"expires_at": (now + timedelta(minutes=10)).isoformat()},
+            params={"id": f"eq.{sanitize_postgrest_value(room_id)}"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        return _serialize_citizen_ble_chat_room_message(inserted)
+
     def respond_to_citizen_ble_chat_session(
         self,
         *,
@@ -547,10 +751,16 @@ class MeshService:
             return _serialize_citizen_ble_chat_session(row)
 
         now = datetime.now(tz=UTC).isoformat()
+        room_payload: dict[str, Any] | None = None
+        room_id = row.get("room_id")
+        if accept:
+            room_payload = self._create_ble_chat_room_from_session(row)
+            room_id = room_payload.get("id")
         data = {
             "status": "accepted" if accept else "rejected",
             "accepted_at": now if accept else None,
             "closed_at": None if accept else now,
+            "room_id": room_id,
         }
         rows = self.client.db_update(
             "citizen_ble_chat_sessions",
@@ -559,7 +769,10 @@ class MeshService:
             use_service_role=True,
         )
         updated = rows[0] if rows else {**row, **data}
-        return _serialize_citizen_ble_chat_session(updated)
+        serialized = _serialize_citizen_ble_chat_session(updated)
+        if room_payload is not None:
+            serialized["room"] = room_payload
+        return serialized
 
     def close_citizen_ble_chat_session(
         self,
@@ -629,6 +842,193 @@ class MeshService:
             use_service_role=True,
         )
         return rows[0] if rows else {**row, **data}
+
+    def _get_ble_chat_room(self, room_id: str) -> dict[str, Any]:
+        rows = self.client.db_query(
+            "citizen_ble_chat_rooms",
+            params={
+                "select": "*",
+                "id": f"eq.{sanitize_postgrest_value(room_id)}",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        if not rows:
+            raise ApiError(
+                "Nearby room not found.",
+                code="not_found",
+                status_code=404,
+            )
+        return rows[0]
+
+    def _require_active_ble_chat_room_member(self, room_id: str, actor_user_id: str) -> dict[str, Any]:
+        rows = self.client.db_query(
+            "citizen_ble_chat_room_members",
+            params={
+                "select": "*",
+                "room_id": f"eq.{sanitize_postgrest_value(room_id)}",
+                "user_id": f"eq.{sanitize_postgrest_value(actor_user_id)}",
+                "status": "eq.active",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        if not rows:
+            raise ApiError(
+                "Only active nearby room members can access room messages.",
+                code="forbidden",
+                status_code=403,
+            )
+        return rows[0]
+
+    def _list_ble_chat_room_members(self, room_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        if not room_ids:
+            return {}
+        rows = self.client.db_query(
+            "citizen_ble_chat_room_members",
+            params={
+                "select": "*",
+                "room_id": f"in.({','.join(sanitize_postgrest_value(room_id) for room_id in room_ids)})",
+                "order": "joined_at.asc",
+                "limit": "500",
+            },
+            use_service_role=True,
+        )
+        members_by_room: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            room_id = str(row.get("room_id") or "")
+            members_by_room.setdefault(room_id, []).append(row)
+        return members_by_room
+
+    def _serialize_citizen_ble_chat_room(self, row: dict[str, Any]) -> dict[str, Any]:
+        room_id = str(row.get("id") or "")
+        members = self._list_ble_chat_room_members([room_id]).get(room_id, [])
+        return {
+            "id": row.get("id"),
+            "creator_user_id": row.get("creator_user_id"),
+            "status": row.get("status"),
+            "created_at": row.get("created_at"),
+            "expires_at": row.get("expires_at"),
+            "closed_at": row.get("closed_at"),
+            "members": [self._serialize_citizen_ble_chat_room_member(member) for member in members],
+        }
+
+    def _serialize_citizen_ble_chat_room_member(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": row.get("id"),
+            "room_id": row.get("room_id"),
+            "user_id": row.get("user_id"),
+            "mesh_device_id": row.get("mesh_device_id"),
+            "display_name": row.get("display_name"),
+            "status": row.get("status"),
+            "joined_at": row.get("joined_at"),
+            "left_at": row.get("left_at"),
+        }
+
+    def _create_ble_chat_room_from_session(self, session_row: dict[str, Any]) -> dict[str, Any]:
+        now = datetime.now(tz=UTC)
+        room_id = str(uuid4())
+        room_payload = {
+            "id": room_id,
+            "creator_user_id": session_row.get("requester_user_id"),
+            "status": "active",
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=10)).isoformat(),
+            "closed_at": None,
+        }
+        self.client.db_insert(
+            "citizen_ble_chat_rooms",
+            data=room_payload,
+            use_service_role=True,
+            return_repr=False,
+        )
+        member_rows = [
+            {
+                "id": str(uuid4()),
+                "room_id": room_id,
+                "user_id": session_row.get("requester_user_id"),
+                "mesh_device_id": session_row.get("requester_mesh_device_id"),
+                "display_name": session_row.get("requester_display_name"),
+                "status": "active",
+                "joined_at": now.isoformat(),
+                "left_at": None,
+            },
+            {
+                "id": str(uuid4()),
+                "room_id": room_id,
+                "user_id": session_row.get("recipient_user_id"),
+                "mesh_device_id": session_row.get("recipient_mesh_device_id"),
+                "display_name": session_row.get("recipient_display_name"),
+                "status": "active",
+                "joined_at": now.isoformat(),
+                "left_at": None,
+            },
+        ]
+        for member_row in member_rows:
+            self.client.db_insert(
+                "citizen_ble_chat_room_members",
+                data=member_row,
+                use_service_role=True,
+                return_repr=False,
+            )
+        return self._serialize_citizen_ble_chat_room(room_payload)
+
+    def _expire_ble_chat_room_if_needed(self, row: dict[str, Any]) -> dict[str, Any]:
+        if str(row.get("status") or "") != "active":
+            return row
+        expires_at = _parse_iso_datetime(row.get("expires_at"))
+        if expires_at is None or expires_at > datetime.now(tz=UTC):
+            return row
+        data = {
+            "status": "expired",
+            "closed_at": datetime.now(tz=UTC).isoformat(),
+        }
+        rows = self.client.db_update(
+            "citizen_ble_chat_rooms",
+            data=data,
+            params={"id": f"eq.{sanitize_postgrest_value(str(row.get('id') or ''))}"},
+            use_service_role=True,
+        )
+        self.client.db_update(
+            "citizen_ble_chat_room_members",
+            data={
+                "status": "left",
+                "left_at": datetime.now(tz=UTC).isoformat(),
+            },
+            params={"room_id": f"eq.{sanitize_postgrest_value(str(row.get('id') or ''))}", "status": "eq.active"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        return rows[0] if rows else {**row, **data}
+
+    def _close_ble_room_if_empty(self, room_id: str) -> dict[str, Any] | None:
+        room = self._get_ble_chat_room(room_id)
+        members = self._list_ble_chat_room_members([room_id]).get(room_id, [])
+        if any(str(member.get("status") or "") == "active" for member in members):
+            return room
+        if str(room.get("status") or "") != "active":
+            return room
+        now = datetime.now(tz=UTC).isoformat()
+        rows = self.client.db_update(
+            "citizen_ble_chat_rooms",
+            data={
+                "status": "closed",
+                "closed_at": now,
+            },
+            params={"id": f"eq.{sanitize_postgrest_value(room_id)}"},
+            use_service_role=True,
+        )
+        self.client.db_update(
+            "citizen_ble_chat_sessions",
+            data={
+                "status": "closed",
+                "closed_at": now,
+            },
+            params={"room_id": f"eq.{sanitize_postgrest_value(room_id)}", "status": "eq.accepted"},
+            use_service_role=True,
+            return_repr=False,
+        )
+        return rows[0] if rows else {**room, "status": "closed", "closed_at": now}
 
     def _raise_nearby_presence_error(self, error: httpx.HTTPStatusError) -> None:
         payload: dict[str, Any] = {}
@@ -1368,6 +1768,18 @@ def _serialize_mesh_message(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _serialize_citizen_ble_chat_room_message(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "room_id": row.get("room_id"),
+        "author_user_id": row.get("author_user_id"),
+        "author_display_name": row.get("author_display_name"),
+        "body": row.get("body"),
+        "created_at": row.get("created_at"),
+        "expires_at": row.get("expires_at"),
+    }
+
+
 # GeoJSON helpers keep the web map thin and consistent across endpoints.
 def _decorate_survivor_signal(row: dict[str, Any]) -> dict[str, Any]:
     lat, lng = _extract_coordinates(row.get("node_location") or {})
@@ -1419,6 +1831,7 @@ def _decorate_citizen_nearby_presence(
 def _serialize_citizen_ble_chat_session(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row.get("id"),
+        "room_id": row.get("room_id"),
         "requester_user_id": row.get("requester_user_id"),
         "recipient_user_id": row.get("recipient_user_id"),
         "requester_mesh_device_id": row.get("requester_mesh_device_id"),

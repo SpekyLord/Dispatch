@@ -41,6 +41,26 @@ class _FakeRealtimeService extends RealtimeService {
   _FakeRealtimeService() : super();
 }
 
+class _FakeBleRoomAuthService extends AuthService {
+  _FakeBleRoomAuthService({required this.roomsResponse});
+
+  final Map<String, dynamic> roomsResponse;
+
+  @override
+  Future<Map<String, dynamic>> listCitizenBleChatSessions({
+    int limit = 50,
+  }) async {
+    return const {'sessions': []};
+  }
+
+  @override
+  Future<Map<String, dynamic>> listCitizenBleChatRooms({
+    int limit = 50,
+  }) async {
+    return roomsResponse;
+  }
+}
+
 class _FakeSessionController extends SessionController {
   _FakeSessionController(SessionState state)
     : super(_NoopSessionStorage(state), AuthService()) {
@@ -264,6 +284,361 @@ void main() {
     expect(find.textContaining('You'), findsOneWidget);
     expect(find.textContaining('CITIZEN TWO'), findsOneWidget);
   });
+
+  testWidgets('shows Open Nearby Room when the selected citizen is in an active room', (
+    tester,
+  ) async {
+    final locationService = _FakeLocationService(
+      currentPosition: _locationAt(latitude: 14.5995),
+    );
+    final trailController = _SeededCitizenLocationTrailController(
+      locationService: locationService,
+      initialState: CitizenLocationTrailState(
+        permissionResolved: true,
+        permissionGranted: true,
+        gpsEnabled: true,
+        trackingActive: true,
+        latestLocation: _locationAt(latitude: 14.5995),
+        displayLocation: _locationAt(latitude: 14.5995),
+        persistedTrailPoints: const [],
+        lastAcceptedTrailPoint: null,
+        lastSampledAt: DateTime.now().toUtc(),
+        lastRejectionReason: null,
+      ),
+    );
+    final nearbyController = _SeededCitizenNearbyPresenceController(
+      authService: AuthService(),
+      realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      initialState: CitizenNearbyPresenceState(
+        selfLocation: _locationAt(latitude: 14.5995),
+        nearbyUsers: [
+          NearbyCitizenPin(
+            userId: 'citizen-2',
+            displayName: 'Citizen Two',
+            meshDeviceId: 'mesh-device-2',
+            meshIdentityHash: 'ABC123',
+            latitude: 14.59955,
+            longitude: 120.9842,
+            accuracyMeters: 7,
+            lastSeenAt: DateTime.now().toUtc(),
+            distanceMeters: 6,
+          ),
+        ],
+        subscribed: true,
+        lastRefreshAt: DateTime.now().toUtc(),
+        lastError: null,
+      ),
+    );
+    final bleRoomAuth = _FakeBleRoomAuthService(
+      roomsResponse: {
+        'rooms': [
+          {
+            'id': 'room-1',
+            'creator_user_id': 'citizen-1',
+            'status': 'active',
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+            'expires_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(minutes: 10))
+                .toIso8601String(),
+            'members': [
+              {
+                'id': 'room-1:citizen-1',
+                'room_id': 'room-1',
+                'user_id': 'citizen-1',
+                'mesh_device_id': 'mesh-device-1',
+                'display_name': 'Citizen One',
+                'status': 'active',
+                'joined_at': DateTime.now().toUtc().toIso8601String(),
+              },
+              {
+                'id': 'room-1:citizen-2',
+                'room_id': 'room-1',
+                'user_id': 'citizen-2',
+                'mesh_device_id': 'mesh-device-2',
+                'display_name': 'Citizen Two',
+                'status': 'active',
+                'joined_at': DateTime.now().toUtc().toIso8601String(),
+              },
+            ],
+          },
+        ],
+      },
+    );
+    final bleChatController = CitizenBleChatSessionController(
+      authService: bleRoomAuth,
+      realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+    );
+
+    await _pumpMap(
+      tester,
+      locationService: locationService,
+      trailController: trailController,
+      nearbyController: nearbyController,
+      bleChatController: bleChatController,
+    );
+    await tester.tap(find.textContaining('CITIZEN TWO').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('Open Nearby Room'), findsOneWidget);
+  });
+
+  testWidgets(
+    'explains why BLE request is unavailable instead of leaving a dead tap',
+    (tester) async {
+      final locationService = _FakeLocationService(
+        currentPosition: _locationAt(latitude: 14.5995),
+      );
+      final trailController = _SeededCitizenLocationTrailController(
+        locationService: locationService,
+        initialState: CitizenLocationTrailState(
+          permissionResolved: true,
+          permissionGranted: true,
+          gpsEnabled: true,
+          trackingActive: true,
+          latestLocation: _locationAt(latitude: 14.5995),
+          displayLocation: _locationAt(latitude: 14.5995),
+          persistedTrailPoints: const [],
+          lastAcceptedTrailPoint: null,
+          lastSampledAt: DateTime.now().toUtc(),
+          lastRejectionReason: null,
+        ),
+      );
+      final nearbyController = _SeededCitizenNearbyPresenceController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: CitizenNearbyPresenceState(
+          selfLocation: _locationAt(latitude: 14.5995),
+          nearbyUsers: [
+            NearbyCitizenPin(
+              userId: 'citizen-2',
+              displayName: 'Citizen Two',
+              meshDeviceId: 'mesh-device-2',
+              meshIdentityHash: 'ABC123',
+              latitude: 14.59955,
+              longitude: 120.9842,
+              accuracyMeters: 7,
+              lastSeenAt: DateTime.now().toUtc(),
+              distanceMeters: 6,
+            ),
+          ],
+          subscribed: true,
+          lastRefreshAt: DateTime.now().toUtc(),
+          lastError: null,
+        ),
+      );
+      final bleChatController = _SeededCitizenBleChatSessionController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: const CitizenBleChatSessionState.initial(),
+      );
+
+      await _pumpMap(
+        tester,
+        locationService: locationService,
+        trailController: trailController,
+        nearbyController: nearbyController,
+        bleChatController: bleChatController,
+      );
+      await tester.tap(find.textContaining('CITIZEN TWO').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Request BLE Connection'), findsOneWidget);
+      expect(
+        find.text('Nearby Citizen - GPS visible, waiting for BLE - +/-7m'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Waiting for a live BLE peer match before requesting.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Request BLE Connection'));
+      await tester.pump();
+
+      expect(
+        find.text(
+          'Nearby chat unavailable right now. Waiting for a live BLE peer match before requesting.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'enables BLE request when a live peer match exists even if GPS distance is larger than 20m',
+    (tester) async {
+      final locationService = _FakeLocationService(
+        currentPosition: _locationAt(latitude: 14.5995),
+      );
+      final trailController = _SeededCitizenLocationTrailController(
+        locationService: locationService,
+        initialState: CitizenLocationTrailState(
+          permissionResolved: true,
+          permissionGranted: true,
+          gpsEnabled: true,
+          trackingActive: true,
+          latestLocation: _locationAt(latitude: 14.5995),
+          displayLocation: _locationAt(latitude: 14.5995),
+          persistedTrailPoints: const [],
+          lastAcceptedTrailPoint: null,
+          lastSampledAt: DateTime.now().toUtc(),
+          lastRejectionReason: null,
+        ),
+      );
+      final nearbyController = _SeededCitizenNearbyPresenceController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: CitizenNearbyPresenceState(
+          selfLocation: _locationAt(latitude: 14.5995),
+          nearbyUsers: [
+            NearbyCitizenPin(
+              userId: 'citizen-2',
+              displayName: 'Citizen Two',
+              meshDeviceId: 'mesh-device-2',
+              meshIdentityHash: 'ABC123',
+              latitude: 14.59975,
+              longitude: 120.9842,
+              accuracyMeters: 7,
+              lastSeenAt: DateTime.now().toUtc(),
+              distanceMeters: 32,
+              bleMatched: true,
+            ),
+          ],
+          subscribed: true,
+          lastRefreshAt: DateTime.now().toUtc(),
+          lastError: null,
+        ),
+      );
+      final bleTransport = MeshTransportService(automaticLocationBeaconing: false);
+      final bleChatController = _SeededCitizenBleChatSessionController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: bleTransport,
+        initialState: const CitizenBleChatSessionState.initial(),
+      );
+      bleTransport.onPeerDiscovered(
+        'endpoint-2',
+        'Citizen Two',
+        deviceId: 'mesh-device-2',
+        meshIdentityHash: 'ABC123',
+        isConnected: true,
+      );
+
+      await _pumpMap(
+        tester,
+        locationService: locationService,
+        trailController: trailController,
+        nearbyController: nearbyController,
+        bleChatController: bleChatController,
+      );
+      await tester.tap(find.textContaining('CITIZEN TWO').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Request BLE Connection'), findsOneWidget);
+      expect(find.text('Nearby Citizen - BLE nearby and ready - +/-7m'), findsOneWidget);
+      expect(
+        find.text('Waiting for a live BLE peer match before requesting.'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'keeps BLE request helper text after the live nearby pin drops out during refresh',
+    (tester) async {
+      final locationService = _FakeLocationService(
+        currentPosition: _locationAt(latitude: 14.5995),
+      );
+      final trailController = _SeededCitizenLocationTrailController(
+        locationService: locationService,
+        initialState: CitizenLocationTrailState(
+          permissionResolved: true,
+          permissionGranted: true,
+          gpsEnabled: true,
+          trackingActive: true,
+          latestLocation: _locationAt(latitude: 14.5995),
+          displayLocation: _locationAt(latitude: 14.5995),
+          persistedTrailPoints: const [],
+          lastAcceptedTrailPoint: null,
+          lastSampledAt: DateTime.now().toUtc(),
+          lastRejectionReason: null,
+        ),
+      );
+      final nearbyController = _SeededCitizenNearbyPresenceController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: CitizenNearbyPresenceState(
+          selfLocation: _locationAt(latitude: 14.5995),
+          nearbyUsers: [
+            NearbyCitizenPin(
+              userId: 'citizen-2',
+              displayName: 'Citizen Two',
+              meshDeviceId: 'mesh-device-2',
+              meshIdentityHash: 'ABC123',
+              latitude: 14.59955,
+              longitude: 120.9842,
+              accuracyMeters: 7,
+              lastSeenAt: DateTime.now().toUtc(),
+              distanceMeters: 6,
+            ),
+          ],
+          subscribed: true,
+          lastRefreshAt: DateTime.now().toUtc(),
+          lastError: null,
+        ),
+      );
+      final bleChatController = _SeededCitizenBleChatSessionController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: const CitizenBleChatSessionState.initial(),
+      );
+
+      await _pumpMap(
+        tester,
+        locationService: locationService,
+        trailController: trailController,
+        nearbyController: nearbyController,
+        bleChatController: bleChatController,
+      );
+      await tester.tap(find.textContaining('CITIZEN TWO').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      nearbyController.setNearbyUsers(const []);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.text('Nearby citizen details are still loading.'),
+        findsNothing,
+      );
+      expect(
+        find.text('Waiting for a live BLE peer match before requesting.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Request BLE Connection'));
+      await tester.pump();
+
+      expect(
+        find.text(
+          'Nearby chat unavailable right now. Waiting for a live BLE peer match before requesting.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'removes a nearby citizen pin when the provider state is cleared',

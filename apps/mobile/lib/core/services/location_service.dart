@@ -18,23 +18,43 @@ class LocationData {
   final DateTime? timestamp;
 }
 
+enum LocationMotionMode { acquiring, stationary, moving, degraded }
+
 class LocationService {
   static const Duration _maxLastKnownAge = Duration(minutes: 2);
   static const double _maxLastKnownAccuracyMeters = 80;
   static const double _maxStreamAccuracyMeters = 90;
+  static const double _maxUsableEstimatorAccuracyMeters = 25;
+  static const double _maxDiagnosticEstimatorAccuracyMeters = 50;
+  static const double _stableBestAccuracyMeters = 15;
+  static const double _stableSpreadMeters = 8;
+  static const double _stableShiftMeters = 6;
   static const double _maxSnapBackDistanceMeters = 120;
   static const double _maxReasonableSpeedMetersPerSecond = 55;
   static const double _pendingJumpConfirmationRadiusMeters = 45;
   static const int _pendingJumpVotesRequired = 2;
+  static const int _fixWindowSize = 6;
+  static const Duration _fixWindowDuration = Duration(seconds: 6);
   static const double _minimumMovementMeters = 4;
-  static const int _stationaryReanchorSamples = 5;
+  static const int _movingWindowVotesRequired = 2;
 
   LocationData? _lastRawAcceptedLocation;
-  LocationData? _lastOutputLocation;
-  LocationData? _bestStationaryLocation;
-  int _stationarySampleCount = 0;
+  final List<LocationData> _acceptedFixWindow = <LocationData>[];
+  List<LocationData> _recentUsableFixes = const <LocationData>[];
   LocationData? _pendingJumpCandidate;
   int _pendingJumpVotes = 0;
+  LocationData? _latestEstimatedLocation;
+  double? _latestDisplayConfidenceMeters;
+  LocationMotionMode _latestMotionMode = LocationMotionMode.acquiring;
+  LocationData? _lastStableCenter;
+  LocationData? _pendingMovingCenter;
+  int _pendingMovingVotes = 0;
+
+  LocationMotionMode get latestMotionMode => _latestMotionMode;
+  LocationData? get latestEstimatedLocation => _latestEstimatedLocation;
+  double? get latestDisplayConfidenceMeters => _latestDisplayConfidenceMeters;
+  List<LocationData> get recentUsableFixes =>
+      List<LocationData>.unmodifiable(_recentUsableFixes);
 
   Future<bool> isGpsAvailable() => Geolocator.isLocationServiceEnabled();
 
@@ -138,20 +158,20 @@ class LocationService {
     if (kIsWeb) {
       return const LocationSettings(
         accuracy: LocationAccuracy.best,
-        distanceFilter: 5,
+        distanceFilter: 1,
       );
     }
 
     return switch (defaultTargetPlatform) {
       TargetPlatform.android => AndroidSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 3,
-        intervalDuration: const Duration(seconds: 2),
+        distanceFilter: 1,
+        intervalDuration: const Duration(milliseconds: 500),
         forceLocationManager: false,
       ),
       TargetPlatform.iOS || TargetPlatform.macOS => AppleSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 3,
+        distanceFilter: 1,
         pauseLocationUpdatesAutomatically: false,
         activityType: ActivityType.fitness,
         allowBackgroundLocationUpdates: false,
@@ -159,7 +179,7 @@ class LocationService {
       ),
       _ => const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 5,
+        distanceFilter: 1,
       ),
     };
   }
@@ -182,17 +202,16 @@ class LocationService {
       final age = DateTime.now().toUtc().difference(timestamp);
       if (age > _maxLastKnownAge &&
           candidate.accuracyMeters > _maxLastKnownAccuracyMeters) {
-        return _lastOutputLocation;
+        return _lastRawAcceptedLocation ?? _latestEstimatedLocation;
       }
     }
 
     final currentRaw = _lastRawAcceptedLocation;
-    final currentOutput = _lastOutputLocation;
-    if (currentRaw == null || currentOutput == null) {
+    if (currentRaw == null) {
       _clearPendingJump();
       _lastRawAcceptedLocation = candidate;
-      _lastOutputLocation = candidate;
-      _resetStationaryTracking(anchor: candidate);
+      _rememberAcceptedFix(candidate);
+      _recomputeEstimate(referenceTimestamp: candidate.timestamp);
       return candidate;
     }
 
@@ -230,47 +249,35 @@ class LocationService {
     if (distanceMeters <= jitterThresholdMeters) {
       _clearPendingJump();
       _lastRawAcceptedLocation = candidate;
-      final nextOutput = _nextOutputLocation(
-        currentOutput: currentOutput,
-        candidate: candidate,
-      );
-      _lastOutputLocation = nextOutput;
-      return nextOutput;
+      _rememberAcceptedFix(candidate);
+      _recomputeEstimate(referenceTimestamp: candidate.timestamp);
+      return candidate;
     }
 
     if (_isMeaningfullyMoreAccurate(candidate, currentRaw)) {
       _clearPendingJump();
       _lastRawAcceptedLocation = candidate;
-      final nextOutput = _nextOutputLocation(
-        currentOutput: currentOutput,
-        candidate: candidate,
-      );
-      _lastOutputLocation = nextOutput;
-      return nextOutput;
+      _rememberAcceptedFix(candidate);
+      _recomputeEstimate(referenceTimestamp: candidate.timestamp);
+      return candidate;
     }
 
     if (impossibleSpeedJump || likelyNoisyStreamJump || likelyStaleFallback) {
       if (_shouldAcceptPendingJump(candidate)) {
         _clearPendingJump();
         _lastRawAcceptedLocation = candidate;
-        final nextOutput = _nextOutputLocation(
-          currentOutput: currentOutput,
-          candidate: candidate,
-        );
-        _lastOutputLocation = nextOutput;
-        return nextOutput;
+        _rememberAcceptedFix(candidate);
+        _recomputeEstimate(referenceTimestamp: candidate.timestamp);
+        return candidate;
       }
-      return currentOutput;
+      return currentRaw;
     }
 
     _clearPendingJump();
     _lastRawAcceptedLocation = candidate;
-    final nextOutput = _nextOutputLocation(
-      currentOutput: currentOutput,
-      candidate: candidate,
-    );
-    _lastOutputLocation = nextOutput;
-    return nextOutput;
+    _rememberAcceptedFix(candidate);
+    _recomputeEstimate(referenceTimestamp: candidate.timestamp);
+    return candidate;
   }
 
   void _clearPendingJump() {
@@ -303,77 +310,232 @@ class LocationService {
     return false;
   }
 
-  LocationData _nextOutputLocation({
-    required LocationData currentOutput,
-    required LocationData candidate,
-  }) {
-    final distanceFromOutput = Geolocator.distanceBetween(
-      currentOutput.latitude,
-      currentOutput.longitude,
-      candidate.latitude,
-      candidate.longitude,
-    );
-    final stationaryBandMeters = _stationaryBandMeters(candidate);
+  void _rememberAcceptedFix(LocationData candidate) {
+    _acceptedFixWindow.add(candidate);
+    if (_acceptedFixWindow.length > _fixWindowSize + 4) {
+      _acceptedFixWindow.removeRange(0, _acceptedFixWindow.length - (_fixWindowSize + 4));
+    }
+  }
 
-    if (distanceFromOutput <= stationaryBandMeters) {
-      _stationarySampleCount += 1;
-      _bestStationaryLocation = _moreAccurateLocation(
-        _bestStationaryLocation,
-        candidate,
+  void _recomputeEstimate({DateTime? referenceTimestamp}) {
+    final latestRaw = _lastRawAcceptedLocation;
+    if (latestRaw == null) {
+      _recentUsableFixes = const <LocationData>[];
+      _latestEstimatedLocation = null;
+      _latestDisplayConfidenceMeters = null;
+      _latestMotionMode = LocationMotionMode.acquiring;
+      return;
+    }
+
+    final referenceTime = referenceTimestamp?.toUtc() ?? latestRaw.timestamp?.toUtc();
+    var recentFixes =
+        _acceptedFixWindow.where((fix) {
+          if (referenceTime == null || fix.timestamp == null) {
+            return true;
+          }
+          return referenceTime.difference(fix.timestamp!.toUtc()) <=
+              _fixWindowDuration;
+        }).toList(growable: false);
+    if (recentFixes.length > _fixWindowSize) {
+      recentFixes = recentFixes.sublist(recentFixes.length - _fixWindowSize);
+    }
+
+    final usableFixes = recentFixes
+        .where((fix) => fix.accuracyMeters <= _maxUsableEstimatorAccuracyMeters)
+        .toList(growable: false);
+    final diagnosticFixes = recentFixes
+        .where(
+          (fix) =>
+              fix.accuracyMeters > _maxUsableEstimatorAccuracyMeters &&
+              fix.accuracyMeters <= _maxDiagnosticEstimatorAccuracyMeters,
+        )
+        .toList(growable: false);
+    _recentUsableFixes = usableFixes;
+
+    if (usableFixes.isEmpty) {
+      final diagnosticAccuracyMeters =
+          diagnosticFixes.isEmpty ? latestRaw.accuracyMeters : _bestAccuracyMeters(diagnosticFixes);
+      _latestEstimatedLocation = latestRaw;
+      _latestDisplayConfidenceMeters = _confidenceRadiusForMode(
+        mode: LocationMotionMode.acquiring,
+        baseAccuracyMeters: diagnosticAccuracyMeters,
       );
+      _latestMotionMode = LocationMotionMode.acquiring;
+      _clearPendingMovingWindow();
+      return;
+    }
 
-      if (_isMeaningfullyMoreAccurate(candidate, currentOutput)) {
-        _resetStationaryTracking(anchor: candidate);
-        return candidate;
+    final weightedCenter = _weightedCenter(usableFixes);
+    final clusterRadius = _clusterRadiusMeters(weightedCenter, usableFixes);
+    final bestAccuracyMeters = _bestAccuracyMeters(usableFixes);
+    final nextMotionMode = _classifyMotionMode(
+      center: weightedCenter,
+      bestAccuracyMeters: bestAccuracyMeters,
+      clusterRadiusMeters: clusterRadius,
+      usableFixCount: usableFixes.length,
+    );
+    final confidenceMeters = _confidenceRadiusForMode(
+      mode: nextMotionMode,
+      baseAccuracyMeters: bestAccuracyMeters,
+    );
+    final estimatedLocation = LocationData(
+      latitude: weightedCenter.latitude,
+      longitude: weightedCenter.longitude,
+      accuracyMeters: confidenceMeters,
+      timestamp: latestRaw.timestamp,
+    );
+    _latestEstimatedLocation = estimatedLocation;
+    _latestDisplayConfidenceMeters = confidenceMeters;
+    _latestMotionMode = nextMotionMode;
+  }
+
+  LocationData _weightedCenter(List<LocationData> fixes) {
+    var latitudeWeight = 0.0;
+    var longitudeWeight = 0.0;
+    var totalWeight = 0.0;
+    for (final fix in fixes) {
+      final accuracy = fix.accuracyMeters <= 0 ? 12.0 : fix.accuracyMeters;
+      final weight = 1 / math.max(accuracy, 3);
+      latitudeWeight += fix.latitude * weight;
+      longitudeWeight += fix.longitude * weight;
+      totalWeight += weight;
+    }
+    if (totalWeight <= 0) {
+      return fixes.last;
+    }
+    return LocationData(
+      latitude: latitudeWeight / totalWeight,
+      longitude: longitudeWeight / totalWeight,
+      accuracyMeters: 0,
+      timestamp: fixes.last.timestamp,
+    );
+  }
+
+  double _clusterRadiusMeters(LocationData center, List<LocationData> fixes) {
+    var maxRadius = 0.0;
+    for (final fix in fixes) {
+      final distanceMeters = Geolocator.distanceBetween(
+        center.latitude,
+        center.longitude,
+        fix.latitude,
+        fix.longitude,
+      );
+      if (distanceMeters > maxRadius) {
+        maxRadius = distanceMeters;
       }
+    }
+    return maxRadius;
+  }
 
-      if (_stationarySampleCount >= _stationaryReanchorSamples &&
-          _bestStationaryLocation != null) {
-        final reanchored = _bestStationaryLocation!;
-        _resetStationaryTracking(anchor: reanchored);
-        return reanchored;
+  double _bestAccuracyMeters(List<LocationData> fixes) {
+    var bestAccuracyMeters = fixes.first.accuracyMeters <= 0
+        ? 12.0
+        : fixes.first.accuracyMeters;
+    for (final fix in fixes.skip(1)) {
+      final accuracyMeters = fix.accuracyMeters <= 0 ? 12.0 : fix.accuracyMeters;
+      if (accuracyMeters < bestAccuracyMeters) {
+        bestAccuracyMeters = accuracyMeters;
       }
-
-      return currentOutput;
     }
-
-    _resetStationaryTracking();
-    return _blendLocation(currentOutput, candidate);
+    return bestAccuracyMeters;
   }
 
-  double _stationaryBandMeters(LocationData candidate) {
-    return math.max(6, math.min(12, candidate.accuracyMeters)).toDouble();
+  LocationMotionMode _classifyMotionMode({
+    required LocationData center,
+    required double bestAccuracyMeters,
+    required double clusterRadiusMeters,
+    required int usableFixCount,
+  }) {
+    if (usableFixCount < 3) {
+      _clearPendingMovingWindow();
+      return LocationMotionMode.acquiring;
+    }
+
+    if (bestAccuracyMeters > _stableBestAccuracyMeters ||
+        clusterRadiusMeters > _stableSpreadMeters) {
+      _clearPendingMovingWindow();
+      return LocationMotionMode.degraded;
+    }
+
+    final lastStableCenter = _lastStableCenter;
+    if (lastStableCenter == null) {
+      _lastStableCenter = center;
+      _clearPendingMovingWindow();
+      return LocationMotionMode.stationary;
+    }
+
+    final shiftMeters = Geolocator.distanceBetween(
+      lastStableCenter.latitude,
+      lastStableCenter.longitude,
+      center.latitude,
+      center.longitude,
+    );
+    if (shiftMeters < _stableShiftMeters) {
+      _lastStableCenter = center;
+      _clearPendingMovingWindow();
+      return LocationMotionMode.stationary;
+    }
+
+    if (_registerMovingWindow(center)) {
+      _lastStableCenter = center;
+      _clearPendingMovingWindow();
+      return LocationMotionMode.moving;
+    }
+
+    return LocationMotionMode.stationary;
   }
 
-  LocationData? _moreAccurateLocation(
-    LocationData? currentBest,
-    LocationData candidate,
-  ) {
-    if (currentBest == null) {
-      return candidate;
+  bool _registerMovingWindow(LocationData center) {
+    final pendingMovingCenter = _pendingMovingCenter;
+    if (pendingMovingCenter == null) {
+      _pendingMovingCenter = center;
+      _pendingMovingVotes = 1;
+      return false;
     }
-    if (_isMeaningfullyMoreAccurate(candidate, currentBest)) {
-      return candidate;
+
+    final driftMeters = Geolocator.distanceBetween(
+      pendingMovingCenter.latitude,
+      pendingMovingCenter.longitude,
+      center.latitude,
+      center.longitude,
+    );
+    if (driftMeters <= _stableSpreadMeters) {
+      _pendingMovingCenter = center;
+      _pendingMovingVotes += 1;
+      return _pendingMovingVotes >= _movingWindowVotesRequired;
     }
-    if (candidate.accuracyMeters > 0 &&
-        currentBest.accuracyMeters > 0 &&
-        candidate.accuracyMeters < currentBest.accuracyMeters) {
-      return candidate;
-    }
-    return currentBest;
+
+    _pendingMovingCenter = center;
+    _pendingMovingVotes = 1;
+    return false;
   }
 
-  void _resetStationaryTracking({LocationData? anchor}) {
-    _bestStationaryLocation = anchor;
-    _stationarySampleCount = anchor == null ? 0 : 1;
+  void _clearPendingMovingWindow() {
+    _pendingMovingCenter = null;
+    _pendingMovingVotes = 0;
+  }
+
+  double _confidenceRadiusForMode({
+    required LocationMotionMode mode,
+    required double baseAccuracyMeters,
+  }) {
+    final normalizedAccuracy = baseAccuracyMeters <= 0 ? 12.0 : baseAccuracyMeters;
+    return switch (mode) {
+      LocationMotionMode.stationary => normalizedAccuracy.clamp(5, 15).toDouble(),
+      LocationMotionMode.moving => normalizedAccuracy.clamp(8, 20).toDouble(),
+      LocationMotionMode.degraded => normalizedAccuracy.clamp(20, 40).toDouble(),
+      LocationMotionMode.acquiring => normalizedAccuracy.clamp(20, 40).toDouble(),
+    };
   }
 
   double _jitterThresholdMeters(LocationData current, LocationData candidate) {
-    final combinedAccuracy =
-        ((current.accuracyMeters + candidate.accuracyMeters) / 2).clamp(
-          _minimumMovementMeters,
-          18,
-        );
+    final currentAccuracy = current.accuracyMeters <= 0 ? 10 : current.accuracyMeters;
+    final candidateAccuracy =
+        candidate.accuracyMeters <= 0 ? 10 : candidate.accuracyMeters;
+    final combinedAccuracy = ((currentAccuracy + candidateAccuracy) / 2).clamp(
+      _minimumMovementMeters,
+      18,
+    );
     return combinedAccuracy.toDouble();
   }
 
@@ -395,46 +557,6 @@ class LocationService {
       return null;
     }
     return milliseconds / 1000;
-  }
-
-  LocationData _blendLocation(LocationData current, LocationData candidate) {
-    final distanceMeters = Geolocator.distanceBetween(
-      current.latitude,
-      current.longitude,
-      candidate.latitude,
-      candidate.longitude,
-    );
-    if (distanceMeters <= _minimumMovementMeters) {
-      return _isMeaningfullyMoreAccurate(candidate, current)
-          ? candidate
-          : current;
-    }
-
-    final accuracyBlend = candidate.accuracyMeters <= 10
-        ? 0.9
-        : candidate.accuracyMeters <= 20
-        ? 0.72
-        : candidate.accuracyMeters <= 35
-        ? 0.58
-        : candidate.accuracyMeters <= 50
-        ? 0.44
-        : 0.3;
-    final distanceBlend = distanceMeters >= 120
-        ? 0.16
-        : distanceMeters >= 50
-        ? 0.08
-        : 0.0;
-    final alpha = (accuracyBlend + distanceBlend).clamp(0.25, 0.92);
-
-    return LocationData(
-      latitude:
-          current.latitude + ((candidate.latitude - current.latitude) * alpha),
-      longitude:
-          current.longitude +
-          ((candidate.longitude - current.longitude) * alpha),
-      accuracyMeters: candidate.accuracyMeters,
-      timestamp: candidate.timestamp,
-    );
   }
 
   @visibleForTesting

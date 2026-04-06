@@ -16,6 +16,7 @@ class OfflineCommsScreen extends ConsumerStatefulWidget {
     this.initialRecipientIdentifier,
     this.initialRecipientLabel,
     this.initialThreadId,
+    this.initialRoomId,
     this.initialEphemeral = false,
     this.initialSessionId,
   });
@@ -24,6 +25,7 @@ class OfflineCommsScreen extends ConsumerStatefulWidget {
   final String? initialRecipientIdentifier;
   final String? initialRecipientLabel;
   final String? initialThreadId;
+  final String? initialRoomId;
   final bool initialEphemeral;
   final String? initialSessionId;
 
@@ -44,14 +46,19 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
 
   String? get _activeThreadId => widget.initialThreadId;
   bool get _isDirectThread => (_activeThreadId != null) && _mode == 'direct';
+  bool get _isRoomThread => (_activeThreadId != null) && _mode == 'room';
   String get _recipientLabel =>
-      widget.initialRecipientLabel ?? 'Selected node';
+      widget.initialRecipientLabel ?? (_isRoomThread ? 'Nearby Room' : 'Selected node');
 
   @override
   void initState() {
     super.initState();
     _mode = widget.initialMode ??
-        (widget.initialRecipientIdentifier != null ? 'direct' : 'broadcast');
+        (widget.initialRoomId != null
+            ? 'room'
+            : widget.initialRecipientIdentifier != null
+            ? 'direct'
+            : 'broadcast');
 
     final transport = ref.read(meshTransportProvider);
     if (_activeThreadId != null) {
@@ -234,11 +241,15 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
         }
         final threadId = _mode == 'direct'
             ? _activeThreadId
+            : _mode == 'room'
+                ? _activeThreadId
             : _mode == 'department' && session.department != null
                 ? MeshTransportService.departmentThreadId(session.department!.id)
                 : MeshTransportService.broadcastThreadId();
         final recipientScope = _mode == 'direct'
             ? 'direct'
+            : _mode == 'room'
+                ? 'room'
             : _mode == 'department'
                 ? 'department'
                 : 'broadcast';
@@ -259,6 +270,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           threadId: threadId,
           recipientScope: recipientScope,
           recipientIdentifier: recipientIdentifier,
+          roomId: widget.initialRoomId,
           body: body,
           authorDisplayName: displayName,
           authorRole: authenticatedRole ?? 'anonymous',
@@ -296,7 +308,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
     return Scaffold(
       backgroundColor: dc.warmBackground,
       appBar: AppBar(
-        title: Text(_isDirectThread ? _recipientLabel : 'Offline Comms'),
+        title: Text((_isDirectThread || _isRoomThread) ? _recipientLabel : 'Offline Comms'),
         backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
@@ -410,9 +422,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   children: [
                     if (_activeThreadId != null)
                       _ModeChip(
-                        label: 'Direct',
-                        active: _mode == 'direct',
-                        onTap: () => setState(() => _mode = 'direct'),
+                        label: _isRoomThread ? 'Room' : 'Direct',
+                        active: _isRoomThread ? _mode == 'room' : _mode == 'direct',
+                        onTap: () => setState(() => _mode = _isRoomThread ? 'room' : 'direct'),
                       ),
                     if (_activeThreadId == null)
                       _ModeChip(
@@ -487,6 +499,8 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                     decoration: InputDecoration(
                       labelText: _mode == 'department'
                           ? 'Department message'
+                          : _mode == 'room'
+                              ? 'Nearby room message'
                           : 'Broadcast message',
                       border: const OutlineInputBorder(),
                     ),
@@ -507,10 +521,12 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   ),
                   icon: Icon(_mode == 'post' ? Icons.campaign : Icons.send),
                   label: Text(
-                    _sending
+                _sending
                         ? 'Queueing...'
                         : _mode == 'post'
                         ? 'Publish over mesh'
+                        : _mode == 'room'
+                            ? 'Send to nearby room'
                         : 'Send over mesh',
                   ),
                 ),
@@ -528,7 +544,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 border: Border.all(color: dc.warmBorder),
               ),
               child: Text(
-                _isDirectThread
+                _isRoomThread
+                    ? 'No nearby room messages yet. Send one and connected nearby members will receive it over the mesh.'
+                    : _isDirectThread
                     ? 'No direct messages in this thread yet. Send one and nearby nodes will relay it across the mesh.'
                     : 'No messages yet. Compose a broadcast above or wait for nearby nodes to relay traffic.',
                 style: TextStyle(color: dc.mutedInk, height: 1.45),

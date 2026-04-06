@@ -267,6 +267,41 @@ void main() {
       expect(pkt.hopCount, 3);
     });
 
+    test('room-scoped packets are only recorded for active room membership', () {
+      final hiddenPacket = MeshTransportService.createMeshMessagePacket(
+        deviceId: 'device-room',
+        threadId: MeshTransportService.roomThreadId('room-1'),
+        recipientScope: 'room',
+        roomId: 'room-1',
+        body: 'Temporary room traffic',
+        authorDisplayName: 'Citizen Two',
+        authorRole: 'citizen',
+        ephemeral: true,
+      );
+
+      svc.receivePacket(MeshPacket.fromJson(hiddenPacket.toJson()));
+      expect(svc.threadItems(MeshTransportService.roomThreadId('room-1')), isEmpty);
+
+      svc.setActiveEphemeralRoomIds(const ['room-1']);
+      final visiblePacket = MeshTransportService.createMeshMessagePacket(
+        deviceId: 'device-room',
+        threadId: MeshTransportService.roomThreadId('room-1'),
+        recipientScope: 'room',
+        roomId: 'room-1',
+        body: 'Visible room traffic',
+        authorDisplayName: 'Citizen Two',
+        authorRole: 'citizen',
+        ephemeral: true,
+      );
+
+      svc.receivePacket(MeshPacket.fromJson(visiblePacket.toJson()));
+      expect(
+        svc.threadItems(MeshTransportService.roomThreadId('room-1'))
+            .where((item) => item.body == 'Visible room traffic'),
+        isNotEmpty,
+      );
+    });
+
     test('gateway role queues received packets for upload', () async {
       await svc.initialize();
       svc.setConnectivity(true);

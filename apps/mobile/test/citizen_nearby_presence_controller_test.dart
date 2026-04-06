@@ -335,6 +335,71 @@ void main() {
     expect(auth.upsertCalls, hasLength(2));
   });
 
+  test('moving users publish on the faster moving interval instead of waiting for the heartbeat', () async {
+    final auth = _FakeAuthService();
+    final realtime = _FakeRealtimeService();
+    final controller = CitizenNearbyPresenceController(
+      authService: auth,
+      realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      refreshInterval: const Duration(milliseconds: 20),
+      heartbeatInterval: const Duration(hours: 1),
+      movingPublishInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start(userId: 'citizen-1', displayName: 'Citizen One');
+    controller.updateSelfLocation(
+      _location(latitude: 14.5995, accuracyMeters: 8),
+      latestAccuracyMeters: 8,
+      motionMode: LocationMotionMode.moving,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(auth.upsertCalls, hasLength(1));
+
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(auth.upsertCalls.length, greaterThanOrEqualTo(2));
+  });
+
+  test('low-confidence updates only heartbeat the published anchor and never move it', () async {
+    final auth = _FakeAuthService();
+    final realtime = _FakeRealtimeService();
+    final controller = CitizenNearbyPresenceController(
+      authService: auth,
+      realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      refreshInterval: const Duration(milliseconds: 20),
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start(userId: 'citizen-1', displayName: 'Citizen One');
+    controller.updateSelfLocation(
+      _location(latitude: 14.5995, accuracyMeters: 8),
+      latestAccuracyMeters: 8,
+      motionMode: LocationMotionMode.stationary,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final firstLat = auth.upsertCalls.single['lat'] as double;
+
+    controller.updateSelfLocation(
+      _location(
+        latitude: 14.5995 + _metersToLatitudeDelta(18),
+        accuracyMeters: 24,
+      ),
+      latestAccuracyMeters: 24,
+      motionMode: LocationMotionMode.degraded,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+
+    expect(auth.upsertCalls.length, greaterThanOrEqualTo(2));
+    for (final call in auth.upsertCalls) {
+      expect(call['lat'], firstLat);
+    }
+  });
+
   test('allows nearby users within the accuracy-adjusted visible radius', () async {
     final auth = _FakeAuthService();
     final realtime = _FakeRealtimeService();
@@ -442,6 +507,55 @@ void main() {
 
     expect(controller.state.nearbyUsers, hasLength(1));
     expect(controller.state.nearbyUsers.first.userId, 'citizen-2');
+  });
+
+  test('keeps a BLE-matched nearby user visible even outside the GPS-only radius', () async {
+    final auth = _FakeAuthService();
+    final realtime = _FakeRealtimeService();
+    final transport = MeshTransportService(automaticLocationBeaconing: false);
+    transport.onPeerDiscovered(
+      'endpoint-2',
+      'Citizen Two',
+      deviceId: 'mesh-device-2',
+      meshIdentityHash: 'ABC123',
+      isConnected: true,
+      transport: 'ble',
+    );
+    final controller = CitizenNearbyPresenceController(
+      authService: auth,
+      realtimeService: realtime,
+      transport: transport,
+      refreshInterval: const Duration(hours: 1),
+      heartbeatInterval: const Duration(hours: 1),
+    );
+    addTearDown(controller.dispose);
+    final now = DateTime.now().toUtc();
+    auth.nearbyResponse = {
+      'users': [
+        {
+          ..._nearbyUser(
+            userId: 'citizen-2',
+            displayName: 'BLE Nearby Citizen',
+            latitude: 14.5995 + _metersToLatitudeDelta(32),
+            accuracyMeters: 8,
+            lastSeenAt: now,
+          ),
+          'mesh_device_id': 'mesh-device-2',
+          'mesh_identity_hash': 'ABC123',
+        },
+      ],
+    };
+
+    await controller.start(userId: 'citizen-1', displayName: 'Citizen One');
+    controller.updateSelfLocation(
+      _location(latitude: 14.5995, accuracyMeters: 8, timestamp: now),
+      latestAccuracyMeters: 8,
+    );
+    await controller.refreshNearby();
+
+    expect(controller.state.nearbyUsers, hasLength(1));
+    expect(controller.state.nearbyUsers.first.bleMatched, isTrue);
+    expect(controller.state.nearbyUsers.first.distanceMeters, greaterThan(25));
   });
 
   test(

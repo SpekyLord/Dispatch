@@ -38,6 +38,8 @@ class CitizenLocationTrailState {
     required this.trackingActive,
     required this.latestLocation,
     required this.displayLocation,
+    this.motionMode = LocationMotionMode.acquiring,
+    this.displayConfidenceMeters,
     required this.persistedTrailPoints,
     required this.lastAcceptedTrailPoint,
     required this.lastSampledAt,
@@ -51,6 +53,8 @@ class CitizenLocationTrailState {
       trackingActive = false,
       latestLocation = null,
       displayLocation = null,
+      motionMode = LocationMotionMode.acquiring,
+      displayConfidenceMeters = null,
       persistedTrailPoints = const [],
       lastAcceptedTrailPoint = null,
       lastSampledAt = null,
@@ -62,6 +66,8 @@ class CitizenLocationTrailState {
   final bool trackingActive;
   final LocationData? latestLocation;
   final LocationData? displayLocation;
+  final LocationMotionMode motionMode;
+  final double? displayConfidenceMeters;
   final List<CitizenTrailPoint> persistedTrailPoints;
   final CitizenTrailPoint? lastAcceptedTrailPoint;
   final DateTime? lastSampledAt;
@@ -88,6 +94,8 @@ class CitizenLocationTrailState {
     bool? trackingActive,
     Object? latestLocation = _sentinel,
     Object? displayLocation = _sentinel,
+    LocationMotionMode? motionMode,
+    Object? displayConfidenceMeters = _sentinel,
     List<CitizenTrailPoint>? persistedTrailPoints,
     Object? lastAcceptedTrailPoint = _sentinel,
     Object? lastSampledAt = _sentinel,
@@ -104,6 +112,10 @@ class CitizenLocationTrailState {
       displayLocation: identical(displayLocation, _sentinel)
           ? this.displayLocation
           : displayLocation as LocationData?,
+      motionMode: motionMode ?? this.motionMode,
+      displayConfidenceMeters: identical(displayConfidenceMeters, _sentinel)
+          ? this.displayConfidenceMeters
+          : displayConfidenceMeters as double?,
       persistedTrailPoints: persistedTrailPoints ?? this.persistedTrailPoints,
       lastAcceptedTrailPoint: identical(lastAcceptedTrailPoint, _sentinel)
           ? this.lastAcceptedTrailPoint
@@ -136,7 +148,8 @@ class CitizenLocationTrailController
   StreamSubscription<LocationData>? _locationSubscription;
   Timer? _sampleTimer;
   LocationData? _latestSampleCandidate;
-  LocationData? _pendingDisplayCandidate;
+  LocationData? _pendingStableDisplayCandidate;
+  int _pendingStableDisplayConfirmations = 0;
   bool _disposed = false;
 
   Future<void> startTracking() async {
@@ -163,6 +176,8 @@ class CitizenLocationTrailController
         gpsEnabled: false,
         latestLocation: null,
         displayLocation: null,
+        motionMode: LocationMotionMode.acquiring,
+        displayConfidenceMeters: null,
         lastSampledAt: DateTime.now().toUtc(),
         lastRejectionReason: 'Location permission denied.',
       );
@@ -226,17 +241,32 @@ class CitizenLocationTrailController
     }
 
     _latestSampleCandidate = location;
-    final nextDisplayLocation = _stabilizeDisplayLocation(location);
+    final estimatedLocation =
+        _locationService.latestEstimatedLocation ?? location;
+    final displayConfidenceMeters =
+        _locationService.latestDisplayConfidenceMeters ??
+        _fallbackDisplayConfidenceMeters(location);
+    final nextDisplayLocation = _stabilizeDisplayAnchor(
+      estimatedLocation: estimatedLocation,
+      motionMode: _locationService.latestMotionMode,
+      displayConfidenceMeters: displayConfidenceMeters,
+    );
     state = state.copyWith(
       latestLocation: location,
       displayLocation: nextDisplayLocation,
+      motionMode: _locationService.latestMotionMode,
+      displayConfidenceMeters: displayConfidenceMeters,
       permissionResolved: true,
       permissionGranted: true,
       gpsEnabled: true,
     );
 
     if (state.lastAcceptedTrailPoint == null) {
-      _evaluateCandidate(location, sampledAt: DateTime.now().toUtc());
+      final trustedAnchor = nextDisplayLocation;
+      if (trustedAnchor != null &&
+          _locationService.latestMotionMode != LocationMotionMode.degraded) {
+        _evaluateCandidate(trustedAnchor, sampledAt: DateTime.now().toUtc());
+      }
     }
   }
 
@@ -260,12 +290,42 @@ class CitizenLocationTrailController
       return;
     }
 
-    final candidate = _latestSampleCandidate;
-    if (candidate == null) {
+    final rawCandidate = _latestSampleCandidate;
+    if (rawCandidate == null) {
       state = state.copyWith(
         gpsEnabled: true,
         lastSampledAt: sampledAt,
         lastRejectionReason: 'Waiting for the first GPS fix.',
+      );
+      return;
+    }
+
+    if (state.motionMode == LocationMotionMode.degraded) {
+      state = state.copyWith(
+        gpsEnabled: true,
+        lastSampledAt: sampledAt,
+        lastRejectionReason:
+            'Skipped trail update because GPS confidence is too low.',
+      );
+      return;
+    }
+
+    final candidate = state.displayLocation;
+    if (candidate == null) {
+      state = state.copyWith(
+        gpsEnabled: true,
+        lastSampledAt: sampledAt,
+        lastRejectionReason: 'Waiting for a trusted GPS anchor.',
+      );
+      return;
+    }
+
+    if (candidate.accuracyMeters > 30) {
+      state = state.copyWith(
+        gpsEnabled: true,
+        lastSampledAt: sampledAt,
+        lastRejectionReason:
+            'Skipped trail update because accuracy exceeded 30m.',
       );
       return;
     }
@@ -298,8 +358,10 @@ class CitizenLocationTrailController
       return;
     }
 
+    final accuracyReferenceMeters =
+        state.latestLocation?.accuracyMeters ?? candidate.accuracyMeters;
     final minimumDistanceMeters = math
-        .max(12, math.min(25, candidate.accuracyMeters))
+        .max(12, math.min(25, accuracyReferenceMeters))
         .toDouble();
     final movedDistanceMeters = Geolocator.distanceBetween(
       lastAccepted.latitude,
@@ -342,68 +404,171 @@ class CitizenLocationTrailController
     _sampleTimer = null;
     await _locationSubscription?.cancel();
     _locationSubscription = null;
-    _pendingDisplayCandidate = null;
+    _clearPendingStableDisplayCandidate();
   }
 
-  LocationData? _stabilizeDisplayLocation(LocationData candidate) {
+  LocationData? _stabilizeDisplayAnchor({
+    required LocationData estimatedLocation,
+    required LocationMotionMode motionMode,
+    required double displayConfidenceMeters,
+  }) {
     final currentDisplay = state.displayLocation;
     if (currentDisplay == null) {
-      _pendingDisplayCandidate = null;
-      return candidate;
+      if (motionMode == LocationMotionMode.stationary) {
+        return estimatedLocation;
+      }
+      return null;
     }
 
-    if (candidate.accuracyMeters > 25) {
-      _pendingDisplayCandidate = null;
+    if (motionMode == LocationMotionMode.degraded ||
+        motionMode == LocationMotionMode.acquiring) {
+      _clearPendingStableDisplayCandidate();
       return currentDisplay;
     }
 
     final distanceFromDisplay = Geolocator.distanceBetween(
       currentDisplay.latitude,
       currentDisplay.longitude,
-      candidate.latitude,
-      candidate.longitude,
+      estimatedLocation.latitude,
+      estimatedLocation.longitude,
     );
-    final holdRadiusMeters = math
-        .max(6, math.min(10, candidate.accuracyMeters))
-        .toDouble();
+    final holdRadiusMeters = _anchorHoldRadiusMeters(displayConfidenceMeters);
 
-    if (distanceFromDisplay <= holdRadiusMeters) {
-      _pendingDisplayCandidate = null;
+    if (motionMode == LocationMotionMode.stationary) {
+      if (distanceFromDisplay <= holdRadiusMeters) {
+        _clearPendingStableDisplayCandidate();
+      }
+      if (distanceFromDisplay <= holdRadiusMeters) {
+        if (_isMateriallyBetterAnchor(
+          candidate: estimatedLocation,
+          current: currentDisplay,
+          displayConfidenceMeters: displayConfidenceMeters,
+        )) {
+          return estimatedLocation;
+        }
+        return currentDisplay;
+      }
+
+      if (_registerStableDisplayCandidate(
+        currentDisplay: currentDisplay,
+        estimatedLocation: estimatedLocation,
+      )) {
+        _clearPendingStableDisplayCandidate();
+        return estimatedLocation;
+      }
       return currentDisplay;
     }
 
-    if (distanceFromDisplay >= 18) {
-      _pendingDisplayCandidate = null;
-      return candidate;
+    if (motionMode == LocationMotionMode.moving) {
+      _clearPendingStableDisplayCandidate();
+      if (distanceFromDisplay <= _movingAnchorStepMeters) {
+        return estimatedLocation;
+      }
+      return _moveToward(
+        from: currentDisplay,
+        to: estimatedLocation,
+        maxStepMeters: _movingAnchorStepMeters,
+      );
     }
 
-    final pending = _pendingDisplayCandidate;
-    if (pending == null) {
-      _pendingDisplayCandidate = candidate;
-      return currentDisplay;
-    }
+    return currentDisplay;
+  }
 
-    final pendingDistanceFromDisplay = Geolocator.distanceBetween(
+  static const double _movingAnchorStepMeters = 8;
+
+  double _fallbackDisplayConfidenceMeters(LocationData location) {
+    final accuracyMeters = location.accuracyMeters <= 0
+        ? 12
+        : location.accuracyMeters;
+    return math.max(5, math.min(35, accuracyMeters)).toDouble();
+  }
+
+  double _anchorHoldRadiusMeters(double displayConfidenceMeters) {
+    return math.max(6, math.min(10, displayConfidenceMeters)).toDouble();
+  }
+
+  bool _isMateriallyBetterAnchor({
+    required LocationData candidate,
+    required LocationData current,
+    required double displayConfidenceMeters,
+  }) {
+    if (candidate.accuracyMeters <= 0) {
+      return false;
+    }
+    final currentAccuracyMeters = current.accuracyMeters <= 0
+        ? displayConfidenceMeters
+        : current.accuracyMeters;
+    return candidate.accuracyMeters <= currentAccuracyMeters * 0.7;
+  }
+
+  bool _registerStableDisplayCandidate({
+    required LocationData currentDisplay,
+    required LocationData estimatedLocation,
+  }) {
+    final distanceFromDisplay = Geolocator.distanceBetween(
       currentDisplay.latitude,
       currentDisplay.longitude,
-      pending.latitude,
-      pending.longitude,
+      estimatedLocation.latitude,
+      estimatedLocation.longitude,
     );
-    final pendingAgreementMeters = Geolocator.distanceBetween(
-      pending.latitude,
-      pending.longitude,
-      candidate.latitude,
-      candidate.longitude,
-    );
-
-    if (pendingDistanceFromDisplay > holdRadiusMeters &&
-        pendingAgreementMeters <= 8) {
-      _pendingDisplayCandidate = null;
-      return candidate;
+    if (distanceFromDisplay < 6) {
+      _clearPendingStableDisplayCandidate();
+      return false;
     }
 
-    _pendingDisplayCandidate = candidate;
-    return currentDisplay;
+    final pendingCandidate = _pendingStableDisplayCandidate;
+    if (pendingCandidate == null) {
+      _pendingStableDisplayCandidate = estimatedLocation;
+      _pendingStableDisplayConfirmations = 1;
+      return false;
+    }
+
+    final driftMeters = Geolocator.distanceBetween(
+      pendingCandidate.latitude,
+      pendingCandidate.longitude,
+      estimatedLocation.latitude,
+      estimatedLocation.longitude,
+    );
+    if (driftMeters <= 8) {
+      _pendingStableDisplayCandidate = estimatedLocation;
+      _pendingStableDisplayConfirmations += 1;
+      return _pendingStableDisplayConfirmations >= 2;
+    }
+
+    _pendingStableDisplayCandidate = estimatedLocation;
+    _pendingStableDisplayConfirmations = 1;
+    return false;
+  }
+
+  void _clearPendingStableDisplayCandidate() {
+    _pendingStableDisplayCandidate = null;
+    _pendingStableDisplayConfirmations = 0;
+  }
+
+  LocationData _moveToward({
+    required LocationData from,
+    required LocationData to,
+    required double maxStepMeters,
+  }) {
+    final distanceMeters = Geolocator.distanceBetween(
+      from.latitude,
+      from.longitude,
+      to.latitude,
+      to.longitude,
+    );
+    if (distanceMeters <= maxStepMeters) {
+      return to;
+    }
+    if (distanceMeters <= 0) {
+      return from;
+    }
+    final ratio = maxStepMeters / distanceMeters;
+    return LocationData(
+      latitude: from.latitude + ((to.latitude - from.latitude) * ratio),
+      longitude: from.longitude + ((to.longitude - from.longitude) * ratio),
+      accuracyMeters: to.accuracyMeters,
+      timestamp: to.timestamp,
+    );
   }
 
   @override

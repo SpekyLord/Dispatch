@@ -24,14 +24,23 @@ class _FakeLocationService extends LocationService {
   Future<bool> isGpsAvailable() async => gpsEnabled;
 
   @override
-  Future<LocationData?> getCurrentPosition() async => currentPosition;
+  Future<LocationData?> getCurrentPosition() async {
+    final position = currentPosition;
+    if (position == null) {
+      return null;
+    }
+    return acceptPositionForTest(position);
+  }
 
   @override
   Stream<LocationData> watchPosition() => _controller.stream;
 
   Future<void> emit(LocationData location) async {
     currentPosition = location;
-    _controller.add(location);
+    final accepted = acceptPositionForTest(location);
+    if (accepted != null) {
+      _controller.add(accepted);
+    }
     await Future<void>.delayed(Duration.zero);
   }
 
@@ -53,8 +62,24 @@ LocationData _locationAt({
 
 double _metersToLatitudeDelta(double meters) => meters / 111111.0;
 
+Future<void> _emitStableCluster(
+  _FakeLocationService service, {
+  required double baseLatitude,
+  required List<double> offsetsMeters,
+  double accuracyMeters = 8,
+}) async {
+  for (final offsetMeters in offsetsMeters) {
+    await service.emit(
+      _locationAt(
+        latitude: baseLatitude + _metersToLatitudeDelta(offsetMeters),
+        accuracyMeters: accuracyMeters,
+      ),
+    );
+  }
+}
+
 void main() {
-  test('stores the first valid point immediately', () async {
+  test('initializes the trusted anchor and first trail point from stable fixes', () async {
     final fakeLocationService = _FakeLocationService(
       permissionGranted: true,
       gpsEnabled: true,
@@ -68,15 +93,21 @@ void main() {
     addTearDown(fakeLocationService.dispose);
 
     await controller.startTracking();
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995,
+      offsetsMeters: const [0, 2, -1, 1],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 25));
 
     expect(controller.state.permissionResolved, isTrue);
-    expect(controller.state.latestLocation, isNotNull);
+    expect(controller.state.motionMode, LocationMotionMode.stationary);
     expect(controller.state.displayLocation, isNotNull);
     expect(controller.state.persistedTrailPoints, hasLength(1));
     expect(controller.state.lastAcceptedTrailPoint, isNotNull);
   });
 
-  test('does not append trail points for sub-threshold movement', () async {
+  test('low-confidence updates keep the pin frozen and skip trail persistence', () async {
     final fakeLocationService = _FakeLocationService(
       permissionGranted: true,
       gpsEnabled: true,
@@ -90,92 +121,117 @@ void main() {
     addTearDown(fakeLocationService.dispose);
 
     await controller.startTracking();
-    await fakeLocationService.emit(
-      _locationAt(
-        latitude: 14.5995 + _metersToLatitudeDelta(5),
-        accuracyMeters: 8,
-      ),
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995,
+      offsetsMeters: const [0, 2, -1, 1],
     );
-    await Future<void>.delayed(const Duration(milliseconds: 18));
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    final trustedLatitude = controller.state.displayLocation!.latitude;
 
-    expect(controller.state.persistedTrailPoints, hasLength(1));
-    expect(
-      controller.state.displayLocation?.latitude,
-      closeTo(14.5995, 0.0000001),
-    );
-    expect(
-      controller.state.lastRejectionReason,
-      contains('movement stayed below the threshold'),
-    );
-    expect(controller.state.permissionResolved, isTrue);
-  });
-
-  test('appends a new trail point for meaningful movement', () async {
-    final fakeLocationService = _FakeLocationService(
-      permissionGranted: true,
-      gpsEnabled: true,
-      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
-    );
-    final controller = CitizenLocationTrailController(
-      locationService: fakeLocationService,
-      sampleInterval: const Duration(milliseconds: 10),
-    );
-    addTearDown(controller.dispose);
-    addTearDown(fakeLocationService.dispose);
-
-    await controller.startTracking();
     await fakeLocationService.emit(
       _locationAt(
         latitude: 14.5995 + _metersToLatitudeDelta(18),
-        accuracyMeters: 8,
+        accuracyMeters: 24,
       ),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 18));
+    await fakeLocationService.emit(
+      _locationAt(
+        latitude: 14.5995 - _metersToLatitudeDelta(16),
+        accuracyMeters: 23,
+      ),
+    );
+    await fakeLocationService.emit(
+      _locationAt(
+        latitude: 14.5995 + _metersToLatitudeDelta(14),
+        accuracyMeters: 22,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 25));
 
-    expect(controller.state.permissionResolved, isTrue);
-    expect(controller.state.persistedTrailPoints, hasLength(2));
-    expect(controller.state.lastRejectionReason, isNull);
+    expect(controller.state.motionMode, LocationMotionMode.degraded);
+    expect(controller.state.displayLocation?.latitude, trustedLatitude);
+    expect(controller.state.persistedTrailPoints, hasLength(1));
+    expect(
+      controller.state.lastRejectionReason,
+      contains('GPS confidence is too low'),
+    );
   });
 
-  test(
-    'updates the live marker without persisting poor-accuracy samples',
-    () async {
-      final fakeLocationService = _FakeLocationService(
-        permissionGranted: true,
-        gpsEnabled: true,
-        currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
-      );
-      final controller = CitizenLocationTrailController(
-        locationService: fakeLocationService,
-        sampleInterval: const Duration(milliseconds: 10),
-      );
-      addTearDown(controller.dispose);
-      addTearDown(fakeLocationService.dispose);
+  test('stable movement after repeated windows advances the anchor and trail', () async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
+    );
+    final controller = CitizenLocationTrailController(
+      locationService: fakeLocationService,
+      sampleInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(fakeLocationService.dispose);
 
-      await controller.startTracking();
-      final poorAccuracyLocation = _locationAt(
-        latitude: 14.5995 + _metersToLatitudeDelta(40),
-        accuracyMeters: 45,
-      );
-      await fakeLocationService.emit(poorAccuracyLocation);
-      await Future<void>.delayed(const Duration(milliseconds: 18));
+    await controller.startTracking();
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995,
+      offsetsMeters: const [0, 2, -1, 1],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 25));
 
-      expect(
-        controller.state.latestLocation?.latitude,
-        poorAccuracyLocation.latitude,
-      );
-      expect(
-        controller.state.displayLocation?.latitude,
-        closeTo(14.5995, 0.0000001),
-      );
-      expect(controller.state.persistedTrailPoints, hasLength(1));
-      expect(
-        controller.state.lastRejectionReason,
-        contains('accuracy exceeded 30m'),
-      );
-      expect(controller.state.permissionResolved, isTrue);
-    },
-  );
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995 + _metersToLatitudeDelta(14),
+      offsetsMeters: const [0, 1, -1],
+    );
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995 + _metersToLatitudeDelta(15),
+      offsetsMeters: const [0, 1, -1],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(controller.state.displayLocation, isNotNull);
+    expect(controller.state.displayLocation!.latitude, greaterThan(14.5995));
+    expect(controller.state.persistedTrailPoints.length, greaterThanOrEqualTo(2));
+  });
+
+  test('updates latest raw location without moving the trusted pin for poor-accuracy samples', () async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
+    );
+    final controller = CitizenLocationTrailController(
+      locationService: fakeLocationService,
+      sampleInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(fakeLocationService.dispose);
+
+    await controller.startTracking();
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995,
+      offsetsMeters: const [0, 2, -1, 1],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    final trustedLatitude = controller.state.displayLocation!.latitude;
+
+    final poorAccuracyLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(40),
+      accuracyMeters: 45,
+    );
+    await fakeLocationService.emit(poorAccuracyLocation);
+    await Future<void>.delayed(const Duration(milliseconds: 18));
+
+    expect(
+      controller.state.latestLocation?.latitude,
+      poorAccuracyLocation.latitude,
+    );
+    expect(controller.state.displayLocation?.latitude, trustedLatitude);
+    expect(controller.state.persistedTrailPoints, hasLength(1));
+  });
 
   test('trims the persisted trail to the latest 240 points', () async {
     final fakeLocationService = _FakeLocationService(
@@ -191,22 +247,24 @@ void main() {
     addTearDown(fakeLocationService.dispose);
 
     await controller.startTracking();
-    for (var index = 1; index <= 245; index++) {
-      await fakeLocationService.emit(
-        _locationAt(
-          latitude: 14.5995 + _metersToLatitudeDelta(index * 14),
-          accuracyMeters: 8,
-        ),
+    await _emitStableCluster(
+      fakeLocationService,
+      baseLatitude: 14.5995,
+      offsetsMeters: const [0, 2, -1, 1],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    for (var index = 1; index <= 260; index++) {
+      await _emitStableCluster(
+        fakeLocationService,
+        baseLatitude: 14.5995 + _metersToLatitudeDelta(index * 16),
+        offsetsMeters: const [0, 1, -1],
       );
       await Future<void>.delayed(const Duration(milliseconds: 2));
     }
 
     expect(controller.state.persistedTrailPoints, hasLength(240));
     expect(controller.state.permissionResolved, isTrue);
-    expect(
-      controller.state.persistedTrailPoints.first.latitude,
-      closeTo(14.5995 + _metersToLatitudeDelta(6 * 14), 0.00001),
-    );
   });
 
   test('marks permission as resolved when access is denied', () async {
@@ -230,76 +288,6 @@ void main() {
     expect(
       controller.state.lastRejectionReason,
       'Location permission denied.',
-    );
-  });
-
-  test('requires two confirming samples for moderate display pin movement', () async {
-    final fakeLocationService = _FakeLocationService(
-      permissionGranted: true,
-      gpsEnabled: true,
-      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
-    );
-    final controller = CitizenLocationTrailController(
-      locationService: fakeLocationService,
-      sampleInterval: const Duration(milliseconds: 10),
-    );
-    addTearDown(controller.dispose);
-    addTearDown(fakeLocationService.dispose);
-
-    await controller.startTracking();
-    final firstModerateLocation = _locationAt(
-      latitude: 14.5995 + _metersToLatitudeDelta(13),
-      accuracyMeters: 8,
-    );
-    await fakeLocationService.emit(firstModerateLocation);
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-
-    expect(
-      controller.state.displayLocation?.latitude,
-      closeTo(14.5995, 0.0000001),
-    );
-    expect(
-      controller.state.latestLocation?.latitude,
-      firstModerateLocation.latitude,
-    );
-
-    final secondModerateLocation = _locationAt(
-      latitude: 14.5995 + _metersToLatitudeDelta(14),
-      accuracyMeters: 8,
-    );
-    await fakeLocationService.emit(secondModerateLocation);
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-
-    expect(
-      controller.state.displayLocation?.latitude,
-      closeTo(secondModerateLocation.latitude, 0.0000001),
-    );
-  });
-
-  test('moves the display pin immediately for large displacement', () async {
-    final fakeLocationService = _FakeLocationService(
-      permissionGranted: true,
-      gpsEnabled: true,
-      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
-    );
-    final controller = CitizenLocationTrailController(
-      locationService: fakeLocationService,
-      sampleInterval: const Duration(milliseconds: 10),
-    );
-    addTearDown(controller.dispose);
-    addTearDown(fakeLocationService.dispose);
-
-    await controller.startTracking();
-    final movedLocation = _locationAt(
-      latitude: 14.5995 + _metersToLatitudeDelta(22),
-      accuracyMeters: 8,
-    );
-    await fakeLocationService.emit(movedLocation);
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-
-    expect(
-      controller.state.displayLocation?.latitude,
-      closeTo(movedLocation.latitude, 0.0000001),
     );
   });
 }

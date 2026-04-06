@@ -535,6 +535,40 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> listCitizenBleChatRooms({
+    int limit = 50,
+  }) async {
+    final response = await _dio.get(
+      '/api/mesh/citizen-ble-chat-rooms',
+      queryParameters: {'limit': limit},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> joinCitizenBleChatRoom({
+    required String roomId,
+    required String meshDeviceId,
+    required String displayName,
+  }) async {
+    final response = await _dio.post(
+      '/api/mesh/citizen-ble-chat-rooms/${Uri.encodeComponent(roomId)}/join',
+      data: {
+        'mesh_device_id': meshDeviceId,
+        'display_name': displayName,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> leaveCitizenBleChatRoom({
+    required String roomId,
+  }) async {
+    final response = await _dio.post(
+      '/api/mesh/citizen-ble-chat-rooms/${Uri.encodeComponent(roomId)}/leave',
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getMeshTrail(
     String deviceFingerprint, {
     int limit = 120,

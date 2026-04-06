@@ -268,6 +268,7 @@ void main() {
         trackingActive: true,
         latestLocation: liveLocation,
         displayLocation: liveLocation,
+        motionMode: LocationMotionMode.stationary,
         persistedTrailPoints: const [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: liveLocation.timestamp,
@@ -282,7 +283,7 @@ void main() {
     );
 
     expect(find.textContaining('You'), findsOneWidget);
-    expect(find.textContaining('Live tracking active'), findsOneWidget);
+    expect(find.textContaining('Stable GPS'), findsOneWidget);
   });
 
   testWidgets('shows the self trail polyline after selecting You', (
@@ -306,6 +307,7 @@ void main() {
         trackingActive: true,
         latestLocation: secondLocation,
         displayLocation: secondLocation,
+        motionMode: LocationMotionMode.stationary,
         persistedTrailPoints: [
           CitizenTrailPoint.fromLocation(firstLocation),
           CitizenTrailPoint.fromLocation(secondLocation),
@@ -456,6 +458,7 @@ void main() {
         trackingActive: true,
         latestLocation: liveLocation,
         displayLocation: displayLocation,
+        motionMode: LocationMotionMode.stationary,
         persistedTrailPoints: const [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: liveLocation.timestamp,
@@ -493,7 +496,7 @@ void main() {
   });
 
   testWidgets(
-    'uses latest accuracy for the accuracy ring while keeping the pin stable',
+    'uses confidence-aware radius for the accuracy ring while keeping the pin stable',
     (tester) async {
       final fakeLocationService = _FakeLocationService(
         permissionGranted: true,
@@ -514,6 +517,8 @@ void main() {
           trackingActive: true,
           latestLocation: liveLocation,
           displayLocation: displayLocation,
+          motionMode: LocationMotionMode.stationary,
+          displayConfidenceMeters: 28,
           persistedTrailPoints: const [],
           lastAcceptedTrailPoint: null,
           lastSampledAt: liveLocation.timestamp,
@@ -536,10 +541,63 @@ void main() {
               (circle.point.longitude - displayLocation.longitude).abs() <
                   0.0000001 &&
               circle.useRadiusInMeter &&
-              circle.radius == 28,
+              circle.radius == 15,
         ),
         isTrue,
       );
     },
   );
+
+  testWidgets('shows a larger ring and low-confidence label without moving the pin', (
+    tester,
+  ) async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995),
+    );
+    final displayLocation = _locationAt(latitude: 14.5995);
+    final liveLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(18),
+      accuracyMeters: 24,
+    );
+    final trailController = _SeededCitizenLocationTrailController(
+      locationService: fakeLocationService,
+      initialState: CitizenLocationTrailState(
+        permissionResolved: true,
+        permissionGranted: true,
+        gpsEnabled: true,
+        trackingActive: true,
+        latestLocation: liveLocation,
+        displayLocation: displayLocation,
+        motionMode: LocationMotionMode.degraded,
+        displayConfidenceMeters: 24,
+        persistedTrailPoints: const [],
+        lastAcceptedTrailPoint: null,
+        lastSampledAt: liveLocation.timestamp,
+        lastRejectionReason: null,
+      ),
+    );
+
+    await _pumpMap(
+      tester,
+      locationService: fakeLocationService,
+      trailController: trailController,
+    );
+
+    expect(find.textContaining('Low GPS confidence'), findsOneWidget);
+    final circles = _allCircleMarkers(tester);
+    expect(
+      circles.any(
+        (circle) =>
+            (circle.point.latitude - displayLocation.latitude).abs() <
+                0.0000001 &&
+            (circle.point.longitude - displayLocation.longitude).abs() <
+                0.0000001 &&
+            circle.useRadiusInMeter &&
+            circle.radius == 24,
+      ),
+      isTrue,
+    );
+  });
 }

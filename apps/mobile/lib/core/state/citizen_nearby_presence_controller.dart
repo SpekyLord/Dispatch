@@ -24,6 +24,7 @@ class NearbyCitizenPin {
     required this.lastSeenAt,
     required this.distanceMeters,
     this.accuracyMeters,
+    this.bleMatched = false,
   });
 
   factory NearbyCitizenPin.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,7 @@ class NearbyCitizenPin {
       latitude: (json['lat'] as num?)?.toDouble() ?? 0,
       longitude: (json['lng'] as num?)?.toDouble() ?? 0,
       accuracyMeters: (json['accuracy_meters'] as num?)?.toDouble(),
+      bleMatched: json['ble_matched'] == true,
       lastSeenAt:
           DateTime.tryParse(json['last_seen_at'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
@@ -49,6 +51,7 @@ class NearbyCitizenPin {
   final double latitude;
   final double longitude;
   final double? accuracyMeters;
+  final bool bleMatched;
   final DateTime lastSeenAt;
   final double distanceMeters;
 }
@@ -108,31 +111,31 @@ class CitizenNearbyPresenceController
     required AuthService authService,
     required RealtimeService realtimeService,
     required MeshTransportService transport,
-    Duration refreshInterval = const Duration(seconds: 5),
+    Duration refreshInterval = const Duration(seconds: 2),
     Duration heartbeatInterval = const Duration(seconds: 10),
+    Duration movingPublishInterval = const Duration(seconds: 2),
     Duration freshnessWindow = const Duration(seconds: 20),
     double fetchRadiusMeters = 40,
-    double baseVisibleRadiusMeters = 25,
     double maxVisibleRadiusMeters = 35,
   }) : _authService = authService,
-       _realtimeService = realtimeService,
-       _transport = transport,
-       _refreshInterval = refreshInterval,
-       _heartbeatInterval = heartbeatInterval,
-       _freshnessWindow = freshnessWindow,
-       _fetchRadiusMeters = fetchRadiusMeters,
-       _baseVisibleRadiusMeters = baseVisibleRadiusMeters,
-       _maxVisibleRadiusMeters = maxVisibleRadiusMeters,
-       super(const CitizenNearbyPresenceState.initial());
+        _realtimeService = realtimeService,
+        _transport = transport,
+        _refreshInterval = refreshInterval,
+        _heartbeatInterval = heartbeatInterval,
+        _movingPublishInterval = movingPublishInterval,
+        _freshnessWindow = freshnessWindow,
+        _fetchRadiusMeters = fetchRadiusMeters,
+        _maxVisibleRadiusMeters = maxVisibleRadiusMeters,
+        super(const CitizenNearbyPresenceState.initial());
 
   final AuthService _authService;
   final RealtimeService _realtimeService;
   final MeshTransportService _transport;
   final Duration _refreshInterval;
   final Duration _heartbeatInterval;
+  final Duration _movingPublishInterval;
   final Duration _freshnessWindow;
   final double _fetchRadiusMeters;
-  final double _baseVisibleRadiusMeters;
   final double _maxVisibleRadiusMeters;
 
   RealtimeSubscriptionHandle? _realtimeHandle;
@@ -140,6 +143,7 @@ class CitizenNearbyPresenceController
   String? _activeUserId;
   String? _displayName;
   double? _selfAccuracyMeters;
+  LocationMotionMode _selfMotionMode = LocationMotionMode.acquiring;
   double? _publishedAccuracyMeters;
   DateTime? _lastPublishedAt;
   LocationData? _publishedPresenceLocation;
@@ -193,14 +197,22 @@ class CitizenNearbyPresenceController
     );
   }
 
-  void updateSelfLocation(LocationData? location, {double? latestAccuracyMeters}) {
+  void updateSelfLocation(
+    LocationData? location, {
+    double? latestAccuracyMeters,
+    LocationMotionMode? motionMode,
+  }) {
     if (_disposed) {
       return;
     }
     _selfAccuracyMeters = latestAccuracyMeters;
+    if (motionMode != null) {
+      _selfMotionMode = motionMode;
+    }
     state = state.copyWith(selfLocation: location);
     _pruneNearbyUsers();
     if (location == null) {
+      _selfMotionMode = LocationMotionMode.acquiring;
       _clearPendingPublishedCandidate();
       return;
     }
@@ -260,12 +272,14 @@ class CitizenNearbyPresenceController
                   latitude: pin.latitude,
                   longitude: pin.longitude,
                   accuracyMeters: pin.accuracyMeters,
+                  bleMatched: _isBleMatched(pin),
                   lastSeenAt: pin.lastSeenAt,
                   distanceMeters: distanceMeters,
                 );
               })
               .where(
-                (pin) => pin.distanceMeters <=
+                (pin) => pin.bleMatched ||
+                    pin.distanceMeters <=
                     _effectiveVisibleRadius(
                       _selfAccuracyMeters,
                       pin.accuracyMeters,
@@ -274,7 +288,9 @@ class CitizenNearbyPresenceController
               .toList(growable: false)
             ..sort(
               (left, right) =>
-                  left.distanceMeters.compareTo(right.distanceMeters),
+                  left.bleMatched == right.bleMatched
+                      ? left.distanceMeters.compareTo(right.distanceMeters)
+                      : (left.bleMatched ? -1 : 1),
             );
 
       state = state.copyWith(
@@ -299,11 +315,15 @@ class CitizenNearbyPresenceController
     }
     _pruneNearbyUsers();
     final lastPublishedAt = _lastPublishedAt;
+    final publishInterval =
+        _selfMotionMode == LocationMotionMode.moving
+            ? _movingPublishInterval
+            : _heartbeatInterval;
     final shouldHeartbeat =
         state.selfLocation != null &&
         (lastPublishedAt == null ||
             DateTime.now().toUtc().difference(lastPublishedAt) >=
-                _heartbeatInterval);
+                publishInterval);
     if (shouldHeartbeat) {
       await _syncPublishedPresence(forceHeartbeat: true);
       return;
@@ -321,11 +341,28 @@ class CitizenNearbyPresenceController
     }
 
     final publishedAnchor = _publishedPresenceLocation;
+    final isConfidenceBlocked =
+        _selfMotionMode == LocationMotionMode.degraded ||
+        _selfMotionMode == LocationMotionMode.acquiring;
     if (publishedAnchor == null) {
+      if (isConfidenceBlocked) {
+        return;
+      }
       await _publishPresence(
         location: selfLocation,
         accuracyMeters: _selfAccuracyMeters,
       );
+      return;
+    }
+
+    if (isConfidenceBlocked) {
+      _clearPendingPublishedCandidate();
+      if (forceHeartbeat) {
+        await _publishPresence(
+          location: publishedAnchor,
+          accuracyMeters: _publishedAccuracyMeters ?? _selfAccuracyMeters,
+        );
+      }
       return;
     }
 
@@ -341,7 +378,8 @@ class CitizenNearbyPresenceController
 
     if (distanceFromPublished <= holdRadiusMeters) {
       _clearPendingPublishedCandidate();
-      if (_shouldUpgradePublishedAnchor(
+      if (distanceFromPublished <= 8 &&
+          _shouldUpgradePublishedAnchor(
         currentPublished: publishedAnchor,
         candidate: selfLocation,
         currentPublishedAccuracyMeters: _publishedAccuracyMeters,
@@ -448,12 +486,35 @@ class CitizenNearbyPresenceController
             pin.latitude,
             pin.longitude,
           );
-          return distanceMeters <=
+          final bleMatched = _isBleMatched(pin);
+          return bleMatched ||
+              distanceMeters <=
               _effectiveVisibleRadius(
                 _selfAccuracyMeters,
                 pin.accuracyMeters,
               );
         })
+        .map(
+          (pin) => NearbyCitizenPin(
+            userId: pin.userId,
+            displayName: pin.displayName,
+            meshDeviceId: pin.meshDeviceId,
+            meshIdentityHash: pin.meshIdentityHash,
+            latitude: pin.latitude,
+            longitude: pin.longitude,
+            accuracyMeters: pin.accuracyMeters,
+            bleMatched: _isBleMatched(pin),
+            lastSeenAt: pin.lastSeenAt,
+            distanceMeters: selfLocation == null
+                ? pin.distanceMeters
+                : Geolocator.distanceBetween(
+                    selfLocation.latitude,
+                    selfLocation.longitude,
+                    pin.latitude,
+                    pin.longitude,
+                  ),
+          ),
+        )
         .toList(growable: false);
 
     if (filtered.length != state.nearbyUsers.length) {
@@ -465,14 +526,24 @@ class CitizenNearbyPresenceController
     double? selfAccuracyMeters,
     double? otherAccuracyMeters,
   ) {
+    const defaultVisibleRadiusMeters = 25.0;
+    const minimumVisibleRadiusMeters = 20.0;
     if (selfAccuracyMeters == null || otherAccuracyMeters == null) {
-      return _baseVisibleRadiusMeters;
+      return defaultVisibleRadiusMeters.clamp(
+        minimumVisibleRadiusMeters,
+        _maxVisibleRadiusMeters,
+      );
     }
     final combinedAccuracyMeters = selfAccuracyMeters + otherAccuracyMeters;
     return math.max(
-      _baseVisibleRadiusMeters,
+      minimumVisibleRadiusMeters,
       math.min(_maxVisibleRadiusMeters, combinedAccuracyMeters),
     );
+  }
+
+  bool _isBleMatched(NearbyCitizenPin pin) {
+    return _transport.hasPeerForDeviceId(pin.meshDeviceId) ||
+        _transport.hasPeerForMeshIdentityHash(pin.meshIdentityHash);
   }
 
   double _stationaryHoldRadiusMeters(double accuracyMeters) {
@@ -532,7 +603,7 @@ class CitizenNearbyPresenceController
     if (publishedAccuracy <= 0 || candidateAccuracy <= 0) {
       return false;
     }
-    return candidateAccuracy <= publishedAccuracy * 0.6;
+    return candidateAccuracy <= publishedAccuracy * 0.7;
   }
 
   void _clearPendingPublishedCandidate() {

@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/survivor_compass_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/dispatch_map_tiles.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +50,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   List<Map<String, dynamic>> _nodes = [];
   List<Map<String, dynamic>> _signals = [];
   List<Map<String, dynamic>> _devices = [];
+  List<Map<String, dynamic>> _localPeers = [];
 
   /// Currently selected node for the bottom sheet.
   Map<String, dynamic>? _selectedNode;
@@ -57,6 +61,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     super.initState();
     _refresh();
     unawaited(_detectGpsCenter());
+    unawaited(_loadLocalPeers());
     _startGpsWatch();
   }
 
@@ -78,6 +83,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
         });
       }
       unawaited(_detectGpsCenter());
+      unawaited(_loadLocalPeers());
       return;
     }
 
@@ -96,12 +102,41 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
         _loading = false;
       });
       _moveCameraToPreferredCenter();
+      unawaited(_loadLocalPeers());
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
     } finally {
       unawaited(_detectGpsCenter());
     }
+  }
+
+  Future<void> _loadLocalPeers() async {
+    final transport = ref.read(meshTransportProvider);
+    final snapshot = await transport.buildTopologySnapshot();
+    if (!mounted || snapshot == null) return;
+    final nodes = (snapshot['nodes'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    setState(() {
+      _localPeers = nodes
+          .where((n) => n['lat'] != null && n['lng'] != null)
+          .map((n) => <String, dynamic>{
+                'id': n['nodeDeviceId'],
+                'node_id': n['nodeDeviceId'],
+                'name': n['displayName'] ?? 'Dispatch Node',
+                'lat': n['lat'],
+                'lng': n['lng'],
+                'last_seen': n['lastSeenTimestamp'] != null
+                    ? DateTime.fromMillisecondsSinceEpoch(
+                        (n['lastSeenTimestamp'] as num).toInt(),
+                        isUtc: true,
+                      ).toIso8601String()
+                    : null,
+                'role': 'Mesh Relay',
+                'status': 'connected',
+              })
+          .toList();
+    });
   }
 
   Future<void> _detectGpsCenter() async {
@@ -135,7 +170,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   LatLng _preferredCenter() {
     if (_gpsCenter != null) return _gpsCenter!;
-    for (final row in [..._signals, ..._devices, ..._nodes]) {
+    for (final row in [..._signals, ..._devices, ..._nodes, ..._localPeers]) {
       final point = _readPoint(row);
       if (point != null) return point;
     }
@@ -293,6 +328,26 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
       );
     }
 
+    // BLE peer nodes — amber markers with label
+    for (final peer in _localPeers) {
+      final point = _readPoint(peer);
+      if (point == null) continue;
+      final peerId = peer['node_id'] as String? ?? peer['id'] as String? ?? 'peer';
+      final label = peer['name'] as String? ??
+          'Node #${peerId.length > 3 ? peerId.substring(peerId.length - 3) : peerId}';
+      markers.add(
+        Marker(
+          point: point,
+          width: 120,
+          height: 50,
+          child: GestureDetector(
+            onTap: () => _selectNode(peer),
+            child: _NodeMarker(label: label, showLabel: true, isPeer: true),
+          ),
+        ),
+      );
+    }
+
     // Device last-seen locations — small gray dots
     for (final device in _devices) {
       final point = _readPoint(device);
@@ -328,7 +383,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     final lines = <Polyline>[];
     final allPoints = <LatLng>[];
 
-    for (final row in [..._nodes, ..._signals, ..._devices]) {
+    for (final row in [..._nodes, ..._signals, ..._devices, ..._localPeers]) {
       final point = _readPoint(row);
       if (point != null) allPoints.add(point);
     }
@@ -507,6 +562,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                 onOpenCompass: () => _openCompass(
                   _selectedNode!['message_id'] as String?,
                 ),
+                onChat: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const OfflineCommsScreen(),
+                  ),
+                ),
                 allowResolve: widget.allowResolveActions,
                 isResolving: _resolvingSignalId ==
                     (_selectedNode!['id'] as String?),
@@ -636,13 +696,15 @@ class _YouMarkerState extends State<_YouMarker>
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _NodeMarker extends StatelessWidget {
-  const _NodeMarker({required this.label, this.showLabel = false});
+  const _NodeMarker({required this.label, this.showLabel = false, this.isPeer = false});
 
   final String label;
   final bool showLabel;
+  final bool isPeer;
 
   @override
   Widget build(BuildContext context) {
+    final dotColor = isPeer ? Colors.amber : dc.secondary;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -650,7 +712,7 @@ class _NodeMarker extends StatelessWidget {
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: dc.secondary,
+            color: dotColor,
             shape: BoxShape.circle,
             border: Border.all(color: dc.surface, width: 2),
             boxShadow: [
@@ -892,6 +954,7 @@ class _NodeDetailSheet extends StatelessWidget {
     required this.locationTrailEnabled,
     required this.onToggleTrail,
     required this.onOpenCompass,
+    this.onChat,
     this.allowResolve = false,
     this.isResolving = false,
     this.onResolve,
@@ -906,6 +969,7 @@ class _NodeDetailSheet extends StatelessWidget {
   final bool locationTrailEnabled;
   final ValueChanged<bool> onToggleTrail;
   final VoidCallback onOpenCompass;
+  final VoidCallback? onChat;
   final bool allowResolve;
   final bool isResolving;
   final VoidCallback? onResolve;
@@ -1090,6 +1154,53 @@ class _NodeDetailSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Chat button
+              if (onChat != null)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onChat,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? dc.darkSurfaceContainer
+                            : dc.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: (isDark ? dc.darkPrimaryAccent : dc.primary)
+                              .withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              size: 20,
+                              color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Chat via Mesh',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (onChat != null) const SizedBox(height: 12),
 
               // Open Compass Locator button
               Material(

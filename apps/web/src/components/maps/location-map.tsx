@@ -27,7 +27,7 @@ export function LocationMap({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-outline-variant/10",
+        "isolate overflow-hidden rounded-xl border border-outline-variant/10",
         wrapperClassName,
       )}
     >

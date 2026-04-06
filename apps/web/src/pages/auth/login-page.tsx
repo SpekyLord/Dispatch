@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { DispatchLogo } from "@/components/branding/dispatch-logo";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 
@@ -145,6 +146,12 @@ export function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      const destination = routeState.from ?? roleHomePaths[response.user.role];
+      if (!destination) {
+        setError("Login succeeded but your account role is not recognised. Please try again.");
+        return;
+      }
+
       setSession({
         user: {
           id: response.user.id,
@@ -157,7 +164,7 @@ export function LoginPage() {
         department: response.department ?? null,
       });
 
-      navigate(routeState.from ?? roleHomePaths[response.user.role] ?? "/");
+      navigate(destination);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Login failed.",
@@ -220,9 +227,9 @@ export function LoginPage() {
       <div className="relative z-10 flex min-h-screen flex-col">
         <header className="bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-5">
-            <span className="text-2xl font-headline italic text-on-surface">
-              Dispatch
-            </span>
+            <Link to="/" aria-label="Dispatch home">
+              <DispatchLogo className="h-12 w-12" />
+            </Link>
             <nav className="hidden items-center gap-8 md:flex">
               <Link
                 to="/feed"
@@ -269,9 +276,7 @@ export function LoginPage() {
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-headline text-[1.8rem] italic leading-none text-white">
-                        Dispatch
-                      </p>
+                      <DispatchLogo className="h-14 w-14 rounded-[20px]" />
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-white/62">
                         Field Access Portal
                       </p>
@@ -463,9 +468,7 @@ export function LoginPage() {
 
         <footer className="bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-4 text-[11px] tracking-[0.22em] text-on-surface-variant">
-            <span className="font-headline text-xl italic tracking-normal text-on-surface">
-              Dispatch
-            </span>
+            <DispatchLogo className="h-10 w-10" />
             <span>© 2026 Dispatch. Community-driven crisis management.</span>
           </div>
         </footer>

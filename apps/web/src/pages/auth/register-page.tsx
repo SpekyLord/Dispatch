@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { DispatchLogo } from "@/components/branding/dispatch-logo";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore, type AppRole } from "@/lib/auth/session-store";
 
@@ -277,9 +278,9 @@ export function RegisterPage() {
       <div className="relative z-10 flex min-h-screen flex-col">
         <header className="bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-12 py-5">
-            <span className="text-2xl font-headline italic text-on-surface">
-              Dispatch
-            </span>
+            <Link to="/" aria-label="Dispatch home">
+              <DispatchLogo className="h-12 w-12" />
+            </Link>
             <nav className="hidden items-center gap-8 md:flex">
               <Link
                 to="/feed"
@@ -326,9 +327,7 @@ export function RegisterPage() {
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-headline text-[1.8rem] italic leading-none text-white">
-                        Dispatch
-                      </p>
+                      <DispatchLogo className="h-14 w-14 rounded-[20px]" />
                       <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.24em] text-white/62">
                         Field Access Portal
                       </p>
@@ -797,8 +796,8 @@ export function RegisterPage() {
 
         <footer className="border-t border-outline-variant/15 bg-surface-container/90 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-[1440px] flex-col items-center justify-between px-12 py-7 md:flex-row">
-            <div className="mb-4 font-headline italic text-on-surface md:mb-0">
-              Dispatch
+            <div className="mb-4 md:mb-0">
+              <DispatchLogo className="h-10 w-10" />
             </div>
             <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">
               &copy; 2026 Dispatch. Community-driven crisis management.

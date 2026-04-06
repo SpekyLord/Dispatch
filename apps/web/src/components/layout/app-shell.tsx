@@ -560,7 +560,7 @@ function DepartmentEmergencyAlert({
   );
 
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
       <div
         className={`w-full max-w-[640px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}
       >
@@ -728,7 +728,7 @@ const roleNavItems: Record<string, NavItem[]> = {
       labelKey: "nav.notifications",
       icon: "notifications",
     },
-    { to: "/profile", labelKey: "nav.profile", icon: "person" },
+    { to: "/citizen/profile", labelKey: "nav.profile", icon: "person" },
   ],
   department: [
     { to: "/department", labelKey: "nav.dashboard", icon: "dashboard" },
@@ -790,7 +790,7 @@ const roleNavItems: Record<string, NavItem[]> = {
       labelKey: "nav.notifications",
       icon: "notifications",
     },
-    { to: "/profile", labelKey: "nav.profile", icon: "person" },
+    { to: "/municipality/profile", labelKey: "nav.profile", icon: "person" },
   ],
 };
 
@@ -866,7 +866,9 @@ export function AppShell({
     : { title: "Dispatch", subtitle: "" };
 
   const profileRoute =
-    user?.role === "department" ? "/department/profile" : "/profile";
+    user?.role === "department" ? "/department/profile"
+    : user?.role === "municipality" ? "/municipality/profile"
+    : "/citizen/profile";
   const profileName =
     user?.role === "department"
       ? (department?.name ?? user?.full_name ?? user?.email ?? "Dispatch User")

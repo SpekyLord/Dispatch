@@ -387,7 +387,7 @@ function LiveMapPlaceholderCard({
         </div>
 
         <div
-          className="relative mt-5 min-h-[365px] overflow-hidden rounded-[30px] border border-[#d8c9bc] bg-[#f8f1ea] sm:min-h-[425px]"
+          className="relative isolate mt-5 min-h-[365px] overflow-hidden rounded-[30px] border border-[#d8c9bc] bg-[#f8f1ea] sm:min-h-[425px]"
           data-testid="department-live-map-placeholder"
         >
           <div className="absolute inset-0">

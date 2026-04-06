@@ -7,6 +7,7 @@ import { LoginPage } from "@/pages/auth/login-page";
 import { RegisterPage } from "@/pages/auth/register-page";
 import { CitizenHomePage } from "@/pages/citizen/citizen-home-page";
 import { CitizenNewsFeedPage } from "@/pages/citizen/citizen-news-feed-page";
+import { CitizenProfilePage } from "@/pages/citizen/citizen-profile-page";
 import { CitizenReportFormPage } from "@/pages/citizen/citizen-report-form-page";
 import { CitizenReportDetailPage } from "@/pages/citizen/citizen-report-detail-page";
 import { DepartmentHomePage } from "@/pages/department/department-home-page";
@@ -48,6 +49,7 @@ export function AppRouter() {
         <Route element={<ProtectedRoute allowedRoles={["citizen"]} />}>
           <Route element={<CitizenHomePage />} path="/citizen" />
           <Route element={<CitizenNewsFeedPage />} path="/citizen/news-feed" />
+          <Route element={<CitizenProfilePage />} path="/citizen/profile" />
           <Route element={<CitizenReportFormPage />} path="/citizen/report/new" />
           <Route element={<CitizenReportDetailPage />} path="/citizen/report/:reportId" />
         </Route>

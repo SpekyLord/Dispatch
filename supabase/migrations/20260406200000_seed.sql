@@ -1,6 +1,7 @@
 -- =============================================================================
--- Dispatch – Consolidated Idempotent Migration
+-- Dispatch – Single Consolidated Idempotent Seed
 -- Safe to run on a fresh database OR one that already has some/all objects.
+-- Merges: 20260401000000, 20260404000000, 20260405031500, 20260406000000, 20260406120000
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -13,7 +14,6 @@ create extension if not exists pgcrypto;
 -- ---------------------------------------------------------------------------
 do $$
 begin
-  -- core enums
   if not exists (select 1 from pg_type where typname = 'user_role') then
     create type public.user_role as enum ('citizen', 'department', 'municipality');
   end if;
@@ -110,6 +110,9 @@ create table if not exists public.users (
   phone text,
   avatar_url text,
   is_verified boolean not null default false,
+  description text not null default '',
+  header_photo text,
+  profile_picture text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -144,6 +147,8 @@ create table if not exists public.incident_reports (
   address text,
   image_urls text[] not null default '{}'::text[],
   is_escalated boolean not null default false,
+  mesh_message_id text,
+  is_mesh_origin boolean not null default false,
   resolved_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -179,6 +184,9 @@ create table if not exists public.posts (
   category public.post_category not null,
   image_urls text[] not null default '{}'::text[],
   is_pinned boolean not null default false,
+  mesh_message_id text,
+  is_mesh_origin boolean not null default false,
+  mesh_originated boolean not null default false,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -344,7 +352,10 @@ create table if not exists public.department_feed_posts (
   title text not null,
   content text not null,
   category text not null,
-  location text not null
+  location text not null,
+  reaction integer not null default 0,
+  post_kind text not null default 'standard',
+  assessment_details jsonb
 );
 
 create table if not exists public.department_feed_storage (
@@ -371,11 +382,13 @@ create table if not exists public.department_feed_reactions (
 );
 
 -- ---------------------------------------------------------------------------
--- 8. ALTER TABLE – add columns to existing tables
+-- 8. ALTER TABLE – add columns to existing tables (idempotent for existing DBs)
 -- ---------------------------------------------------------------------------
--- department_feed_posts: reaction counter
-alter table public.department_feed_posts
-add column if not exists reaction integer not null default 0;
+-- users: rich profile fields
+alter table public.users
+  add column if not exists description    text    not null default '',
+  add column if not exists header_photo   text,
+  add column if not exists profile_picture text;
 
 -- incident_reports: mesh origin tracking
 alter table public.incident_reports
@@ -387,6 +400,34 @@ alter table public.posts
   add column if not exists mesh_message_id text,
   add column if not exists is_mesh_origin boolean not null default false,
   add column if not exists mesh_originated boolean not null default false;
+
+-- department_feed_posts: reaction counter + assessment fields
+alter table public.department_feed_posts
+  add column if not exists reaction integer not null default 0;
+
+alter table public.department_feed_posts
+  add column if not exists post_kind text not null default 'standard',
+  add column if not exists assessment_details jsonb;
+
+-- backfill post_kind on rows that pre-date the column
+update public.department_feed_posts
+set post_kind = 'standard'
+where post_kind is null;
+
+-- post_kind check constraint (idempotent via pg_constraint lookup)
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'department_feed_posts_post_kind_check'
+  ) then
+    alter table public.department_feed_posts
+      add constraint department_feed_posts_post_kind_check
+      check (post_kind in ('standard', 'assessment'));
+  end if;
+end
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 9. Mesh tables
@@ -494,6 +535,19 @@ create table if not exists public.device_location_trail (
     check (app_state in ('foreground', 'background', 'sos_active'))
 );
 
+-- citizen nearby presence pins
+create table if not exists public.citizen_nearby_presence (
+  user_id uuid primary key references public.users(id) on delete cascade,
+  display_name text not null default '',
+  lat double precision not null,
+  lng double precision not null,
+  location jsonb not null default '{}'::jsonb,
+  accuracy_meters real,
+  last_seen_at timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 -- ---------------------------------------------------------------------------
 -- 10. Indexes
 -- ---------------------------------------------------------------------------
@@ -567,6 +621,10 @@ create index if not exists mesh_comms_messages_scope_idx on public.mesh_comms_me
 create index if not exists device_location_trail_device_recorded_idx on public.device_location_trail (device_fingerprint, recorded_at desc);
 create index if not exists device_location_trail_recorded_idx on public.device_location_trail (recorded_at desc);
 
+-- citizen_nearby_presence
+create index if not exists citizen_nearby_presence_last_seen_idx on public.citizen_nearby_presence (last_seen_at desc);
+create index if not exists citizen_nearby_presence_lat_lng_idx on public.citizen_nearby_presence (lat, lng);
+
 -- ---------------------------------------------------------------------------
 -- 11. Triggers
 -- ---------------------------------------------------------------------------
@@ -587,6 +645,11 @@ create trigger set_damage_assessments_updated_at before update on public.damage_
 
 drop trigger if exists set_mesh_topology_nodes_updated_at on public.mesh_topology_nodes;
 create trigger set_mesh_topology_nodes_updated_at before update on public.mesh_topology_nodes for each row execute procedure public.set_updated_at();
+
+drop trigger if exists set_citizen_nearby_presence_updated_at on public.citizen_nearby_presence;
+create trigger set_citizen_nearby_presence_updated_at
+before update on public.citizen_nearby_presence
+for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- 12. Enable RLS
@@ -609,6 +672,7 @@ alter table public.survivor_signals enable row level security;
 alter table public.mesh_topology_nodes enable row level security;
 alter table public.mesh_comms_messages enable row level security;
 alter table public.device_location_trail enable row level security;
+alter table public.citizen_nearby_presence enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- 13. RLS policies (final versions only)
@@ -670,13 +734,19 @@ on public.incident_reports for update
 using (reporter_id = auth.uid() or public.is_municipality())
 with check (reporter_id = auth.uid() or public.is_municipality());
 
--- department_responses (final: includes visible-report access)
+-- department_responses (final: includes reporter + department + municipality access)
 drop policy if exists "department_responses_select_owner_or_municipality" on public.department_responses;
 drop policy if exists "department_responses_select_visible_report_or_municipality" on public.department_responses;
 create policy "department_responses_select_visible_report_or_municipality"
 on public.department_responses for select
 using (
   public.is_municipality()
+  or exists (
+    select 1
+    from public.incident_reports
+    where public.incident_reports.id = department_responses.report_id
+      and public.incident_reports.reporter_id = auth.uid()
+  )
   or exists (
     select 1
     from public.incident_reports
@@ -936,6 +1006,23 @@ create policy "device_location_trail_insert_any"
 on public.device_location_trail for insert
 with check (true);
 
+-- citizen_nearby_presence
+drop policy if exists "citizen_nearby_presence_select_authenticated" on public.citizen_nearby_presence;
+create policy "citizen_nearby_presence_select_authenticated"
+on public.citizen_nearby_presence for select
+using (auth.role() = 'authenticated');
+
+drop policy if exists "citizen_nearby_presence_insert_self" on public.citizen_nearby_presence;
+create policy "citizen_nearby_presence_insert_self"
+on public.citizen_nearby_presence for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "citizen_nearby_presence_update_self" on public.citizen_nearby_presence;
+create policy "citizen_nearby_presence_update_self"
+on public.citizen_nearby_presence for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
 -- ---------------------------------------------------------------------------
 -- 14. Storage buckets
 -- ---------------------------------------------------------------------------
@@ -1045,6 +1132,9 @@ begin
   exception when duplicate_object or undefined_object then null; end;
 
   begin alter publication supabase_realtime add table public.mesh_comms_messages;
+  exception when duplicate_object or undefined_object then null; end;
+
+  begin alter publication supabase_realtime add table public.citizen_nearby_presence;
   exception when duplicate_object or undefined_object then null; end;
 end $$;
 

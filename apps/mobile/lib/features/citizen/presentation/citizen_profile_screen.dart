@@ -1,9 +1,12 @@
 import 'dart:async';
 
-import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
+import 'package:dispatch_mobile/core/state/notification_inbox_controller.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_edit_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +24,10 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
 
   List<Map<String, dynamic>> _reports = const [];
   String? _phone;
+  String? _description;
   String? _avatarUrl;
+  String? _profilePictureUrl;
+  String? _headerPhotoUrl;
   bool _loading = true;
   bool _meshBusy = false;
   bool _signingOut = false;
@@ -79,93 +85,69 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
     setState(() {
       _reports = reports;
       _phone = _readProfileString(profile, ['phone']);
-      _avatarUrl = _readProfileString(profile, ['avatar_url']);
+      _description = _readProfileString(profile, ['description']);
+      _avatarUrl = _readProfileString(profile, [
+        'avatar_url',
+        'profile_picture',
+        'profile_photo',
+      ]);
+      _profilePictureUrl = _readProfileString(profile, [
+        'profile_picture',
+        'profile_photo',
+        'avatar_url',
+      ]);
+      _headerPhotoUrl = _readProfileString(profile, ['header_photo']);
       _loading = false;
     });
   }
 
-  Future<void> _editName() async {
+  Future<void> _openEditProfile() async {
     final session = ref.read(sessionControllerProvider);
-    final currentValue = session.fullName ?? '';
-    final controller = TextEditingController(text: currentValue);
-
-    final nextValue = await showDialog<String>(
-      context: context,
-      builder: (context) => _ProfileFieldDialog(
-        title: 'Change Name',
-        description: 'Update the public mesh name shown to nearby responders.',
-        hintText: 'Full name',
-        initialValue: currentValue,
-        controller: controller,
-        keyboardType: TextInputType.name,
-      ),
-    );
-
-    if (!mounted ||
-        nextValue == null ||
-        nextValue.trim() == currentValue.trim()) {
-      return;
-    }
-
-    await _updateProfile(fullName: nextValue.trim());
-  }
-
-  Future<void> _editPhone() async {
-    final controller = TextEditingController(text: _phone ?? '');
-
-    final nextValue = await showDialog<String>(
-      context: context,
-      builder: (context) => _ProfileFieldDialog(
-        title: 'Phone Number',
-        description:
-            'Keep a callback number available for mesh relay follow-ups.',
-        hintText: '+1 555 000 0000',
-        initialValue: _phone ?? '',
-        controller: controller,
-        keyboardType: TextInputType.phone,
-      ),
-    );
-
-    if (!mounted ||
-        nextValue == null ||
-        nextValue.trim() == (_phone ?? '').trim()) {
-      return;
-    }
-
-    await _updateProfile(phone: nextValue.trim());
-  }
-
-  Future<void> _updateProfile({String? fullName, String? phone}) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final response = await ref
-          .read(authServiceProvider)
-          .updateProfile(fullName: fullName, phone: phone);
-      final profile =
-          (response['profile'] as Map<String, dynamic>?) ??
-          (response.isNotEmpty ? response : null);
-      final nextName = _readProfileString(profile, ['full_name']);
-      final nextPhone = _readProfileString(profile, ['phone']);
-      if (nextName != null && nextName.isNotEmpty) {
-        ref.read(sessionControllerProvider.notifier).updateFullName(nextName);
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _phone = nextPhone ?? _phone;
-        _avatarUrl = _readProfileString(profile, ['avatar_url']) ?? _avatarUrl;
-      });
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully.')),
-      );
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Profile update failed. Please try again.'),
+    final result = await Navigator.of(context).push<CitizenProfileEditResult>(
+      MaterialPageRoute(
+        builder: (_) => CitizenProfileEditScreen(
+          initialFullName: session.fullName ?? '',
+          initialPhone: _phone ?? '',
+          initialDescription: _description ?? '',
+          initialProfilePictureUrl: _profilePictureUrl,
+          initialHeaderPhotoUrl: _headerPhotoUrl,
         ),
-      );
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
     }
+
+    final profile = result.profile;
+    final nextName = _readProfileString(profile, ['full_name']);
+    if (nextName != null && nextName.isNotEmpty) {
+      ref.read(sessionControllerProvider.notifier).updateFullName(nextName);
+    }
+    setState(() {
+      _phone = _readProfileString(profile, ['phone']) ?? _phone;
+      _description =
+          _readProfileString(profile, ['description']) ?? _description;
+      _avatarUrl =
+          _readProfileString(profile, [
+            'avatar_url',
+            'profile_picture',
+            'profile_photo',
+          ]) ??
+          _avatarUrl;
+      _profilePictureUrl =
+          _readProfileString(profile, [
+            'profile_picture',
+            'profile_photo',
+            'avatar_url',
+          ]) ??
+          _profilePictureUrl;
+      _headerPhotoUrl =
+          _readProfileString(profile, ['header_photo']) ?? _headerPhotoUrl;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile updated successfully.')),
+    );
   }
 
   Future<void> _toggleMeshMode(bool enabled) async {
@@ -219,16 +201,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
     }
   }
 
-  void _showPasswordMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Password changes are not available in this mobile build yet.',
-        ),
-      ),
-    );
-  }
-
   void _toggleAppearance(bool enabled) {
     setState(() => _darkModePreview = enabled);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -245,7 +217,8 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final session = ref.watch(sessionControllerProvider);
-    final transport = ref.read(meshTransportProvider);
+    final transport = ref.watch(meshTransportProvider);
+    final inbox = ref.watch(notificationInboxControllerProvider);
     final stats = _CitizenProfileStats.fromReports(_reports);
     final fullName = (session.fullName ?? '').trim().isEmpty
         ? 'Citizen Responder'
@@ -257,7 +230,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
     final nodeStateLabel = transport.isDiscovering
         ? 'ACTIVE NODE'
         : 'STANDBY NODE';
-    final phone = (_phone ?? '').trim();
     final topPadding = MediaQuery.of(context).padding.top + 18;
     final backgroundColor = isDark ? dc.darkBackground : dc.background;
     final cardColor = isDark ? dc.darkSurface : dc.surfaceContainerLow;
@@ -276,22 +248,69 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.signal_cellular_alt,
-                      color: isDark ? dc.darkPrimaryAccent : dc.primary,
-                      size: 21,
-                    ),
-                    const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        'Mesh Communications',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.35,
-                          color: textColor,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Citizen profile',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.35,
+                              color: textColor,
+                            ),
+                          ),
+                          Text(
+                            'Profile, report stats, quick links, and node settings.',
+                            style: TextStyle(fontSize: 12, color: labelColor),
+                          ),
+                        ],
                       ),
+                    ),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            );
+                          },
+                          icon: Icon(
+                            Icons.notifications_none_rounded,
+                            color: textColor,
+                          ),
+                          tooltip: 'Notifications',
+                        ),
+                        if (inbox.unreadCount > 0)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: dc.statusError,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                inbox.unreadCount > 99
+                                    ? '99+'
+                                    : '${inbox.unreadCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     IconButton(
                       onPressed: _loading
@@ -307,17 +326,60 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                 ),
               ),
               const SizedBox(height: 22),
+              Container(
+                height: 164,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(26),
+                  gradient: const LinearGradient(
+                    colors: dc.heroGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  image: (_headerPhotoUrl ?? '').isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(_headerPhotoUrl!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 18),
               Center(
                 child: _ProfileIdentityHero(
-                  avatarUrl: (_avatarUrl ?? '').isEmpty
+                  avatarUrl: (_profilePictureUrl ?? _avatarUrl ?? '').isEmpty
                       ? _fallbackAvatarUrl
-                      : _avatarUrl!,
+                      : (_profilePictureUrl ?? _avatarUrl)!,
                   initials: _initialsFor(fullName),
                   fullName: fullName,
                   citizenId: citizenId,
                   sectorLabel: sectorLabel,
                   nodeStateLabel: nodeStateLabel,
                   isDark: isDark,
+                ),
+              ),
+              if ((_description ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text(
+                    _description!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: labelColor,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _openEditProfile,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit profile'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: dc.primary,
+                  foregroundColor: dc.onPrimary,
                 ),
               ),
               const SizedBox(height: 28),
@@ -360,37 +422,74 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              _SectionLabel(title: 'Account Credentials', color: labelColor),
+              _SectionLabel(title: 'Quick Links', color: labelColor),
               const SizedBox(height: 10),
               _GroupedCard(
                 backgroundColor: cardColor,
                 children: [
                   _ActionTile(
-                    icon: Icons.person,
-                    title: 'Change Name',
-                    subtitle: 'Update your public mesh identity',
-                    onTap: _editName,
+                    icon: Icons.assignment_outlined,
+                    title: 'My Reports',
+                    subtitle: '${stats.totalReports} total reports logged',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const Scaffold(
+                            body: CitizenFeedScreen(
+                              initialSegment: CitizenFeedSegment.reports,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                     isDark: isDark,
                   ),
                   _ToneDivider(isDark: isDark),
                   _ActionTile(
-                    icon: Icons.lock,
-                    title: 'Change Password',
-                    subtitle: 'Password reset is handled securely',
-                    onTap: _showPasswordMessage,
+                    icon: Icons.notifications_none_rounded,
+                    title: 'Notifications',
+                    subtitle: inbox.unreadCount == 0
+                        ? 'All caught up'
+                        : '${inbox.unreadCount} unread updates',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
                     isDark: isDark,
                   ),
                   _ToneDivider(isDark: isDark),
                   _ActionTile(
-                    icon: Icons.call,
-                    title: 'Phone Number',
-                    subtitle: phone.isEmpty
-                        ? 'Add a callback number'
-                        : _maskPhone(phone),
-                    onTap: _editPhone,
+                    icon: Icons.newspaper_outlined,
+                    title: 'Dispatch News',
+                    subtitle: 'Browse advisories and department updates',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const Scaffold(body: CitizenFeedScreen()),
+                        ),
+                      );
+                    },
                     isDark: isDark,
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+              _SectionLabel(title: 'Published Posts', color: labelColor),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'No published posts yet.',
+                  style: TextStyle(color: dc.mutedInk),
+                ),
               ),
               const SizedBox(height: 24),
               _SectionLabel(title: 'App Configuration', color: labelColor),
@@ -430,7 +529,7 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
               const SizedBox(height: 12),
               Center(
                 child: Text(
-                  'App Version 0.1.0-stable • Build 1',
+                  'App Version 0.1.0-stable - Build 1',
                   style: TextStyle(
                     fontSize: 11,
                     color: labelColor.withValues(alpha: 0.8),
@@ -500,16 +599,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
     final ring = (total % 9) + 1;
     final block = String.fromCharCode(65 + (total % 26));
     return 'SECTOR $ring-$block';
-  }
-
-  static String _maskPhone(String rawPhone) {
-    final digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length < 4) {
-      return rawPhone;
-    }
-    final suffix = digits.substring(digits.length - 2);
-    final prefixLength = digits.length >= 3 ? 3 : digits.length;
-    return '+${digits.substring(0, prefixLength)} ••• ••$suffix';
   }
 }
 
@@ -604,7 +693,7 @@ class _ProfileIdentityHero extends StatelessWidget {
                 child: Image.network(
                   avatarUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) {
+                  errorBuilder: (context, error, stackTrace) {
                     return DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -711,7 +800,7 @@ class _ProfileIdentityHero extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              '$sectorLabel • $nodeStateLabel',
+              '$sectorLabel - $nodeStateLabel',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -1098,86 +1187,6 @@ class _SignOutButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ProfileFieldDialog extends StatelessWidget {
-  const _ProfileFieldDialog({
-    required this.title,
-    required this.description,
-    required this.hintText,
-    required this.initialValue,
-    required this.controller,
-    required this.keyboardType,
-  });
-
-  final String title;
-  final String description;
-  final String hintText;
-  final String initialValue;
-  final TextEditingController controller;
-  final TextInputType keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AlertDialog(
-      backgroundColor: isDark ? dc.darkSurface : dc.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: isDark ? dc.darkInk : dc.onSurface,
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.45,
-              color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: hintText,
-              filled: true,
-              fillColor: isDark
-                  ? dc.darkSurfaceContainer
-                  : dc.surfaceContainerHigh,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text),
-          style: FilledButton.styleFrom(
-            backgroundColor: dc.primary,
-            foregroundColor: dc.onPrimary,
-          ),
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }

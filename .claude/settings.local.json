@@ -24,7 +24,8 @@
       "Bash(python -m py_compile src/dispatch_api/services/notification_service.py)",
       "Bash(python -m py_compile src/dispatch_api/services/department_service.py)",
       "Bash(python3 -m py_compile src/dispatch_api/services/feed_service.py)",
-      "Bash(py -3 -m py_compile src/dispatch_api/services/feed_service.py)"
+      "Bash(py -3 -m py_compile src/dispatch_api/services/feed_service.py)",
+      "Bash(flutter test:*)"
     ]
   }
 }

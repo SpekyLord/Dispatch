@@ -1,71 +1,108 @@
 import 'dart:async';
 
-import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
+import 'package:dispatch_mobile/core/state/notification_inbox_controller.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_department_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_detail_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
-import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:latlong2/latlong.dart';
 
-const _fallbackFloodImageUrl =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBpbdu1Cxzplfb2Wsq2Q0DKA_FgJIXWmv3NzeMic3oPqqwv-DZ4Ob38QfCn8ng1PiyYWp6CN9uzdrZxZYPgJRearFtdgZKLY2lExm9JJBkLNNDZi0voeEs2BulX_Sc8j_V0VL704Eo2E6u-bJhib8viFwzju63sIN9VLV6duttt-sOJLf-egMOwVG-CYpjeSn1wHqLK4HNhlIXBAmQD6ez-ah_TaJdBMmPkP41GDtYyQwX7lbcun5xF3JtYgk7NTn5ny59etC0zzSE';
-const _fallbackMapImageUrl =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBZPIXpRXkI-oBG7Kl5O5x7L9G2ud9R9ErTbYyZE_aShaXbaFIJcx0pzsd-G1mKSQ0JBClUVUrvGlHQBPv7exYpqVszFGIfsfrys4KSjgTxpnnM6CYMbPuM9D7ptV6Hy8JBRMtNQoha5qiBd613DNK2eGEh00NqB4jiACe7yMFmJTojA6XzxS7h-cfgKAazZwt07DTSN1cKRkhuj1JNbWZP_iLzzcvgvPTAtsJoOZhsFBUrJWzXa6uNuTy_2X7oxnDzybXPzxkifO4';
+enum CitizenFeedSegment { news, reports, messages }
+
+const _feedCategories = <String>[
+  'all',
+  'alert',
+  'warning',
+  'safety_tip',
+  'update',
+  'situational_report',
+];
 
 class CitizenFeedScreen extends ConsumerStatefulWidget {
-  const CitizenFeedScreen({super.key, this.onOpenMapTab, this.onOpenNodesTab});
+  const CitizenFeedScreen({
+    super.key,
+    this.onOpenMapTab,
+    this.onOpenNodesTab,
+    this.initialSegment = CitizenFeedSegment.news,
+  });
 
   final VoidCallback? onOpenMapTab;
   final VoidCallback? onOpenNodesTab;
+  final CitizenFeedSegment initialSegment;
 
   @override
   ConsumerState<CitizenFeedScreen> createState() => _CitizenFeedScreenState();
 }
 
 class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
-  static const _tabLabels = ['All Reports', 'Disaster', 'Messages'];
+  final List<RealtimeSubscriptionHandle> _subscriptions =
+      <RealtimeSubscriptionHandle>[];
+  final Set<String> _bookmarkedPostIds = <String>{};
+  final TextEditingController _searchController = TextEditingController();
 
-  final List<RealtimeSubscriptionHandle> _subscriptions = [];
-  int _selectedTab = 0;
+  late CitizenFeedSegment _segment;
   bool _loading = true;
+  String? _loadError;
   String _searchQuery = '';
-  List<Map<String, dynamic>> _posts = const [];
-  List<Map<String, dynamic>> _reports = const [];
-  List<Map<String, dynamic>> _topologyNodes = const [];
-  List<MeshInboxItem> _inboxItems = const [];
-  LocationData? _location;
+  String _newsCategory = 'all';
+  String _reportStatus = 'all';
+  String _reportCategory = 'all';
+  List<Map<String, dynamic>> _posts = const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _reports = const <Map<String, dynamic>>[];
 
   @override
   void initState() {
     super.initState();
+    _segment = widget.initialSegment;
     _fetchFeed();
     _subscribeToRealtime();
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.dispose());
     }
     super.dispose();
   }
 
+  bool get _isCitizen {
+    return ref.read(sessionControllerProvider).role == AppRole.citizen;
+  }
+
   void _subscribeToRealtime() {
     final realtime = ref.read(realtimeServiceProvider);
     _subscriptions.addAll([
       realtime.subscribeToTable(
-        table: 'posts',
+        table: 'department_feed_posts',
         onChange: () {
           if (mounted) {
+            unawaited(_fetchFeed(showLoader: false));
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'department_feed_comment',
+        onChange: () {
+          if (mounted && _segment == CitizenFeedSegment.news) {
+            unawaited(_fetchFeed(showLoader: false));
+          }
+        },
+      ),
+      realtime.subscribeToTable(
+        table: 'department_feed_reactions',
+        onChange: () {
+          if (mounted && _segment == CitizenFeedSegment.news) {
             unawaited(_fetchFeed(showLoader: false));
           }
         },
@@ -78,54 +115,100 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
           }
         },
       ),
+      realtime.subscribeToTable(
+        table: 'mesh_messages',
+        onChange: () {
+          if (mounted && _segment == CitizenFeedSegment.messages) {
+            setState(() {});
+          }
+        },
+      ),
     ]);
   }
 
   Future<void> _fetchFeed({bool showLoader = true}) async {
     if (showLoader && mounted) {
-      setState(() => _loading = true);
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
     }
 
     try {
       final auth = ref.read(authServiceProvider);
       final transport = ref.read(meshTransportProvider);
-      final results = await Future.wait<Object?>([
-        auth.getCitizenMeshFeedSnapshot(),
-        ref.read(locationServiceProvider).getCurrentPosition(),
-      ]);
-      final snapshot = results[0] as Map<String, dynamic>;
+      final snapshot = _isCitizen
+          ? await auth.getCitizenMeshFeedSnapshot()
+          : <String, dynamic>{'posts': await auth.getFeedPosts()};
+
+      final posts = (snapshot['posts'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+      final reports =
+          (snapshot['reports'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: false);
       final meshMessages =
           (snapshot['mesh_messages'] as List<dynamic>? ?? const <dynamic>[])
-              .cast<Map<String, dynamic>>();
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: false);
       final meshPosts =
           (snapshot['mesh_posts'] as List<dynamic>? ?? const <dynamic>[])
-              .cast<Map<String, dynamic>>();
-      transport.ingestServerMessages(meshMessages);
-      transport.ingestServerMeshPosts(meshPosts);
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: false);
+
+      if (_isCitizen) {
+        transport.ingestServerMessages(meshMessages);
+        transport.ingestServerMeshPosts(meshPosts);
+      }
+
       if (!mounted) {
         return;
       }
+
       setState(() {
-        _posts = (snapshot['posts'] as List<dynamic>? ?? const <dynamic>[])
-            .cast<Map<String, dynamic>>();
-        _reports = (snapshot['reports'] as List<dynamic>? ?? const <dynamic>[])
-            .cast<Map<String, dynamic>>();
-        _topologyNodes =
-            (snapshot['topology_nodes'] as List<dynamic>? ?? const <dynamic>[])
-                .cast<Map<String, dynamic>>();
-        _inboxItems = transport.inboxItems;
-        _location = results[1] as LocationData?;
+        _posts = posts;
+        _reports = reports;
         _loading = false;
+        _loadError = null;
       });
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _inboxItems = ref.read(meshTransportProvider).inboxItems;
         _loading = false;
+        _loadError = 'Unable to refresh the citizen feed right now.';
       });
     }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+  }
+
+  Future<void> _openPost(_FeedPost post) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CitizenFeedDetailScreen(postId: post.id),
+      ),
+    );
+    await _fetchFeed(showLoader: false);
+  }
+
+  Future<void> _openReport(_CitizenReport report) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CitizenReportDetailScreen(reportId: report.id),
+      ),
+    );
+    await _fetchFeed(showLoader: false);
   }
 
   Future<void> _openReportComposer() async {
@@ -135,262 +218,232 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     await _fetchFeed(showLoader: false);
   }
 
-  Future<void> _openBroadcastComposer() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const OfflineCommsScreen()));
-    await _fetchFeed(showLoader: false);
-  }
-
-  Future<void> _openStory(_FeedStory story) async {
-    switch (story.type) {
-      case _FeedStoryType.report:
-        if (story.routeId == null || story.routeId!.isEmpty) {
-          return;
-        }
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => CitizenReportDetailScreen(reportId: story.routeId!),
-          ),
-        );
-      case _FeedStoryType.post:
-        if (story.routeId == null || story.routeId!.isEmpty) {
-          return;
-        }
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => CitizenFeedDetailScreen(postId: story.routeId!),
-          ),
-        );
-      case _FeedStoryType.meshPost:
-        await _openBroadcastComposer();
-    }
-    await _fetchFeed(showLoader: false);
-  }
-
-  Future<void> _handleHeroAction(_FeedStory story) async {
-    await _openStory(story);
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Critical alert opened for full details.'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  Future<void> _openMap() async {
-    if (widget.onOpenMapTab != null) {
-      widget.onOpenMapTab!.call();
+  Future<void> _openDepartmentProfile(_FeedPost post) async {
+    final uploaderId = post.uploaderId;
+    if (uploaderId == null || uploaderId.isEmpty) {
       return;
     }
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const MeshPeopleMapScreen(
-          title: 'Mesh Feed Map',
-          subtitle: 'Interactive map',
-          allowResolveActions: false,
-          allowCompassActions: true,
-          enableSelfTracking: true,
-          selfTrackingActive: true,
-        ),
+        builder: (_) => CitizenDepartmentProfileScreen(uploaderId: uploaderId),
       ),
     );
   }
 
-  List<MeshInboxItem> get _meshMessages {
-    final items = _inboxItems
-        .where((item) => item.itemType == 'mesh_message')
-        .toList(growable: false);
-    items.sort(
-      (a, b) => _parseDate(b.createdAt).compareTo(_parseDate(a.createdAt)),
-    );
-    return items;
-  }
+  Future<void> _toggleReaction(_FeedPost post) async {
+    if (post.id.isEmpty) {
+      return;
+    }
+    final previousPosts = _posts;
+    final nextLiked = !post.likedByMe;
+    final nextReaction = nextLiked
+        ? post.reactionCount + 1
+        : (post.reactionCount - 1).clamp(0, post.reactionCount);
 
-  List<_FeedStory> _buildStories() {
-    final stories = <_FeedStory>[];
-    final seenKeys = <String>{};
-    for (final post in _posts) {
-      final story = _FeedStory.fromPost(post);
-      final dedupeKey = '${story.title}|${story.body}';
-      if (seenKeys.add(dedupeKey)) {
-        stories.add(story);
-      }
-    }
-    for (final report in _reports) {
-      final story = _FeedStory.fromReport(report);
-      final dedupeKey = '${story.title}|${story.body}|${story.createdAt}';
-      if (seenKeys.add(dedupeKey)) {
-        stories.add(story);
-      }
-    }
-    for (final item in _inboxItems.where(
-      (entry) => entry.itemType == 'mesh_post',
-    )) {
-      final story = _FeedStory.fromMeshPost(item);
-      final dedupeKey = '${story.title}|${story.body}';
-      if (seenKeys.add(dedupeKey)) {
-        stories.add(story);
-      }
-    }
-    stories.sort((a, b) {
-      final priority = _storyPriority(b).compareTo(_storyPriority(a));
-      if (priority != 0) {
-        return priority;
-      }
-      return _parseDate(b.createdAt).compareTo(_parseDate(a.createdAt));
+    setState(() {
+      _posts = [
+        for (final item in _posts)
+          if ((item['id'] ?? '').toString() == post.id)
+            {...item, 'liked_by_me': nextLiked, 'reaction': nextReaction}
+          else
+            item,
+      ];
     });
-    return stories;
+
+    try {
+      final updated = await ref
+          .read(authServiceProvider)
+          .toggleFeedReaction(post.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _posts = [
+          for (final item in _posts)
+            if ((item['id'] ?? '').toString() == post.id) updated else item,
+        ];
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _posts = previousPosts);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update your reaction right now.'),
+        ),
+      );
+    }
   }
 
-  bool _matchesSearch(_FeedStory story) {
+  Future<void> _openComments(_FeedPost post) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _CommentsSheet(post: post),
+    );
+    await _fetchFeed(showLoader: false);
+  }
+
+  void _toggleBookmark(String postId) {
+    setState(() {
+      if (_bookmarkedPostIds.contains(postId)) {
+        _bookmarkedPostIds.remove(postId);
+      } else {
+        _bookmarkedPostIds.add(postId);
+      }
+    });
+  }
+
+  List<_FeedPost> get _filteredPosts {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) {
-      return true;
-    }
-    final haystack = [
-      story.title,
-      story.body,
-      story.category,
-      story.address ?? '',
-      story.severity ?? '',
-    ].join(' ').toLowerCase();
-    return haystack.contains(query);
+    return _posts
+        .map(_FeedPost.fromJson)
+        .where((post) {
+          if (_newsCategory != 'all' && post.category != _newsCategory) {
+            return false;
+          }
+          if (query.isEmpty) {
+            return true;
+          }
+          final haystack = [
+            post.title,
+            post.content,
+            post.categoryLabel,
+            post.location ?? '',
+            post.departmentName ?? '',
+            post.departmentDescription ?? '',
+          ].join(' ').toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  List<_CitizenReport> get _filteredReports {
+    final query = _searchQuery.trim().toLowerCase();
+    return _reports
+        .map(_CitizenReport.fromJson)
+        .where((report) {
+          if (_reportStatus != 'all' && report.status != _reportStatus) {
+            return false;
+          }
+          if (_reportCategory != 'all' && report.category != _reportCategory) {
+            return false;
+          }
+          if (query.isEmpty) {
+            return true;
+          }
+          final haystack = [
+            report.title,
+            report.description,
+            report.categoryLabel,
+            report.statusLabel,
+            report.address ?? '',
+            report.severityLabel,
+          ].join(' ').toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  List<MeshInboxItem> get _meshItems {
+    final items = ref.watch(meshTransportProvider).inboxItems.toList();
+    items.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    final query = _searchQuery.trim().toLowerCase();
+    return items
+        .where((item) {
+          if (query.isEmpty) {
+            return true;
+          }
+          final haystack = [
+            item.title ?? '',
+            item.body,
+            item.authorDisplayName,
+            item.category ?? '',
+          ].join(' ').toLowerCase();
+          return haystack.contains(query);
+        })
+        .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
-    final allStories = _buildStories();
-    final hasQuery = _searchQuery.trim().isNotEmpty;
-    final stories = allStories.where(_matchesSearch).toList(growable: false);
-    final readinessStories = (hasQuery ? stories : allStories)
-        .where(
-          (story) =>
-              _isCriticalStory(story) ||
-              story.category.toLowerCase() == 'situational_report' ||
-              story.category.toLowerCase() == 'update',
-        )
-        .take(5)
-        .toList(growable: false);
-    final feedStories = (hasQuery ? stories : allStories)
-        .take(8)
-        .toList(growable: false);
+    final inbox = ref.watch(notificationInboxControllerProvider);
+    final segments = _isCitizen
+        ? const <CitizenFeedSegment>[
+            CitizenFeedSegment.news,
+            CitizenFeedSegment.reports,
+            CitizenFeedSegment.messages,
+          ]
+        : const <CitizenFeedSegment>[CitizenFeedSegment.news];
+    final availableSegment = segments.contains(_segment)
+        ? _segment
+        : CitizenFeedSegment.news;
     final profileSeed = (session.fullName ?? session.email ?? 'Dispatch')
         .trim();
     final profileInitial = profileSeed.isEmpty
         ? 'D'
         : profileSeed.substring(0, 1).toUpperCase();
 
-    IconData categoryIcon(String category) => switch (category.toLowerCase()) {
-      'alert' || 'warning' => Icons.campaign_rounded,
-      'situational_report' => Icons.assignment_outlined,
-      'fire' => Icons.local_fire_department_rounded,
-      'flood' => Icons.water_drop_outlined,
-      'medical' => Icons.medical_services_outlined,
-      'structural' => Icons.foundation_outlined,
-      'road_accident' => Icons.car_crash_outlined,
-      _ => Icons.notifications_active_outlined,
-    };
-
-    Color accentColor(String category) => switch (category.toLowerCase()) {
-      'alert' || 'warning' => const Color(0xFFA14B2F),
-      'situational_report' => const Color(0xFF8A6B2E),
-      'fire' => const Color(0xFFB05535),
-      'flood' => const Color(0xFF4F7A90),
-      'medical' => const Color(0xFF7A5B88),
-      'structural' => const Color(0xFF8E5F47),
-      _ => const Color(0xFF7E746D),
-    };
-
-    Color accentTint(String category) => switch (category.toLowerCase()) {
-      'alert' || 'warning' => const Color(0xFFF7E8DE),
-      'situational_report' => const Color(0xFFF6F0DE),
-      'fire' => const Color(0xFFF8E7E0),
-      'flood' => const Color(0xFFE7F0F5),
-      'medical' => const Color(0xFFF0E8F5),
-      'structural' => const Color(0xFFF4EBE5),
-      _ => const Color(0xFFF2ECE6),
-    };
-
-    String sourceLabel(_FeedStory story) => switch (story.type) {
-      _FeedStoryType.report => 'Citizen report',
-      _FeedStoryType.meshPost => 'Mesh update',
-      _FeedStoryType.post => 'Dispatch bulletin',
-    };
-
-    if (_loading && _posts.isEmpty && _reports.isEmpty && _inboxItems.isEmpty) {
-      return Container(
-        color: dc.background,
-        alignment: Alignment.center,
-        child: const CircularProgressIndicator(color: dc.primary),
-      );
-    }
-
     return Container(
       color: dc.background,
       child: SafeArea(
         child: RefreshIndicator(
+          onRefresh: _fetchFeed,
           color: dc.primary,
-          onRefresh: () => _fetchFeed(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
             children: [
               Row(
                 children: [
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: widget.onOpenNodesTab,
-                      borderRadius: BorderRadius.circular(999),
-                      child: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(
-                          Icons.menu_rounded,
-                          color: dc.primary,
-                          size: 22,
+                  if (widget.onOpenNodesTab != null)
+                    IconButton(
+                      onPressed: widget.onOpenNodesTab,
+                      icon: const Icon(Icons.menu_rounded, color: dc.primary),
+                      tooltip: 'Open navigation',
+                    )
+                  else
+                    const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isCitizen ? 'Citizen feed' : 'Community feed',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: dc.ink,
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Dispatch',
-                      style: TextStyle(
-                        fontFamily: 'Georgia',
-                        fontFamilyFallback: ['Times New Roman', 'serif'],
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: dc.primaryDim,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E2A35),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: dc.onSurface.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                        Text(
+                          _isCitizen
+                              ? 'Track official advisories, your reports, and mesh updates from one place.'
+                              : 'Browse the public Dispatch news stream.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.45,
+                            color: dc.mutedInk,
+                          ),
                         ),
                       ],
                     ),
-                    alignment: Alignment.center,
+                  ),
+                  _NotificationIconButton(
+                    unreadCount: inbox.unreadCount,
+                    onTap: _openNotifications,
+                  ),
+                  const SizedBox(width: 10),
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: dc.primaryDim,
                     child: Text(
                       profileInitial,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -400,431 +453,88 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
               const SizedBox(height: 18),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x12000000),
-                      blurRadius: 14,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  decoration: InputDecoration(
-                    filled: false,
-                    fillColor: Colors.transparent,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      color: dc.onSurfaceVariant,
-                    ),
-                    hintText: 'response protocols and more',
-                    hintStyle: const TextStyle(color: Color(0xFFB8AEA7)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(24),
+                  color: dc.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x12000000),
                       blurRadius: 16,
-                      offset: Offset(0, 6),
+                      offset: Offset(0, 8),
                     ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF182430),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.campaign_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Expanded(
-                          child: Text(
-                            'Anything urgent to share?',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Color(0xFFC1B5AD),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: dc.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        for (final icon in const [
-                          Icons.image_outlined,
-                          Icons.location_on_outlined,
-                          Icons.link_rounded,
-                        ]) ...[
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _openReportComposer,
-                              borderRadius: BorderRadius.circular(999),
-                              child: SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: Icon(
-                                  icon,
-                                  size: 20,
-                                  color: const Color(0xFF8B817A),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        const Spacer(),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: dc.primary,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: TextButton(
-                            onPressed: _openReportComposer,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
-                              ),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'Post',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                    hintText: 'Search posts, reports, or mesh updates',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
                     ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Active Readiness',
-                      style: TextStyle(
-                        fontFamily: 'Georgia',
-                        fontFamilyFallback: ['Times New Roman', 'serif'],
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: dc.onSurface,
-                      ),
-                    ),
+              const SizedBox(height: 16),
+              if (segments.length > 1) ...[
+                SizedBox(
+                  height: 42,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemBuilder: (context, index) {
+                      final item = segments[index];
+                      return _SegmentChip(
+                        label: switch (item) {
+                          CitizenFeedSegment.news => 'News',
+                          CitizenFeedSegment.reports => 'My Reports',
+                          CitizenFeedSegment.messages => 'Messages',
+                        },
+                        selected: availableSegment == item,
+                        onTap: () => setState(() => _segment = item),
+                      );
+                    },
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemCount: segments.length,
                   ),
-                  TextButton(
-                    onPressed: () => setState(() => _searchQuery = ''),
-                    style: TextButton.styleFrom(
-                      foregroundColor: dc.primary,
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'VIEW ALL',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 164,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: hasQuery
-                      ? readinessStories.length
-                      : (readinessStories.isEmpty
-                            ? 2
-                            : readinessStories.length),
-                  separatorBuilder: (_, _) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    final story = !hasQuery && readinessStories.isEmpty
-                        ? (index == 0
-                              ? _fallbackHeroStory
-                              : _fallbackIncidentStory)
-                        : readinessStories[index];
-                    final accent = accentColor(story.category);
-                    return InkWell(
-                      onTap: () => _openStory(story),
-                      borderRadius: BorderRadius.circular(18),
-                      child: Container(
-                        width: 172,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: accentTint(story.category),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border(
-                            left: BorderSide(color: accent, width: 3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _titleCase(story.category.replaceAll('_', ' ')),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.1,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Expanded(
-                              child: Text(
-                                story.title,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  height: 1.15,
-                                  fontWeight: FontWeight.w700,
-                                  color: dc.onSurface,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    color: accent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _timeAgo(story.createdAt).toUpperCase(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.8,
-                                      color: dc.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
                 ),
-              ),
-              const SizedBox(height: 26),
-              Row(
-                children: const [
-                  Icon(
-                    Icons.emergency_share_outlined,
-                    color: dc.primary,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Situational Reports',
-                    style: TextStyle(
-                      fontFamily: 'Georgia',
-                      fontFamilyFallback: ['Times New Roman', 'serif'],
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: dc.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              if (feedStories.isEmpty)
+                const SizedBox(height: 16),
+              ],
+              if (_loadError != null)
                 Container(
-                  padding: const EdgeInsets.all(18),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(24),
+                    color: dc.errorContainer.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: dc.error.withValues(alpha: 0.12)),
                   ),
-                  child: const Text(
-                    'No feed results matched your search. Try a different keyword or refresh for the latest updates.',
-                    style: TextStyle(color: dc.onSurfaceVariant, height: 1.5),
-                  ),
-                )
-              else
-                for (final story in feedStories) ...[
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _openStory(story),
-                      borderRadius: BorderRadius.circular(26),
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.96),
-                          borderRadius: BorderRadius.circular(26),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x12000000),
-                              blurRadius: 16,
-                              offset: Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 42,
-                                  height: 42,
-                                  decoration: BoxDecoration(
-                                    color: accentTint(story.category),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    categoryIcon(story.category),
-                                    color: accentColor(story.category),
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        sourceLabel(story),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
-                                          color: dc.onSurface,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${_titleCase(story.category.replaceAll('_', ' '))} | ${_timeAgo(story.createdAt)}',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.5,
-                                          color: dc.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.more_vert_rounded,
-                                  color: dc.outline,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              story.title,
-                              style: const TextStyle(
-                                fontFamily: 'Georgia',
-                                fontFamilyFallback: [
-                                  'Times New Roman',
-                                  'serif',
-                                ],
-                                fontSize: 20,
-                                height: 1.15,
-                                fontWeight: FontWeight.w700,
-                                color: dc.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              story.body.isEmpty
-                                  ? 'Tap to open the full field update and incident context.'
-                                  : story.body,
-                              maxLines: 4,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                height: 1.55,
-                                color: dc.onSurfaceVariant,
-                              ),
-                            ),
-                            if ((story.imageUrl ?? '').isNotEmpty) ...[
-                              const SizedBox(height: 14),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: AspectRatio(
-                                  aspectRatio: 16 / 9,
-                                  child: Image.network(
-                                    story.imageUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            Container(
-                                              color: accentTint(story.category),
-                                              alignment: Alignment.center,
-                                              child: Icon(
-                                                categoryIcon(story.category),
-                                                color: accentColor(
-                                                  story.category,
-                                                ),
-                                                size: 32,
-                                              ),
-                                            ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_tethering_error, color: dc.error),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _loadError!,
+                          style: const TextStyle(color: dc.errorDim),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                ],
+                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: switch (availableSegment) {
+                  CitizenFeedSegment.news => _buildNews(context),
+                  CitizenFeedSegment.reports => _buildReports(context),
+                  CitizenFeedSegment.messages => _buildMessages(context),
+                },
+              ),
             ],
           ),
         ),
@@ -832,521 +542,21 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     );
   }
 
-  List<Widget> _buildAllReportsContent({
-    required _FeedStory heroStory,
-    required _FeedStory secondaryStory,
-    required _FeedMessageData remoteMessage,
-    required _FeedMessageData localMessage,
-    required int nodeCount,
-    required int updateCount,
-  }) {
-    return [
-      _CriticalAlertCard(
-        story: heroStory,
-        timeLabel: _timeAgo(heroStory.createdAt),
-        distanceLabel: _distanceLabel(heroStory),
-        onTap: () => _openStory(heroStory),
-        onAction: () => _handleHeroAction(heroStory),
-      ),
-      const SizedBox(height: 18),
-      _MeshMessageBubble(message: remoteMessage),
-      const SizedBox(height: 18),
-      _IncidentStoryCard(
-        story: secondaryStory,
-        updateCount: updateCount,
-        severityLabel: _storySeverityLabel(secondaryStory),
-        onTap: () => _openStory(secondaryStory),
-        onBroadcast: _openBroadcastComposer,
-        onUpdates: () => setState(() => _selectedTab = 2),
-      ),
-      const SizedBox(height: 18),
-      _MeshMessageBubble(message: localMessage),
-      const SizedBox(height: 18),
-      _MapSnapshotCard(nodeCount: nodeCount, onOpenMap: _openMap),
-    ];
-  }
-
-  List<Widget> _buildDisasterContent({
-    required List<_FeedStory> disasterStories,
-    required _FeedStory fallbackHero,
-    required int updateCount,
-    required int nodeCount,
-  }) {
-    final stories = disasterStories.isNotEmpty
-        ? disasterStories.take(5).toList(growable: false)
-        : <_FeedStory>[fallbackHero, _fallbackIncidentStory];
-    return [
-      _CriticalAlertCard(
-        story: stories.first,
-        timeLabel: _timeAgo(stories.first.createdAt),
-        distanceLabel: _distanceLabel(stories.first),
-        onTap: () => _openStory(stories.first),
-        onAction: () => _handleHeroAction(stories.first),
-      ),
-      for (final story in stories.skip(1)) ...[
-        const SizedBox(height: 18),
-        _IncidentStoryCard(
-          story: story,
-          updateCount: updateCount,
-          severityLabel: _storySeverityLabel(story),
-          onTap: () => _openStory(story),
-          onBroadcast: _openBroadcastComposer,
-          onUpdates: () => setState(() => _selectedTab = 2),
-        ),
-      ],
-      const SizedBox(height: 18),
-      _MapSnapshotCard(nodeCount: nodeCount, onOpenMap: _openMap),
-    ];
-  }
-
-  List<Widget> _buildMessagesContent({
-    required String? sessionName,
-    required String? sessionEmail,
-    required int updateCount,
-    required int nodeCount,
-  }) {
-    final items = _inboxItems
-        .where(
-          (item) =>
-              item.itemType == 'mesh_message' || item.itemType == 'mesh_post',
-        )
-        .take(8)
-        .toList(growable: false);
-    final widgets = <Widget>[];
-    if (items.isEmpty) {
-      widgets
-        ..add(_MeshMessageBubble(message: _fallbackRemoteMessage))
-        ..add(const SizedBox(height: 18))
-        ..add(_MeshMessageBubble(message: _fallbackLocalMessage));
-    } else {
-      for (final item in items) {
-        if (item.itemType == 'mesh_post') {
-          final story = _FeedStory.fromMeshPost(item);
-          widgets.add(
-            _IncidentStoryCard(
-              story: story,
-              updateCount: updateCount,
-              severityLabel: _storySeverityLabel(story),
-              onTap: _openBroadcastComposer,
-              onBroadcast: _openBroadcastComposer,
-              onUpdates: () => setState(() => _selectedTab = 2),
-            ),
-          );
-        } else {
-          final isLocal = _isLocalMessage(
-            item,
-            fullName: sessionName,
-            email: sessionEmail,
-          );
-          widgets.add(
-            _MeshMessageBubble(
-              message: _messagePreviewFromItem(
-                item,
-                fallback: isLocal
-                    ? _fallbackLocalMessage
-                    : _fallbackRemoteMessage,
-                isLocal: isLocal,
-              ),
-            ),
-          );
-        }
-        widgets.add(const SizedBox(height: 18));
-      }
-      if (widgets.isNotEmpty) {
-        widgets.removeLast();
-      }
-    }
-    widgets
-      ..add(const SizedBox(height: 18))
-      ..add(_MapSnapshotCard(nodeCount: nodeCount, onOpenMap: _openMap));
-    return widgets;
-  }
-
-  bool _isLocalMessage(
-    MeshInboxItem item, {
-    required String? fullName,
-    required String? email,
-  }) {
-    final author = item.authorDisplayName.trim().toLowerCase();
-    final name = fullName?.trim().toLowerCase();
-    final userEmail = email?.trim().toLowerCase();
-    return item.needsServerSync ||
-        author == 'you' ||
-        author == 'local node' ||
-        (name != null && name.isNotEmpty && author == name) ||
-        (userEmail != null && userEmail.isNotEmpty && author == userEmail);
-  }
-
-  _FeedMessageData _messagePreviewFromItem(
-    MeshInboxItem? item, {
-    required _FeedMessageData fallback,
-    required bool isLocal,
-  }) {
-    if (item == null) {
-      return fallback;
-    }
-    final sender = isLocal
-        ? 'YOU (LOCAL NODE)'
-        : _senderLabel(item.authorDisplayName, item.authorRole);
-    return _FeedMessageData(
-      senderLabel: sender,
-      timeLabel: _clockTime(item.createdAt),
-      body: item.body.isEmpty ? fallback.body : item.body,
-      isLocal: isLocal,
-    );
-  }
-
-  String _senderLabel(String displayName, String role) {
-    final normalizedName = displayName.trim().isEmpty
-        ? 'Mesh Node'
-        : displayName.trim();
-    final normalizedRole = role.trim().isEmpty || role.trim() == 'anonymous'
-        ? ''
-        : ' (${role.trim().toUpperCase()})';
-    return '${normalizedName.toUpperCase()}$normalizedRole';
-  }
-
-  bool _isCriticalStory(_FeedStory story) {
-    final severity = (story.severity ?? '').toLowerCase();
-    final category = story.category.toLowerCase();
-    return story.isPinned ||
-        severity == 'critical' ||
-        severity == 'high' ||
-        category == 'alert' ||
-        category == 'warning' ||
-        category == 'flood' ||
-        category == 'fire' ||
-        category == 'earthquake' ||
-        category == 'medical' ||
-        category == 'structural';
-  }
-
-  bool _isDisasterStory(_FeedStory story) {
-    final category = story.category.toLowerCase();
-    return _isCriticalStory(story) ||
-        story.type == _FeedStoryType.report ||
-        category == 'situational_report' ||
-        category == 'road_accident';
-  }
-
-  int _storyPriority(_FeedStory story) {
-    var score = 0;
-    if (story.isPinned) score += 4;
-    switch ((story.severity ?? '').toLowerCase()) {
-      case 'critical':
-        score += 4;
-      case 'high':
-        score += 3;
-      case 'medium':
-        score += 2;
-      case 'low':
-        score += 1;
-    }
-    switch (story.category.toLowerCase()) {
-      case 'alert':
-      case 'warning':
-      case 'flood':
-      case 'fire':
-      case 'earthquake':
-      case 'medical':
-      case 'structural':
-        score += 3;
-      case 'situational_report':
-      case 'road_accident':
-        score += 2;
-      case 'update':
-      case 'safety_tip':
-        score += 1;
-    }
-    if (story.type == _FeedStoryType.report) score += 1;
-    return score;
-  }
-
-  String _storySeverityLabel(_FeedStory story) {
-    final severity = (story.severity ?? '').trim();
-    if (severity.isNotEmpty) {
-      return _titleCase(severity);
-    }
-    return switch (story.category.toLowerCase()) {
-      'alert' => 'Critical',
-      'warning' => 'Moderate',
-      'situational_report' => 'Update',
-      _ => 'Moderate',
-    };
-  }
-
-  String _distanceLabel(_FeedStory story) {
-    if (story.latitude != null &&
-        story.longitude != null &&
-        _location != null) {
-      const calculator = Distance();
-      final meters = calculator.as(
-        LengthUnit.Meter,
-        LatLng(_location!.latitude, _location!.longitude),
-        LatLng(story.latitude!, story.longitude!),
-      );
-      if (meters >= 1000) {
-        return '${(meters / 1000).toStringAsFixed(1)}km from your current node';
-      }
-      return '${meters.round()}m from your current node';
-    }
-    if ((story.address ?? '').trim().isNotEmpty) {
-      return story.address!.trim();
-    }
-    return 'Near your current node';
-  }
-
-  String _timeAgo(String raw) {
-    final parsed = _tryParseDate(raw);
-    if (parsed == null) return raw.isEmpty ? 'Now' : raw;
-    final diff = DateTime.now().difference(parsed);
-    if (diff.inMinutes < 1) return 'Now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  String _clockTime(String raw) {
-    final parsed = _tryParseDate(raw);
-    if (parsed == null) return raw.isEmpty ? '12:45 PM' : raw;
-    return DateFormat('h:mm a').format(parsed);
-  }
-
-  String _titleCase(String value) {
-    if (value.trim().isEmpty) return value;
-    return value
-        .split(' ')
-        .where((part) => part.isNotEmpty)
-        .map(
-          (part) =>
-              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
-        )
-        .join(' ');
-  }
-
-  DateTime _parseDate(String raw) {
-    return _tryParseDate(raw) ?? DateTime.fromMillisecondsSinceEpoch(0);
-  }
-
-  DateTime? _tryParseDate(String raw) {
-    final parsed = DateTime.tryParse(raw);
-    return parsed?.toLocal();
-  }
-}
-
-class _FeedTopBar extends StatelessWidget {
-  const _FeedTopBar({this.onMenuTap, this.onStatusTap});
-
-  final VoidCallback? onMenuTap;
-  final VoidCallback? onStatusTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-      child: Row(
-        children: [
-          _HeaderIconButton(icon: Icons.menu, onTap: onMenuTap),
-          const Expanded(
-            child: Text(
-              'Mesh Feed',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: dc.onSurface,
-              ),
-            ),
-          ),
-          _StatusHaloButton(onTap: onStatusTap),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, this.onTap});
-
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, color: dc.onSurface, size: 22),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusHaloButton extends StatefulWidget {
-  const _StatusHaloButton({this.onTap});
-
-  final VoidCallback? onTap;
-
-  @override
-  State<_StatusHaloButton> createState() => _StatusHaloButtonState();
-}
-
-class _StatusHaloButtonState extends State<_StatusHaloButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1700),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final scale = 0.92 + (_controller.value * 0.16);
-        final opacity = 0.08 + (_controller.value * 0.16);
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(999),
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dc.primary.withValues(alpha: opacity),
-                      ),
-                    ),
-                  ),
-                  const Icon(Icons.wifi_tethering, color: dc.primary, size: 20),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _FeedTabBar extends StatelessWidget {
-  const _FeedTabBar({
-    required this.labels,
-    required this.selectedIndex,
-    required this.onSelected,
-  });
-
-  final List<String> labels;
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: dc.background.withValues(alpha: 0.95),
-        border: Border(
-          bottom: BorderSide(color: dc.outlineVariant.withValues(alpha: 0.3)),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          for (var index = 0; index < labels.length; index++)
-            Padding(
-              padding: EdgeInsets.only(
-                right: index == labels.length - 1 ? 0 : 24,
-              ),
-              child: InkWell(
-                onTap: () => onSelected(index),
-                child: Container(
-                  padding: const EdgeInsets.only(top: 14, bottom: 12),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: selectedIndex == index
-                            ? dc.primary
-                            : Colors.transparent,
-                        width: 3,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    labels[index],
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: selectedIndex == index
-                          ? dc.onSurface
-                          : dc.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CriticalAlertCard extends StatelessWidget {
-  const _CriticalAlertCard({
-    required this.story,
-    required this.timeLabel,
-    required this.distanceLabel,
-    required this.onTap,
-    required this.onAction,
-  });
-
-  final _FeedStory story;
-  final String timeLabel;
-  final String distanceLabel;
-  final VoidCallback onTap;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(10),
+  Widget _buildNews(BuildContext context) {
+    final posts = _filteredPosts;
+    return Column(
+      key: const ValueKey<String>('news'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: dc.errorContainer.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(18),
-            border: Border(left: BorderSide(color: dc.error, width: 4)),
+            gradient: const LinearGradient(
+              colors: dc.heroGradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(28),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1356,120 +566,383 @@ class _CriticalAlertCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
-                      vertical: 4,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: dc.error,
+                      color: Colors.white.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text(
-                      'CRITICAL ALERT',
+                      'DISPATCH NEWS',
                       style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 10,
+                        color: Colors.white,
+                        fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                        color: dc.onError,
+                        letterSpacing: 0.8,
                       ),
                     ),
                   ),
                   const Spacer(),
                   Text(
-                    timeLabel,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
+                    '${posts.length} updates',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.84),
                       fontSize: 12,
-                      color: dc.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(
-                    story.imageUrl ?? _fallbackFloodImageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: dc.primaryContainer,
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.flood,
-                        color: dc.primary,
-                        size: 36,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                story.title,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 24,
-                  height: 1.15,
-                  fontWeight: FontWeight.w800,
-                  color: dc.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                story.body.isEmpty
-                    ? 'Immediate evacuation advised for nearby residents. Stay alert for route updates from responders.'
-                    : story.body,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  height: 1.45,
-                  color: dc.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, color: dc.error, size: 16),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      distanceLabel,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: dc.onSurfaceVariant,
-                      ),
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: onAction,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: dc.error,
-                    foregroundColor: dc.onError,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text(
-                    'MARK AS SAFE / ACKNOWLEDGE',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
+              const Text(
+                'Official advisories and field notices',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  height: 1.08,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Pinned alerts stay at the top, while comments and reactions keep the response loop active.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.86),
+                  height: 1.45,
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemBuilder: (context, index) {
+              final category = _feedCategories[index];
+              return _FilterChip(
+                label: category == 'all'
+                    ? 'All'
+                    : category.replaceAll('_', ' '),
+                selected: _newsCategory == category,
+                onTap: () => setState(() => _newsCategory = category),
+              );
+            },
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemCount: _feedCategories.length,
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (_loading && _posts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: dc.primary)),
+          )
+        else if (posts.isEmpty)
+          _EmptyStateCard(
+            icon: Icons.newspaper_outlined,
+            title: 'No matching posts yet',
+            body:
+                'Try another search term or category. Official department updates will appear here as they are published.',
+          )
+        else
+          for (final post in posts) ...[
+            _FeedPostCard(
+              post: post,
+              bookmarked: _bookmarkedPostIds.contains(post.id),
+              onBookmark: () => _toggleBookmark(post.id),
+              onComment: () => _openComments(post),
+              onOpen: () => _openPost(post),
+              onPublisherTap: () => _openDepartmentProfile(post),
+              onReact: () => _toggleReaction(post),
+            ),
+            const SizedBox(height: 14),
+          ],
+      ],
+    );
+  }
+
+  Widget _buildReports(BuildContext context) {
+    final reports = _filteredReports;
+    final reportCategories = <String>{
+      'all',
+      ..._reports
+          .map(_CitizenReport.fromJson)
+          .map((report) => report.category)
+          .where((category) => category.isNotEmpty),
+    }.toList(growable: false);
+
+    return Column(
+      key: const ValueKey<String>('reports'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: dc.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: dc.warmBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'My reports',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: dc.ink,
+                      ),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _openReportComposer,
+                    icon: const Icon(Icons.add_alert_rounded, size: 18),
+                    label: const Text('New report'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: dc.primary,
+                      foregroundColor: dc.onPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${reports.length} visible in this view',
+                style: const TextStyle(color: dc.mutedInk),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final status in const [
+                      'all',
+                      'pending',
+                      'accepted',
+                      'responding',
+                      'resolved',
+                    ]) ...[
+                      _FilterChip(
+                        label: status == 'all' ? 'All statuses' : status,
+                        selected: _reportStatus == status,
+                        onTap: () => setState(() => _reportStatus = status),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 38,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemBuilder: (context, index) {
+                    final category = reportCategories[index];
+                    return _FilterChip(
+                      label: category == 'all'
+                          ? 'All categories'
+                          : category.replaceAll('_', ' '),
+                      selected: _reportCategory == category,
+                      onTap: () => setState(() => _reportCategory = category),
+                    );
+                  },
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 8),
+                  itemCount: reportCategories.length,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (_loading && _reports.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator(color: dc.primary)),
+          )
+        else if (reports.isEmpty)
+          _EmptyStateCard(
+            icon: Icons.assignment_outlined,
+            title: 'No reports match this view',
+            body:
+                'Your submitted incidents will show status, severity, and response progress here.',
+            actionLabel: 'Create a report',
+            onAction: _openReportComposer,
+          )
+        else
+          for (final report in reports) ...[
+            _ReportCard(report: report, onTap: () => _openReport(report)),
+            const SizedBox(height: 12),
+          ],
+      ],
+    );
+  }
+
+  Widget _buildMessages(BuildContext context) {
+    final items = _meshItems;
+    return Column(
+      key: const ValueKey<String>('messages'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: dc.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Mesh inbox',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: dc.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Keep the mobile-first local inbox for direct node traffic and broadcasted field updates.',
+                style: TextStyle(color: dc.mutedInk, height: 1.45),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.onOpenMapTab,
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('Mesh map'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const OfflineCommsScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.send_rounded),
+                      label: const Text('Open comms'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: dc.primary,
+                        foregroundColor: dc.onPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (items.isEmpty)
+          _EmptyStateCard(
+            icon: Icons.forum_outlined,
+            title: 'No local mesh messages yet',
+            body:
+                'Broadcasts and direct relay messages will appear here once nearby nodes sync.',
+            actionLabel: 'Open Offline Comms',
+            onAction: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const OfflineCommsScreen()),
+              );
+            },
+          )
+        else
+          for (final item in items) ...[
+            _MeshMessageCard(item: item),
+            const SizedBox(height: 12),
+          ],
+      ],
+    );
+  }
+}
+
+class _NotificationIconButton extends StatelessWidget {
+  const _NotificationIconButton({
+    required this.unreadCount,
+    required this.onTap,
+  });
+
+  final int unreadCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: onTap,
+          icon: const Icon(Icons.notifications_none_rounded, color: dc.ink),
+          tooltip: 'Notifications',
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: 5,
+            top: 5,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: dc.statusError,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                unreadCount > 99 ? '99+' : '$unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SegmentChip extends StatelessWidget {
+  const _SegmentChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? dc.primary : dc.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : dc.onSurface,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -1477,191 +950,411 @@ class _CriticalAlertCard extends StatelessWidget {
   }
 }
 
-class _MeshMessageBubble extends StatelessWidget {
-  const _MeshMessageBubble({required this.message});
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final _FeedMessageData message;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final alignment = message.isLocal
-        ? CrossAxisAlignment.end
-        : CrossAxisAlignment.start;
-    final rowAlignment = message.isLocal
-        ? MainAxisAlignment.end
-        : MainAxisAlignment.start;
-    final bubbleColor = message.isLocal ? dc.primary : dc.surfaceContainerLow;
-    final textColor = message.isLocal ? dc.onPrimary : dc.onSurface;
-    final metaColor = message.isLocal ? dc.primary : dc.onSurfaceVariant;
-    final borderRadius = message.isLocal
-        ? const BorderRadius.only(
-            topLeft: Radius.circular(18),
-            topRight: Radius.circular(6),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
-          )
-        : const BorderRadius.only(
-            topLeft: Radius.circular(6),
-            topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
-          );
-    return Column(
-      crossAxisAlignment: alignment,
-      children: [
-        Row(
-          mainAxisAlignment: rowAlignment,
-          children: [
-            if (!message.isLocal)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: dc.surfaceContainerHigh,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.account_circle,
-                    color: dc.primary,
-                    size: 18,
-                  ),
-                ),
-              ),
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: message.isLocal
-                    ? [
-                        Text(
-                          message.timeLabel,
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            color: dc.outline,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          message.senderLabel,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.4,
-                            color: metaColor,
-                          ),
-                        ),
-                      ]
-                    : [
-                        Text(
-                          message.senderLabel,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.4,
-                            color: metaColor,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          message.timeLabel,
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            color: dc.outline,
-                          ),
-                        ),
-                      ],
-              ),
-            ),
-          ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? dc.primaryContainer : dc.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: selected ? dc.primary : dc.outlineVariant),
         ),
-        const SizedBox(height: 6),
-        Container(
-          constraints: const BoxConstraints(maxWidth: 290),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: bubbleColor,
-            borderRadius: borderRadius,
-            boxShadow: message.isLocal
-                ? [
-                    BoxShadow(
-                      color: dc.primary.withValues(alpha: 0.18),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            message.body,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              height: 1.45,
-              color: textColor,
-            ),
+        child: Text(
+          _titleCase(label),
+          style: TextStyle(
+            color: selected ? dc.onPrimaryContainer : dc.onSurfaceVariant,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-class _IncidentStoryCard extends StatelessWidget {
-  const _IncidentStoryCard({
-    required this.story,
-    required this.updateCount,
-    required this.severityLabel,
-    required this.onTap,
-    required this.onBroadcast,
-    required this.onUpdates,
+class _FeedPostCard extends StatelessWidget {
+  const _FeedPostCard({
+    required this.post,
+    required this.bookmarked,
+    required this.onBookmark,
+    required this.onComment,
+    required this.onOpen,
+    required this.onPublisherTap,
+    required this.onReact,
   });
 
-  final _FeedStory story;
-  final int updateCount;
-  final String severityLabel;
-  final VoidCallback onTap;
-  final VoidCallback onBroadcast;
-  final VoidCallback onUpdates;
+  final _FeedPost post;
+  final bool bookmarked;
+  final VoidCallback onBookmark;
+  final VoidCallback onComment;
+  final VoidCallback onOpen;
+  final VoidCallback onPublisherTap;
+  final VoidCallback onReact;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: dc.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: dc.onSurface.withValues(alpha: 0.04),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+    final categoryColor = dc.categoryColor(post.category);
+    final publisherInitial = (post.departmentName ?? 'D').substring(0, 1);
+
+    return InkWell(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(26),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: dc.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: dc.warmBorder),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x10000000),
+              blurRadius: 18,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: onPublisherTap,
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: dc.primaryContainer,
+                    backgroundImage: post.profilePictureUrl == null
+                        ? null
+                        : NetworkImage(post.profilePictureUrl!),
+                    child: post.profilePictureUrl == null
+                        ? Text(
+                            publisherInitial.toUpperCase(),
+                            style: const TextStyle(
+                              color: dc.onPrimaryContainer,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onPublisherTap,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.departmentName ?? 'Dispatch department',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: dc.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          post.publishedAtLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: dc.mutedInk,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (post.isPinned)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dc.errorContainer.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      'Pinned',
+                      style: TextStyle(
+                        color: dc.errorDim,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetaPill(
+                  label: post.categoryLabel,
+                  icon: _feedCategoryIcon(post.category),
+                  color: categoryColor,
+                ),
+                if ((post.location ?? '').isNotEmpty)
+                  _MetaPill(
+                    label: post.location!,
+                    icon: Icons.location_on_outlined,
+                    color: dc.coolAccent,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              post.title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: dc.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              post.content,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: dc.mutedInk,
+              ),
+            ),
+            if (post.imageUrls.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.network(
+                  post.imageUrls.first,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 180,
+                    color: dc.surfaceContainerHigh,
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.image_not_supported_outlined,
+                      color: dc.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               ),
             ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            if (post.attachments.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final attachment in post.attachments)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: dc.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        _attachmentLabel(attachment),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _ActionCountButton(
+                  icon: post.likedByMe
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  label: '${post.reactionCount}',
+                  color: post.likedByMe ? dc.statusError : dc.onSurfaceVariant,
+                  onTap: onReact,
+                ),
+                const SizedBox(width: 12),
+                _ActionCountButton(
+                  icon: Icons.mode_comment_outlined,
+                  label: '${post.commentCount}',
+                  color: dc.onSurfaceVariant,
+                  onTap: onComment,
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: onBookmark,
+                  icon: Icon(
+                    bookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_outline_rounded,
+                    color: bookmarked ? dc.primary : dc.onSurfaceVariant,
+                  ),
+                  tooltip: 'Bookmark',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportCard extends StatelessWidget {
+  const _ReportCard({required this.report, required this.onTap});
+
+  final _CitizenReport report;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: dc.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: dc.warmBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    report.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: dc.ink,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: dc
+                        .statusColor(report.status)
+                        .withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    report.statusLabel,
+                    style: TextStyle(
+                      color: dc.statusColor(report.status),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              report.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: dc.mutedInk,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetaPill(
+                  label: report.categoryLabel,
+                  icon: _reportCategoryIcon(report.category),
+                  color: dc.categoryColor(report.category),
+                ),
+                _MetaPill(
+                  label: report.severityLabel,
+                  icon: Icons.priority_high_rounded,
+                  color: _severityColor(report.severity),
+                ),
+                if ((report.address ?? '').isNotEmpty)
+                  _MetaPill(
+                    label: report.address!,
+                    icon: Icons.place_outlined,
+                    color: dc.coolAccent,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              report.createdAtLabel,
+              style: const TextStyle(fontSize: 12, color: dc.mutedInk),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MeshMessageCard extends StatelessWidget {
+  const _MeshMessageCard({required this.item});
+
+  final MeshInboxItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBroadcast = item.itemType == 'mesh_post';
+    final accent = isBroadcast ? dc.primary : dc.coolAccent;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: dc.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: dc.warmBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: dc.primaryContainer,
+                  color: accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  _storyCategoryIcon(story.category),
-                  color: dc.primary,
-                  size: 22,
+                  isBroadcast ? Icons.campaign_outlined : Icons.forum_outlined,
+                  color: accent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1669,218 +1362,139 @@ class _IncidentStoryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            story.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: dc.onSurface,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: dc.surfaceContainerHigh,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            severityLabel,
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: dc.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      item.title?.trim().isNotEmpty == true
+                          ? item.title!
+                          : item.authorDisplayName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: dc.ink,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      story.body.isEmpty
-                          ? 'Waiting for field updates.'
-                          : story.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        height: 1.45,
-                        color: dc.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: onBroadcast,
-                          style: TextButton.styleFrom(
-                            foregroundColor: dc.primary,
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          icon: const Icon(Icons.share, size: 16),
-                          label: const Text(
-                            'BROADCAST',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        TextButton.icon(
-                          onPressed: onUpdates,
-                          style: TextButton.styleFrom(
-                            foregroundColor: dc.onSurfaceVariant,
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                          label: Text(
-                            '$updateCount UPDATES',
-                            style: const TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
+                      _formatDateTime(item.createdAt),
+                      style: const TextStyle(fontSize: 12, color: dc.mutedInk),
                     ),
                   ],
                 ),
               ),
+              if (item.isRead == false)
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: dc.statusPending,
+                    shape: BoxShape.circle,
+                  ),
+                ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            item.body,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: dc.mutedInk,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MetaPill(
+                label: isBroadcast ? 'Broadcast' : 'Direct message',
+                icon: isBroadcast ? Icons.campaign : Icons.mail_outline,
+                color: accent,
+              ),
+              _MetaPill(
+                label: '${item.hopCount}/${item.maxHops} hops',
+                icon: Icons.hub_outlined,
+                color: dc.statusResponding,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
-
-  IconData _storyCategoryIcon(String category) {
-    return switch (category) {
-      'flood' => Icons.flood,
-      'fire' => Icons.local_fire_department,
-      'earthquake' => Icons.vibration,
-      'medical' => Icons.medical_services,
-      'structural' => Icons.home_repair_service,
-      'warning' => Icons.warning_amber,
-      'alert' => Icons.campaign,
-      _ => Icons.electrical_services,
-    };
-  }
 }
 
-class _MapSnapshotCard extends StatelessWidget {
-  const _MapSnapshotCard({required this.nodeCount, required this.onOpenMap});
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
 
-  final int nodeCount;
-  final VoidCallback onOpenMap;
+  final String label;
+  final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: dc.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Column(
-          children: [
-            Stack(
-              children: [
-                SizedBox(
-                  height: 168,
-                  width: double.infinity,
-                  child: Image.network(
-                    _fallbackMapImageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: dc.surfaceContainerHigh,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.map, color: dc.primary, size: 36),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          dc.onSurface.withValues(alpha: 0.1),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            _titleCase(label),
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Interactive Mesh Topology',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: dc.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$nodeCount Active Nodes in this sector',
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 10,
-                            color: dc.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: onOpenMap,
-                    style: TextButton.styleFrom(
-                      foregroundColor: dc.primary,
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'OPEN MAP',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionCountButton extends StatelessWidget {
+  const _ActionCountButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: dc.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -1890,49 +1504,319 @@ class _MapSnapshotCard extends StatelessWidget {
   }
 }
 
-class _BroadcastReportButton extends StatelessWidget {
-  const _BroadcastReportButton({required this.onTap});
+class _EmptyStateCard extends StatelessWidget {
+  const _EmptyStateCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.actionLabel,
+    this.onAction,
+  });
 
-  final VoidCallback onTap;
+  final IconData icon;
+  final String title;
+  final String body;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [dc.primary, dc.primaryDim],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: dc.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 34, color: dc.primary),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: dc.ink,
             ),
-            borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              BoxShadow(
-                color: dc.onSurface.withValues(alpha: 0.08),
-                blurRadius: 26,
-                offset: const Offset(0, 8),
-              ),
-            ],
           ),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 8),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: dc.mutedInk,
+            ),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: onAction,
+              style: FilledButton.styleFrom(
+                backgroundColor: dc.primary,
+                foregroundColor: dc.onPrimary,
+              ),
+              child: Text(actionLabel!),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentsSheet extends ConsumerStatefulWidget {
+  const _CommentsSheet({required this.post});
+
+  final _FeedPost post;
+
+  @override
+  ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
+}
+
+class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
+  final TextEditingController _commentController = TextEditingController();
+  bool _loading = true;
+  bool _submitting = false;
+  List<Map<String, dynamic>> _comments = const <Map<String, dynamic>>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    try {
+      final comments = await ref
+          .read(authServiceProvider)
+          .getFeedComments(widget.post.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _comments = comments;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submitComment() async {
+    final value = _commentController.text.trim();
+    if (value.isEmpty || _submitting) {
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final comment = await ref
+          .read(authServiceProvider)
+          .createFeedComment(widget.post.id, comment: value);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _comments = [..._comments, comment];
+        _submitting = false;
+      });
+      _commentController.clear();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to post your comment right now.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: dc.surfaceContainerLowest,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.75,
+            child: Column(
               children: [
-                Icon(Icons.campaign, color: dc.onPrimary, size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'BROADCAST REPORT',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: dc.onPrimary,
-                    letterSpacing: 0.4,
+                const SizedBox(height: 12),
+                Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: dc.outlineVariant,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Comments',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.post.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: dc.mutedInk,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _loading
+                      ? const Center(
+                          child: CircularProgressIndicator(color: dc.primary),
+                        )
+                      : _comments.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No comments yet. Start the thread.',
+                            style: TextStyle(color: dc.mutedInk),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(20),
+                          itemBuilder: (context, index) {
+                            final comment = _comments[index];
+                            final userName =
+                                (comment['user_name'] as String? ?? 'Citizen')
+                                    .trim();
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: dc.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          userName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatDateTime(
+                                          comment['created_at'] as String? ??
+                                              '',
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: dc.mutedInk,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    comment['comment'] as String? ?? '',
+                                    style: const TextStyle(
+                                      height: 1.45,
+                                      color: dc.ink,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemCount: _comments.length,
+                        ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _commentController,
+                          minLines: 1,
+                          maxLines: 4,
+                          decoration: InputDecoration(
+                            hintText: 'Add a comment',
+                            filled: true,
+                            fillColor: dc.surfaceContainerLow,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton(
+                        onPressed: _submitting ? null : _submitComment,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: dc.primary,
+                          foregroundColor: dc.onPrimary,
+                          minimumSize: const Size(52, 52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1944,190 +1828,191 @@ class _BroadcastReportButton extends StatelessWidget {
   }
 }
 
-enum _FeedStoryType { post, report, meshPost }
-
-class _FeedStory {
-  const _FeedStory({
+class _FeedPost {
+  const _FeedPost({
     required this.id,
-    required this.type,
     required this.title,
-    required this.body,
+    required this.content,
     required this.category,
     required this.createdAt,
-    this.routeId,
-    this.imageUrl,
-    this.latitude,
-    this.longitude,
-    this.address,
-    this.severity,
-    this.isPinned = false,
+    required this.reactionCount,
+    required this.commentCount,
+    required this.likedByMe,
+    required this.isPinned,
+    required this.imageUrls,
+    required this.attachments,
+    this.location,
+    this.uploaderId,
+    this.departmentName,
+    this.departmentDescription,
+    this.profilePictureUrl,
   });
 
-  factory _FeedStory.fromPost(Map<String, dynamic> post) {
-    final title = (post['title'] as String? ?? '').trim();
-    final body = (post['content'] as String? ?? '').trim();
-    final category = (post['category'] as String? ?? 'update').trim();
-    final images =
-        (post['image_urls'] as List?)?.whereType<String>().toList() ??
-        const <String>[];
-    return _FeedStory(
-      id: 'post-${post['id'] ?? title.hashCode}',
-      type: _FeedStoryType.post,
-      title: title.isEmpty ? _defaultPostTitle(category) : title,
-      body: body,
-      category: category,
-      createdAt: post['created_at'] as String? ?? '',
-      routeId: post['id']?.toString(),
-      imageUrl: images.isEmpty ? null : images.first,
-      isPinned: post['is_pinned'] == true,
-    );
-  }
-
-  factory _FeedStory.fromReport(Map<String, dynamic> report) {
-    final description = (report['description'] as String? ?? '').trim();
-    final lines = description
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
-    final category = (report['category'] as String? ?? 'report').trim();
-    final images =
-        (report['image_urls'] as List?)?.whereType<String>().toList() ??
-        const <String>[];
-    return _FeedStory(
-      id: 'report-${report['id'] ?? description.hashCode}',
-      type: _FeedStoryType.report,
-      title: lines.isNotEmpty ? lines.first : _defaultReportTitle(category),
-      body: lines.length > 1 ? lines.skip(1).join(' ') : description,
-      category: category,
-      createdAt: report['created_at'] as String? ?? '',
-      routeId: report['id']?.toString(),
-      imageUrl: images.isEmpty ? null : images.first,
-      latitude: (report['latitude'] as num?)?.toDouble(),
-      longitude: (report['longitude'] as num?)?.toDouble(),
-      address: report['address'] as String?,
-      severity: report['severity'] as String?,
-      isPinned:
-          ((report['severity'] as String?) ?? '').toLowerCase() == 'critical',
-    );
-  }
-
-  factory _FeedStory.fromMeshPost(MeshInboxItem item) {
-    final category = (item.category ?? 'update').trim();
-    return _FeedStory(
-      id: 'mesh-post-${item.messageId}',
-      type: _FeedStoryType.meshPost,
-      title: (item.title ?? '').trim().isEmpty
-          ? _defaultPostTitle(category)
-          : item.title!.trim(),
-      body: item.body.trim(),
-      category: category,
-      createdAt: item.createdAt,
-      routeId: item.id,
-      isPinned: category == 'alert' || category == 'warning',
+  factory _FeedPost.fromJson(Map<String, dynamic> json) {
+    final department = json['department'] as Map<String, dynamic>? ?? const {};
+    return _FeedPost(
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] as String? ?? '').trim(),
+      content: (json['content'] as String? ?? '').trim(),
+      category: (json['category'] as String? ?? 'update').trim(),
+      createdAt: (json['created_at'] as String? ?? '').trim(),
+      location: (json['location'] as String?)?.trim(),
+      uploaderId: (json['uploader'] ?? '').toString(),
+      reactionCount: (json['reaction'] as num?)?.toInt() ?? 0,
+      commentCount: (json['comment_count'] as num?)?.toInt() ?? 0,
+      likedByMe: json['liked_by_me'] == true,
+      isPinned: json['is_pinned'] == true,
+      imageUrls: (json['image_urls'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .toList(growable: false),
+      attachments: (json['attachments'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .toList(growable: false),
+      departmentName: (department['name'] as String?)?.trim(),
+      departmentDescription: (department['description'] as String?)?.trim(),
+      profilePictureUrl: (department['profile_picture'] as String?)?.trim(),
     );
   }
 
   final String id;
-  final _FeedStoryType type;
   final String title;
-  final String body;
+  final String content;
   final String category;
   final String createdAt;
-  final String? routeId;
-  final String? imageUrl;
-  final double? latitude;
-  final double? longitude;
-  final String? address;
-  final String? severity;
+  final String? location;
+  final String? uploaderId;
+  final int reactionCount;
+  final int commentCount;
+  final bool likedByMe;
   final bool isPinned;
+  final List<String> imageUrls;
+  final List<String> attachments;
+  final String? departmentName;
+  final String? departmentDescription;
+  final String? profilePictureUrl;
 
-  static String _defaultPostTitle(String category) {
-    return switch (category) {
-      'alert' => 'Critical Alert',
-      'warning' => 'Emergency Warning',
-      'safety_tip' => 'Safety Guidance',
-      'situational_report' => 'Field Situation Report',
-      _ => 'Department Update',
-    };
-  }
+  String get categoryLabel => _titleCase(category.replaceAll('_', ' '));
 
-  static String _defaultReportTitle(String category) {
-    return switch (category) {
-      'flood' => 'Flash Flood Advisory',
-      'fire' => 'Fire Response Needed',
-      'earthquake' => 'Earthquake Damage Check',
-      'medical' => 'Medical Assistance Needed',
-      'road_accident' => 'Road Hazard Report',
-      'structural' => 'Structural Damage Report',
-      _ => 'Citizen Incident Report',
-    };
-  }
+  String get publishedAtLabel => _formatDateTime(createdAt);
 }
 
-class _FeedMessageData {
-  const _FeedMessageData({
-    required this.senderLabel,
-    required this.timeLabel,
-    required this.body,
-    required this.isLocal,
+class _CitizenReport {
+  const _CitizenReport({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.category,
+    required this.status,
+    required this.severity,
+    required this.createdAt,
+    this.address,
   });
 
-  final String senderLabel;
-  final String timeLabel;
-  final String body;
-  final bool isLocal;
+  factory _CitizenReport.fromJson(Map<String, dynamic> json) {
+    final title = (json['title'] as String?)?.trim();
+    final description = (json['description'] as String? ?? '').trim();
+    return _CitizenReport(
+      id: (json['id'] ?? '').toString(),
+      title: (title == null || title.isEmpty)
+          ? _deriveReportTitle(description, json['category'] as String?)
+          : title,
+      description: description,
+      category: (json['category'] as String? ?? 'other').trim(),
+      status: (json['status'] as String? ?? 'pending').trim(),
+      severity: (json['severity'] as String? ?? 'medium').trim(),
+      createdAt: (json['created_at'] as String? ?? '').trim(),
+      address: (json['address'] as String?)?.trim(),
+    );
+  }
+
+  final String id;
+  final String title;
+  final String description;
+  final String category;
+  final String status;
+  final String severity;
+  final String createdAt;
+  final String? address;
+
+  String get categoryLabel => _titleCase(category.replaceAll('_', ' '));
+  String get statusLabel => _titleCase(status);
+  String get severityLabel => _titleCase(severity);
+  String get createdAtLabel => _formatDateTime(createdAt);
 }
 
-const _fallbackHeroStory = _FeedStory(
-  id: 'fallback-hero',
-  type: _FeedStoryType.post,
-  title: 'Flash Flood - Zone B (North Riverside)',
-  body:
-      'Immediate evacuation advised for all residents within 500m of the river bank. Water levels rising 15cm/hr.',
-  category: 'alert',
-  createdAt: '',
-  imageUrl: _fallbackFloodImageUrl,
-  isPinned: true,
-);
-
-const _fallbackIncidentStory = _FeedStory(
-  id: 'fallback-incident',
-  type: _FeedStoryType.report,
-  title: 'Downed Power Lines',
-  body: 'Oakwood Ave & 12th St intersection. Avoid area.',
-  category: 'structural',
-  createdAt: '',
-  severity: 'moderate',
-);
-
-const _fallbackRemoteMessage = _FeedMessageData(
-  senderLabel: 'NODE_742 (SUPPORT)',
-  timeLabel: '12:45 PM',
-  body:
-      'Has anyone checked the bridge on 5th Street? We have a transport waiting to cross with medical supplies.',
-  isLocal: false,
-);
-
-const _fallbackLocalMessage = _FeedMessageData(
-  senderLabel: 'YOU (LOCAL NODE)',
-  timeLabel: '12:48 PM',
-  body: 'Checking 5th St bridge now. Will report back in 5 mins.',
-  isLocal: true,
-);
-
-T? _firstOrNull<T>(Iterable<T> items) {
-  for (final item in items) {
-    return item;
+String _deriveReportTitle(String description, String? category) {
+  final lines = description
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
+  if (lines.isNotEmpty) {
+    return lines.first;
   }
-  return null;
+  final fallback = category?.trim().isNotEmpty == true ? category! : 'report';
+  return _titleCase(fallback.replaceAll('_', ' '));
 }
 
-T? _firstWhereOrNull<T>(Iterable<T> items, bool Function(T item) test) {
-  for (final item in items) {
-    if (test(item)) {
-      return item;
-    }
+String _attachmentLabel(String url) {
+  final parsed = Uri.tryParse(url);
+  final segment = parsed?.pathSegments.isNotEmpty == true
+      ? parsed!.pathSegments.last
+      : url.split('/').last;
+  return segment.isEmpty ? 'Attachment' : segment;
+}
+
+String _titleCase(String value) {
+  if (value.trim().isEmpty) {
+    return value;
   }
-  return null;
+  return value
+      .split(RegExp(r'\s+'))
+      .map((part) {
+        final word = part.trim();
+        if (word.isEmpty) {
+          return word;
+        }
+        return '${word.substring(0, 1).toUpperCase()}${word.substring(1).toLowerCase()}';
+      })
+      .join(' ');
+}
+
+String _formatDateTime(String value) {
+  final timestamp = DateTime.tryParse(value)?.toLocal();
+  if (timestamp == null) {
+    return value;
+  }
+  return DateFormat('MMM d, y • h:mm a').format(timestamp);
+}
+
+IconData _feedCategoryIcon(String category) {
+  return switch (category) {
+    'alert' => Icons.campaign_outlined,
+    'warning' => Icons.warning_amber_rounded,
+    'safety_tip' => Icons.health_and_safety_outlined,
+    'situational_report' => Icons.assignment_outlined,
+    _ => Icons.newspaper_outlined,
+  };
+}
+
+IconData _reportCategoryIcon(String category) {
+  return switch (category) {
+    'fire' => Icons.local_fire_department_rounded,
+    'flood' => Icons.water_drop_outlined,
+    'earthquake' => Icons.vibration_rounded,
+    'road_accident' => Icons.car_crash_outlined,
+    'medical' => Icons.medical_services_outlined,
+    'structural' => Icons.foundation_outlined,
+    _ => Icons.report_problem_outlined,
+  };
+}
+
+Color _severityColor(String severity) {
+  return switch (severity) {
+    'low' => dc.statusResolved,
+    'medium' => dc.coolAccent,
+    'high' => dc.statusPending,
+    'critical' => dc.statusError,
+    _ => dc.onSurfaceVariant,
+  };
 }

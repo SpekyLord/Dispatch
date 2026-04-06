@@ -134,9 +134,58 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> updateProfileMultipart({
+    String? fullName,
+    String? phone,
+    String? description,
+    SelectedMedia? profilePicture,
+    SelectedMedia? headerPhoto,
+    bool removeProfilePicture = false,
+    bool removeHeaderPhoto = false,
+  }) async {
+    final formData = FormData();
+    if (fullName != null) formData.fields.add(MapEntry('full_name', fullName));
+    if (phone != null) formData.fields.add(MapEntry('phone', phone));
+    if (description != null) {
+      formData.fields.add(MapEntry('description', description));
+    }
+    if (removeProfilePicture) {
+      formData.fields.add(const MapEntry('remove_profile_picture', 'true'));
+    }
+    if (removeHeaderPhoto) {
+      formData.fields.add(const MapEntry('remove_header_photo', 'true'));
+    }
+    if (profilePicture != null) {
+      formData.files.add(
+        MapEntry(
+          'profile_picture_file',
+          MultipartFile.fromBytes(
+            profilePicture.bytes,
+            filename: profilePicture.name,
+          ),
+        ),
+      );
+    }
+    if (headerPhoto != null) {
+      formData.files.add(
+        MapEntry(
+          'header_photo_file',
+          MultipartFile.fromBytes(
+            headerPhoto.bytes,
+            filename: headerPhoto.name,
+          ),
+        ),
+      );
+    }
+
+    final response = await _dio.put('/api/users/profile', data: formData);
+    return response.data as Map<String, dynamic>;
+  }
+
   // --- Reports ---
 
   Future<Map<String, dynamic>> createReport({
+    String? title,
     required String description,
     required String category,
     String severity = 'medium',
@@ -149,6 +198,9 @@ class AuthService {
       'category': category,
       'severity': severity,
     };
+    if (title != null && title.trim().isNotEmpty) {
+      body['title'] = title.trim();
+    }
     if (address != null) body['address'] = address;
     if (latitude != null) body['latitude'] = latitude;
     if (longitude != null) body['longitude'] = longitude;
@@ -156,8 +208,11 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getReports() async {
-    final response = await _dio.get('/api/reports');
+  Future<List<dynamic>> getReports({String? status, String? category}) async {
+    final params = <String, dynamic>{};
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    if (category != null && category.isNotEmpty) params['category'] = category;
+    final response = await _dio.get('/api/reports', queryParameters: params);
     return (response.data as Map<String, dynamic>)['reports'] as List<dynamic>;
   }
 
@@ -294,9 +349,13 @@ class AuthService {
   // --- Feed (Phase 2) ---
 
   // List public feed posts with optional category filter
-  Future<List<Map<String, dynamic>>> getFeedPosts({String? category}) async {
+  Future<List<Map<String, dynamic>>> getFeedPosts({
+    String? category,
+    String? uploader,
+  }) async {
     final params = <String, dynamic>{};
     if (category != null) params['category'] = category;
+    if (uploader != null) params['uploader'] = uploader;
     final response = await _dio.get('/api/feed', queryParameters: params);
     return (response.data['posts'] as List).cast<Map<String, dynamic>>();
   }
@@ -306,6 +365,36 @@ class AuthService {
     final response = await _dio.get('/api/feed/$postId');
     return (response.data as Map<String, dynamic>)['post']
         as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getFeedComments(String postId) async {
+    final response = await _dio.get('/api/feed/$postId/comments');
+    return (response.data['comments'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createFeedComment(
+    String postId, {
+    required String comment,
+  }) async {
+    final response = await _dio.post(
+      '/api/feed/$postId/comments',
+      data: {'comment': comment},
+    );
+    return (response.data as Map<String, dynamic>)['comment']
+        as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> toggleFeedReaction(String postId) async {
+    final response = await _dio.post('/api/feed/$postId/reaction');
+    return (response.data as Map<String, dynamic>)['post']
+        as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getDepartmentPublicProfile(
+    String uploaderId,
+  ) async {
+    final response = await _dio.get('/api/departments/view/$uploaderId');
+    return response.data as Map<String, dynamic>;
   }
 
   /// Aggregates the citizen-facing mesh feed into a single payload so the
@@ -372,6 +461,10 @@ class AuthService {
   // Mark all notifications as read
   Future<void> markAllNotificationsRead() async {
     await _dio.put('/api/notifications/read-all');
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    await _dio.delete('/api/notifications/$notificationId');
   }
 
   // --- Mesh survivor signals (Phase 4 extension) ---

@@ -4,20 +4,21 @@ import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dispatch_mobile/features/shared/presentation/location_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' show ImageSource;
+import 'package:latlong2/latlong.dart';
 
 const _maxImages = 3;
 const _categories = <({String api, String label, IconData icon})>[
-  (api: 'medical', label: 'Medical', icon: Icons.medical_services_rounded),
-  (
-    api: 'structural',
-    label: 'Infrastructure',
-    icon: Icons.construction_rounded,
-  ),
   (api: 'fire', label: 'Fire', icon: Icons.local_fire_department_rounded),
+  (api: 'flood', label: 'Flood', icon: Icons.water_drop_rounded),
+  (api: 'earthquake', label: 'Earthquake', icon: Icons.vibration_rounded),
+  (api: 'road_accident', label: 'Road Accident', icon: Icons.car_crash_rounded),
+  (api: 'medical', label: 'Medical', icon: Icons.medical_services_rounded),
+  (api: 'structural', label: 'Structural', icon: Icons.foundation_rounded),
   (api: 'other', label: 'Other', icon: Icons.more_horiz_rounded),
 ];
 const _severities = <({String api, String label})>[
@@ -46,6 +47,7 @@ class _CitizenReportFormScreenState
   String _severity = 'high';
   bool _loading = false;
   bool _gpsLoading = false;
+  bool _manualLocationLocked = false;
   String? _error;
   String _meshStatus = 'Waiting for Mesh Broadcast...';
   double? _latitude;
@@ -59,6 +61,9 @@ class _CitizenReportFormScreenState
     _gpsSubscription = ref.read(locationServiceProvider).watchPosition().listen(
       (location) {
         if (!mounted) {
+          return;
+        }
+        if (_manualLocationLocked) {
           return;
         }
         setState(() {
@@ -97,6 +102,7 @@ class _CitizenReportFormScreenState
         return;
       }
       setState(() {
+        _manualLocationLocked = false;
         _latitude = location?.latitude;
         _longitude = location?.longitude;
         _accuracyMeters = location?.accuracyMeters;
@@ -113,6 +119,120 @@ class _CitizenReportFormScreenState
         setState(() => _gpsLoading = false);
       }
     }
+  }
+
+  Future<void> _pickLocationManually() async {
+    final selected = await showModalBottomSheet<LatLng>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final initialLatitude = _latitude ?? 14.5995;
+        final initialLongitude = _longitude ?? 120.9842;
+        LatLng? pendingSelection;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 24, 12, 12),
+                decoration: BoxDecoration(
+                  color: dc.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Pin Incident Location',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: dc.onSurface,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Tap the map to drop a manual pin when GPS is weak or drifting.',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            height: 1.45,
+                            color: dc.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      LocationPicker(
+                        initialLatitude: initialLatitude,
+                        initialLongitude: initialLongitude,
+                        height: 320,
+                        onLocationSelected: (point) {
+                          setModalState(() => pendingSelection = point);
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                Navigator.of(context).pop(
+                                  pendingSelection ??
+                                      LatLng(initialLatitude, initialLongitude),
+                                );
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: dc.primary,
+                                foregroundColor: dc.onPrimary,
+                              ),
+                              child: const Text('Use pin'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || selected == null) {
+      return;
+    }
+
+    setState(() {
+      _manualLocationLocked = true;
+      _latitude = selected.latitude;
+      _longitude = selected.longitude;
+      _meshStatus = 'Manual map pin locked.';
+    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -224,8 +344,8 @@ class _CitizenReportFormScreenState
     final address = _addressController.text.trim();
     if (title.isEmpty && details.isEmpty) {
       setState(
-        () => _error =
-            'Add a title or describe the situation before submitting.',
+        () =>
+            _error = 'Add a title or describe the situation before submitting.',
       );
       return;
     }
@@ -242,6 +362,7 @@ class _CitizenReportFormScreenState
     try {
       final auth = ref.read(authServiceProvider);
       final result = await auth.createReport(
+        title: title.isEmpty ? null : title,
         description: description,
         category: _category,
         severity: _severity,
@@ -683,7 +804,7 @@ class _CitizenReportFormScreenState
                   const SizedBox(height: 14),
                   _sectionCard(
                     child: SizedBox(
-                      height: 150,
+                      height: 184,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -794,6 +915,8 @@ class _CitizenReportFormScreenState
                                   child: Text(
                                     _latitude == null || _longitude == null
                                         ? 'SEARCHING FOR MESH TAG'
+                                        : _manualLocationLocked
+                                        ? 'MANUAL MAP PIN'
                                         : 'ACTIVE MESH TAGGING',
                                     style: const TextStyle(
                                       fontFamily: 'Inter',
@@ -812,6 +935,32 @@ class _CitizenReportFormScreenState
                                     fontSize: 11,
                                     color: dc.onSurface.withValues(alpha: 0.72),
                                   ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _pickLocationManually,
+                                        icon: const Icon(
+                                          Icons.push_pin_outlined,
+                                        ),
+                                        label: const Text('Pin on map'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _gpsLoading
+                                            ? null
+                                            : _refreshGps,
+                                        icon: const Icon(
+                                          Icons.gps_fixed_rounded,
+                                        ),
+                                        label: const Text('Use GPS'),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

@@ -50,6 +50,8 @@ class FakeRealtimeService extends RealtimeService {
 class FakeCitizenDetailAuthService extends AuthService {
   FakeCitizenDetailAuthService() : super();
 
+  int fetchCount = 0;
+
   Map<String, dynamic> _report = {
     'id': 'report-12345',
     'description': 'Smoke seen near the public market.',
@@ -69,9 +71,16 @@ class FakeCitizenDetailAuthService extends AuthService {
     },
   ];
 
+  List<dynamic> _departmentResponses = const <dynamic>[];
+
   @override
   Future<Map<String, dynamic>> getReport(String reportId) async {
-    return {'report': _report, 'status_history': _history};
+    fetchCount++;
+    return {
+      'report': _report,
+      'status_history': _history,
+      'department_responses': _departmentResponses,
+    };
   }
 
   void moveToResponding() {
@@ -82,6 +91,18 @@ class FakeCitizenDetailAuthService extends AuthService {
         'new_status': 'responding',
         'notes': 'Responders are now en route.',
         'created_at': '2026-03-29T05:04:00Z',
+      },
+    ];
+  }
+
+  void addDepartmentResponse() {
+    _departmentResponses = [
+      ..._departmentResponses,
+      {
+        'notes': 'Unit 3 is on scene.',
+        'department_name': 'Fire Station 3',
+        'action': 'accepted',
+        'created_at': '2026-03-29T05:10:00Z',
       },
     ];
   }
@@ -123,6 +144,75 @@ void main() {
 
       expect(find.text('Responders are now en route.'), findsOneWidget);
       expect(find.text('RESPONDING'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'citizen detail screen refreshes when department_responses event fires',
+    (tester) async {
+      final auth = FakeCitizenDetailAuthService();
+      final realtime = FakeRealtimeService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authServiceProvider.overrideWith((ref) => auth),
+            realtimeServiceProvider.overrideWith((ref) => realtime),
+          ],
+          child: const MaterialApp(
+            home: CitizenReportDetailScreen(reportId: 'report-12345'),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Report received.'), findsOneWidget);
+
+      auth.addDepartmentResponse();
+      realtime.emit(
+        'department_responses',
+        eqColumn: 'report_id',
+        eqValue: 'report-12345',
+      );
+
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unit 3 is on scene.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'citizen detail screen re-fetches when notifications event fires',
+    (tester) async {
+      final auth = FakeCitizenDetailAuthService();
+      final realtime = FakeRealtimeService();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authServiceProvider.overrideWith((ref) => auth),
+            realtimeServiceProvider.overrideWith((ref) => realtime),
+          ],
+          child: const MaterialApp(
+            home: CitizenReportDetailScreen(reportId: 'report-12345'),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      final countBeforeEvent = auth.fetchCount;
+
+      realtime.emit('notifications');
+
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(auth.fetchCount, greaterThan(countBeforeEvent));
     },
   );
 }

@@ -145,6 +145,12 @@ export function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      const destination = routeState.from ?? roleHomePaths[response.user.role];
+      if (!destination) {
+        setError("Login succeeded but your account role is not recognised. Please try again.");
+        return;
+      }
+
       setSession({
         user: {
           id: response.user.id,
@@ -157,7 +163,7 @@ export function LoginPage() {
         department: response.department ?? null,
       });
 
-      navigate(routeState.from ?? roleHomePaths[response.user.role] ?? "/");
+      navigate(destination);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Login failed.",

@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
+import 'package:flutter/foundation.dart';
 
 enum MeshNodeRole { origin, relay, gateway }
 
@@ -108,6 +109,7 @@ class MeshPacket {
 
 class MeshPeer {
   final String endpointId;
+  String? deviceId;
   String deviceName;
   bool isGateway;
   bool supportsWifiDirect;
@@ -117,6 +119,7 @@ class MeshPeer {
 
   MeshPeer({
     required this.endpointId,
+    this.deviceId,
     required this.deviceName,
     this.isGateway = false,
     this.supportsWifiDirect = false,
@@ -284,6 +287,7 @@ class DeviceLocationTrailPoint {
     required this.lng,
     required this.recordedAt,
     this.displayName,
+    this.routingDeviceId,
     this.accuracyMeters,
     this.batteryPct,
     this.appState = 'foreground',
@@ -292,6 +296,7 @@ class DeviceLocationTrailPoint {
   final String messageId;
   final String deviceFingerprint;
   final String? displayName;
+  final String? routingDeviceId;
   final double lat;
   final double lng;
   final double? accuracyMeters;
@@ -305,6 +310,7 @@ class DeviceLocationTrailPoint {
       messageId: packet.messageId,
       deviceFingerprint: payload['deviceFingerprint'] as String? ?? '',
       displayName: payload['displayName'] as String?,
+      routingDeviceId: packet.originDeviceId,
       lat: (payload['lat'] as num?)?.toDouble() ?? 0,
       lng: (payload['lng'] as num?)?.toDouble() ?? 0,
       accuracyMeters: (payload['accuracyMeters'] as num?)?.toDouble(),
@@ -335,6 +341,11 @@ class DeviceLocationTrailPoint {
           '',
       displayName:
           json['display_name'] as String? ?? json['displayName'] as String?,
+      routingDeviceId:
+          json['routing_device_id'] as String? ??
+          json['routingDeviceId'] as String? ??
+          json['origin_device_id'] as String? ??
+          json['originDeviceId'] as String?,
       lat: lat,
       lng: lng,
       accuracyMeters:
@@ -360,7 +371,7 @@ class DeviceLocationTrailPoint {
   }
 }
 
-class MeshTransportService {
+class MeshTransportService extends ChangeNotifier {
   MeshTransportService({
     MeshInboxStorage? inboxStorage,
     LocationService? locationService,
@@ -399,6 +410,10 @@ class MeshTransportService {
   bool _isSosBeaconBroadcasting = false;
   bool _sarModeEnabled = false;
   String? _sosBeaconDeviceId;
+  String? _operatorDisplayName;
+  String? _operatorRole;
+  String? _operatorDepartmentId;
+  String? _operatorDepartmentName;
   Timer? _locationBeaconTimer;
   Duration? _activeLocationBeaconInterval;
   bool _hydratedInbox = false;
@@ -427,6 +442,19 @@ class MeshTransportService {
   String? get transportStatusNote => _transportStatusNote;
   String? get activeRelayTransport => _activeRelayTransport;
   List<MeshInboxItem> get inboxItems => List.unmodifiable(_sortedInbox());
+  bool get hasPendingServerSync =>
+      _outboundQueue.isNotEmpty || _inbox.any((item) => item.needsServerSync);
+  List<MeshPacket> get pendingReportPackets {
+    final packetsById = <String, MeshPacket>{
+      for (final packet in [..._relayBacklog.values, ..._outboundQueue])
+        if (packet.payloadType == MeshPayloadType.incidentReport ||
+            packet.payloadType == MeshPayloadType.distress)
+          packet.messageId: packet,
+    };
+    final packets = packetsById.values.toList(growable: false);
+    packets.sort((left, right) => right.timestamp.compareTo(left.timestamp));
+    return packets;
+  }
   int get unreadMeshMessageCount => _inbox
       .where((item) => !item.isRead && item.itemType == 'mesh_message')
       .length;
@@ -449,10 +477,28 @@ class MeshTransportService {
     return points;
   }
 
+  String directThreadIdForNode(String nodeDeviceId) {
+    return directThreadId(_localDeviceId, nodeDeviceId);
+  }
+
+  void updateOperatorProfile({
+    String? displayName,
+    String? operatorRole,
+    String? departmentId,
+    String? departmentName,
+  }) {
+    _operatorDisplayName = displayName?.trim();
+    _operatorRole = operatorRole?.trim();
+    _operatorDepartmentId = departmentId?.trim();
+    _operatorDepartmentName = departmentName?.trim();
+    notifyListeners();
+  }
+
   void ingestServerLastSeen(Iterable<Map<String, dynamic>> rows) {
     for (final row in rows) {
       _upsertTrailPoint(DeviceLocationTrailPoint.fromJson(row));
     }
+    notifyListeners();
   }
 
   void ingestServerTrail(
@@ -467,6 +513,7 @@ class MeshTransportService {
             messageId: point.messageId,
             deviceFingerprint: deviceFingerprint,
             displayName: point.displayName,
+            routingDeviceId: point.routingDeviceId,
             lat: point.lat,
             lng: point.lng,
             accuracyMeters: point.accuracyMeters,
@@ -479,6 +526,7 @@ class MeshTransportService {
       }
       _upsertTrailPoint(point);
     }
+    notifyListeners();
   }
 
   Future<void> initialize() async {
@@ -491,6 +539,7 @@ class MeshTransportService {
     await _refreshPlatformCapabilities();
     await _hydrateInbox();
     _syncLocationBeaconSchedule();
+    notifyListeners();
   }
 
   Future<void> _hydrateInbox() async {
@@ -533,6 +582,7 @@ class MeshTransportService {
           onPeerDiscovered(
             peer.endpointId,
             peer.deviceName,
+            deviceId: peer.deviceId,
             isGateway: peer.isGateway,
             supportsWifiDirect: peer.supportsWifiDirect,
             isConnected: peer.isConnected,
@@ -550,6 +600,7 @@ class MeshTransportService {
           if (snapshot.connectedPeerCount > 0) {
             _scheduleRelayFlush();
           }
+          notifyListeners();
         case MeshPlatformEventType.packetReceived:
           final inbound = event.packet;
           if (inbound == null) {
@@ -569,6 +620,7 @@ class MeshTransportService {
       return;
     }
     _platformCapabilities = await _platform.getCapabilities();
+    notifyListeners();
   }
 
   Future<void> startDiscovery() async {
@@ -579,15 +631,22 @@ class MeshTransportService {
       localDeviceId: _localDeviceId,
       isGateway: _role == MeshNodeRole.gateway,
     );
+    _syncLocationBeaconSchedule();
     _scheduleRelayFlush();
+    notifyListeners();
   }
 
   Future<void> stopDiscovery() async {
     _isDiscovering = false;
     await _platform?.stopDiscovery();
+    _syncLocationBeaconSchedule();
+    notifyListeners();
   }
 
   void setConnectivity(bool hasInternet) {
+    if (_hasInternet == hasInternet) {
+      return;
+    }
     _hasInternet = hasInternet;
     if (hasInternet) {
       _rehydratePendingInboxPackets();
@@ -603,6 +662,7 @@ class MeshTransportService {
     }
     _syncLocationBeaconSchedule();
     _scheduleRelayFlush();
+    notifyListeners();
   }
 
   void enqueuePacket(MeshPacket packet) {
@@ -612,6 +672,7 @@ class MeshTransportService {
     _recordLocationTrail(packet);
     _recordPacketInInbox(packet, authoredLocally: true);
     _scheduleRelayFlush(messageId: packet.messageId);
+    notifyListeners();
   }
 
   bool receivePacket(
@@ -622,12 +683,12 @@ class MeshTransportService {
     if (_seenMessageIds.contains(packet.messageId)) {
       return false;
     }
-    if (_isDirectMessage(packet) && !_isPacketForThisDevice(packet)) {
-      return false;
-    }
     if (packet.hopCount >= packet.maxHops) {
       return false;
     }
+
+    final isDirectMessage = _isDirectMessage(packet);
+    final isPacketForThisDevice = _isPacketForThisDevice(packet);
 
     _seenMessageIds.add(packet.messageId);
     packet.hopCount++;
@@ -638,8 +699,10 @@ class MeshTransportService {
 
     _rememberForRelay(packet);
     _recordLocationTrail(packet);
-    _recordPacketInInbox(packet, authoredLocally: false);
-    _packetController.add(packet);
+    if (!isDirectMessage || isPacketForThisDevice) {
+      _recordPacketInInbox(packet, authoredLocally: false);
+      _packetController.add(packet);
+    }
     if (transport != null && transport.isNotEmpty) {
       _activeRelayTransport = transport;
     }
@@ -647,6 +710,7 @@ class MeshTransportService {
       messageId: packet.messageId,
       excludeEndpointId: sourceEndpointId,
     );
+    notifyListeners();
     return true;
   }
 
@@ -659,6 +723,7 @@ class MeshTransportService {
       );
     _outboundQueue.clear();
     _lastSyncTime = DateTime.now();
+    notifyListeners();
     return packets;
   }
 
@@ -676,6 +741,7 @@ class MeshTransportService {
       _outboundQueue.add(packet);
       queuedMessageIds.add(packet.messageId);
     }
+    notifyListeners();
   }
 
   Future<Map<String, dynamic>?> buildTopologySnapshot({
@@ -702,6 +768,7 @@ class MeshTransportService {
           messageId: '',
           deviceFingerprint: localFingerprint,
           displayName: displayName,
+          routingDeviceId: _localDeviceId,
           lat: location.latitude,
           lng: location.longitude,
           accuracyMeters: location.accuracyMeters,
@@ -715,18 +782,23 @@ class MeshTransportService {
       return null;
     }
 
-    final normalizedRole = _normalizeTopologyRole(operatorRole);
+    final effectiveOperatorRole = operatorRole ?? _operatorRole;
+    final effectiveDepartmentId = departmentId ?? _operatorDepartmentId;
+    final effectiveDepartmentName = departmentName ?? _operatorDepartmentName;
+    final effectiveDisplayName = displayName ?? _operatorDisplayName;
+
+    final normalizedRole = _normalizeTopologyRole(effectiveOperatorRole);
     final hasDepartmentId =
-        departmentId != null && departmentId.trim().isNotEmpty;
+        effectiveDepartmentId != null && effectiveDepartmentId.trim().isNotEmpty;
     final normalizedDepartmentId = hasDepartmentId
-        ? departmentId!.trim()
+        ? effectiveDepartmentId!.trim()
         : null;
-    final normalizedDepartmentName = (departmentName ?? '').trim();
-    final gatewayDisplayName = (displayName ?? gatewayPoint.displayName ?? '')
-        .trim();
+    final normalizedDepartmentName = (effectiveDepartmentName ?? '').trim();
+    final gatewayDisplayName =
+        (effectiveDisplayName ?? gatewayPoint.displayName ?? '').trim();
 
     final gatewayNode = <String, dynamic>{
-      'nodeDeviceId': _localDeviceId,
+      'nodeDeviceId': gatewayPoint.routingDeviceId ?? _localDeviceId,
       'gatewayDeviceId': _localDeviceId,
       'role': 'gateway',
       'lat': gatewayPoint.lat,
@@ -763,7 +835,7 @@ class MeshTransportService {
         .take(effectiveMaxNodes)
         .map(
           (point) => <String, dynamic>{
-            'nodeDeviceId': point.deviceFingerprint,
+            'nodeDeviceId': point.routingDeviceId ?? point.deviceFingerprint,
             'gatewayDeviceId': _localDeviceId,
             'role': 'relay',
             'lat': point.lat,
@@ -777,6 +849,7 @@ class MeshTransportService {
               'batteryPct': point.batteryPct,
               'appState': point.appState,
               'accuracyMeters': point.accuracyMeters,
+              'deviceFingerprint': point.deviceFingerprint,
               'source': 'location_beacon',
             },
           },
@@ -807,14 +880,25 @@ class MeshTransportService {
     }
     if (changed) {
       unawaited(_persistInbox());
+      notifyListeners();
     }
   }
 
   void ingestServerMessages(List<Map<String, dynamic>> rows) {
+    var changed = false;
     for (final row in rows) {
       final messageId = row['message_id'] as String? ?? '';
-      if (messageId.isEmpty ||
-          _inbox.any((item) => item.messageId == messageId)) {
+      if (messageId.isEmpty) {
+        continue;
+      }
+      final existingIndex = _inbox.indexWhere((item) => item.messageId == messageId);
+      if (existingIndex >= 0) {
+        if (_inbox[existingIndex].needsServerSync) {
+          _inbox[existingIndex] = _inbox[existingIndex].copyWith(
+            needsServerSync: false,
+          );
+          changed = true;
+        }
         continue;
       }
       _inbox.add(
@@ -836,16 +920,28 @@ class MeshTransportService {
           createdAt: row['created_at'] as String? ?? '',
         ),
       );
+      changed = true;
     }
-    unawaited(_persistInbox());
+    if (changed) {
+      unawaited(_persistInbox());
+      notifyListeners();
+    }
   }
 
   void ingestServerMeshPosts(List<Map<String, dynamic>> rows) {
+    var changed = false;
     for (final row in rows) {
       final messageId = row['mesh_message_id'] as String?;
       final fallbackId = row['id'] as String? ?? '';
       final uniqueId = messageId ?? 'mesh-post-$fallbackId';
-      if (_inbox.any((item) => item.messageId == uniqueId)) {
+      final existingIndex = _inbox.indexWhere((item) => item.messageId == uniqueId);
+      if (existingIndex >= 0) {
+        if (_inbox[existingIndex].needsServerSync) {
+          _inbox[existingIndex] = _inbox[existingIndex].copyWith(
+            needsServerSync: false,
+          );
+          changed = true;
+        }
         continue;
       }
       _inbox.add(
@@ -867,8 +963,12 @@ class MeshTransportService {
           createdAt: row['created_at'] as String? ?? '',
         ),
       );
+      changed = true;
     }
-    unawaited(_persistInbox());
+    if (changed) {
+      unawaited(_persistInbox());
+      notifyListeners();
+    }
   }
 
   void markAllCommsRead() {
@@ -882,6 +982,7 @@ class MeshTransportService {
     }
     if (changed) {
       unawaited(_persistInbox());
+      notifyListeners();
     }
   }
 
@@ -896,21 +997,26 @@ class MeshTransportService {
     }
     if (changed) {
       unawaited(_persistInbox());
+      notifyListeners();
     }
   }
 
   void onPeerDiscovered(
     String endpointId,
     String deviceName, {
+    String? deviceId,
     bool isGateway = false,
     bool supportsWifiDirect = false,
     bool isConnected = false,
     String? transport,
   }) {
+    var wasDisconnected = true;
     final existing = _peers.where((p) => p.endpointId == endpointId);
     if (existing.isNotEmpty) {
       final peer = existing.first;
+      wasDisconnected = !peer.isConnected;
       peer
+        ..deviceId = deviceId ?? peer.deviceId
         ..deviceName = deviceName
         ..isGateway = isGateway
         ..supportsWifiDirect = supportsWifiDirect
@@ -921,6 +1027,7 @@ class MeshTransportService {
       _peers.add(
         MeshPeer(
           endpointId: endpointId,
+          deviceId: deviceId,
           deviceName: deviceName,
           isGateway: isGateway,
           supportsWifiDirect: supportsWifiDirect,
@@ -935,8 +1042,15 @@ class MeshTransportService {
     }
     _updateNodeRole();
     if (isConnected) {
-      _scheduleRelayFlush();
+      // On reconnection, flush the full relay backlog so the peer gets
+      // every message it may have missed while disconnected.
+      if (wasDisconnected && _relayBacklog.isNotEmpty) {
+        _scheduleRelayFlush();
+      } else {
+        _scheduleRelayFlush();
+      }
     }
+    notifyListeners();
   }
 
   void pruneStalePeers() {
@@ -944,6 +1058,7 @@ class MeshTransportService {
     _peers.removeWhere((p) => p.lastSeen.isBefore(cutoff));
     _connectedRelayPeerCount = _peers.where((peer) => peer.isConnected).length;
     _updateNodeRole();
+    notifyListeners();
   }
 
   void pruneStaleePeers() => pruneStalePeers();
@@ -963,17 +1078,20 @@ class MeshTransportService {
     _isSosBeaconBroadcasting = true;
     _sosBeaconDeviceId = deviceId;
     _syncLocationBeaconSchedule();
+    notifyListeners();
   }
 
   void stopSosBeaconBroadcast() {
     _isSosBeaconBroadcasting = false;
     _sosBeaconDeviceId = null;
     _syncLocationBeaconSchedule();
+    notifyListeners();
   }
 
   void setSarModeEnabled(bool enabled) {
     _sarModeEnabled = enabled;
     _syncLocationBeaconSchedule();
+    notifyListeners();
   }
 
   void _rememberForRelay(MeshPacket packet) {
@@ -1045,6 +1163,7 @@ class MeshTransportService {
     } finally {
       _relayFlushInFlight = false;
       _updateNodeRole();
+      notifyListeners();
     }
   }
 
@@ -1148,7 +1267,12 @@ class MeshTransportService {
     }
 
     final shouldBroadcast =
-        _sarModeEnabled || isMeshOnlyState || _isSosBeaconBroadcasting;
+        _sarModeEnabled ||
+        isMeshOnlyState ||
+        _isSosBeaconBroadcasting ||
+        _isDiscovering ||
+        _connectedRelayPeerCount > 0 ||
+        _peers.isNotEmpty;
     final nextInterval = shouldBroadcast
         ? (_isSosBeaconBroadcasting
               ? const Duration(seconds: 10)
@@ -1187,7 +1311,7 @@ class MeshTransportService {
         latitude: location.latitude,
         longitude: location.longitude,
         accuracyMeters: location.accuracyMeters,
-        displayName: null,
+        displayName: _operatorDisplayName,
         appState: _isSosBeaconBroadcasting ? 'sos_active' : 'foreground',
       ),
     );
@@ -1201,7 +1325,8 @@ class MeshTransportService {
 
   bool _isPacketForThisDevice(MeshPacket packet) {
     final recipient = packet.payload['recipientIdentifier'] as String?;
-    return recipient == _localDeviceId || recipient == packet.originDeviceId;
+    if (recipient == null || recipient.isEmpty) return false;
+    return recipient == _localDeviceId;
   }
 
   int _estimateReach() {
@@ -1405,6 +1530,14 @@ class MeshTransportService {
         '${digest.substring(20, 32)}';
   }
 
+  static String directThreadId(String firstDeviceId, String secondDeviceId) {
+    final sorted = [firstDeviceId.trim(), secondDeviceId.trim()]..sort();
+    final digest = md5Hash('direct:${sorted.join('|')}');
+    return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
+        '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
+        '${digest.substring(20, 32)}';
+  }
+
   static String anonymizeDeviceFingerprint(String rawIdentifier) {
     final segments = rawIdentifier
         .toUpperCase()
@@ -1501,10 +1634,12 @@ class MeshTransportService {
     };
   }
 
+  @override
   void dispose() {
     _locationBeaconTimer?.cancel();
     unawaited(_platformSubscription?.cancel());
     _packetController.close();
+    super.dispose();
   }
 
   static String _generateUuid() {

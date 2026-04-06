@@ -18,7 +18,7 @@ final meshPlatformServiceProvider = Provider<MeshPlatformService>((ref) {
   return service;
 });
 
-final meshTransportProvider = Provider<MeshTransportService>((ref) {
+final meshTransportProvider = ChangeNotifierProvider<MeshTransportService>((ref) {
   final transport = MeshTransportService(
     inboxStorage: ref.read(meshInboxStorageProvider),
     locationService: ref.read(locationServiceProvider),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
@@ -9,7 +10,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class OfflineCommsScreen extends ConsumerStatefulWidget {
-  const OfflineCommsScreen({super.key});
+  const OfflineCommsScreen({
+    super.key,
+    this.initialMode,
+    this.initialRecipientIdentifier,
+    this.initialRecipientLabel,
+    this.initialThreadId,
+  });
+
+  final String? initialMode;
+  final String? initialRecipientIdentifier;
+  final String? initialRecipientLabel;
+  final String? initialThreadId;
 
   @override
   ConsumerState<OfflineCommsScreen> createState() => _OfflineCommsScreenState();
@@ -24,17 +36,53 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   bool _sending = false;
   bool _syncing = false;
   String? _error;
+  final List<RealtimeSubscriptionHandle> _realtimeHandles = [];
+
+  String? get _activeThreadId => widget.initialThreadId;
+  bool get _isDirectThread => (_activeThreadId != null) && _mode == 'direct';
+  String get _recipientLabel =>
+      widget.initialRecipientLabel ?? 'Selected node';
 
   @override
   void initState() {
     super.initState();
+    _mode = widget.initialMode ??
+        (widget.initialRecipientIdentifier != null ? 'direct' : 'broadcast');
+
     final transport = ref.read(meshTransportProvider);
-    transport.markAllCommsRead();
+    if (_activeThreadId != null) {
+      transport.markThreadRead(_activeThreadId!);
+    } else {
+      transport.markAllCommsRead();
+    }
+
+    _bindRealtime();
     unawaited(_hydrateServerHistory());
+  }
+
+  void _bindRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    if (!realtime.isConfigured) {
+      return;
+    }
+
+    _realtimeHandles.addAll([
+      realtime.subscribeToTable(
+        table: 'mesh_comms_messages',
+        onChange: () => unawaited(_hydrateServerHistory()),
+      ),
+      realtime.subscribeToTable(
+        table: 'mesh_comms_posts',
+        onChange: () => unawaited(_hydrateServerHistory()),
+      ),
+    ]);
   }
 
   @override
   void dispose() {
+    for (final handle in _realtimeHandles) {
+      unawaited(handle.dispose());
+    }
     _messageCtrl.dispose();
     _titleCtrl.dispose();
     _postBodyCtrl.dispose();
@@ -170,15 +218,33 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
             'Offline account token is missing or expired. Sign in again before sending mesh messages.',
           );
         }
+        final threadId = _mode == 'direct'
+            ? _activeThreadId
+            : _mode == 'department' && session.department != null
+                ? MeshTransportService.departmentThreadId(session.department!.id)
+                : MeshTransportService.broadcastThreadId();
+        final recipientScope = _mode == 'direct'
+            ? 'direct'
+            : _mode == 'department'
+                ? 'department'
+                : 'broadcast';
+        final recipientIdentifier = _mode == 'direct'
+            ? widget.initialRecipientIdentifier
+            : _mode == 'department'
+                ? session.department?.id
+                : null;
+        if (threadId == null || threadId.isEmpty) {
+          throw Exception('Direct thread target is missing.');
+        }
+        if (recipientScope == 'direct' &&
+            (recipientIdentifier == null || recipientIdentifier.isEmpty)) {
+          throw Exception('Recipient node is missing for this direct message.');
+        }
         final packet = MeshTransportService.createMeshMessagePacket(
           deviceId: transport.localDeviceId,
-          threadId: _mode == 'department' && session.department != null
-              ? MeshTransportService.departmentThreadId(session.department!.id)
-              : MeshTransportService.broadcastThreadId(),
-          recipientScope: _mode == 'department' ? 'department' : 'broadcast',
-          recipientIdentifier: _mode == 'department'
-              ? session.department?.id
-              : null,
+          threadId: threadId,
+          recipientScope: recipientScope,
+          recipientIdentifier: recipientIdentifier,
           body: body,
           authorDisplayName: displayName,
           authorRole: authenticatedRole ?? 'anonymous',
@@ -205,14 +271,16 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
     final transport = ref.watch(meshTransportProvider);
-    final items = transport.inboxItems;
+    final items = _activeThreadId != null
+        ? transport.threadItems(_activeThreadId!)
+        : transport.inboxItems;
     final canDepartmentMessage =
         session.role == AppRole.department && session.department != null;
 
     return Scaffold(
       backgroundColor: dc.warmBackground,
       appBar: AppBar(
-        title: const Text('Offline Comms'),
+        title: Text(_isDirectThread ? _recipientLabel : 'Offline Comms'),
         backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
@@ -323,18 +391,25 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _ModeChip(
-                      label: 'Broadcast',
-                      active: _mode == 'broadcast',
-                      onTap: () => setState(() => _mode = 'broadcast'),
-                    ),
-                    if (canDepartmentMessage)
+                    if (_activeThreadId != null)
+                      _ModeChip(
+                        label: 'Direct',
+                        active: _mode == 'direct',
+                        onTap: () => setState(() => _mode = 'direct'),
+                      ),
+                    if (_activeThreadId == null)
+                      _ModeChip(
+                        label: 'Broadcast',
+                        active: _mode == 'broadcast',
+                        onTap: () => setState(() => _mode = 'broadcast'),
+                      ),
+                    if (_activeThreadId == null && canDepartmentMessage)
                       _ModeChip(
                         label: 'Department',
                         active: _mode == 'department',
                         onTap: () => setState(() => _mode = 'department'),
                       ),
-                    if (canDepartmentMessage)
+                    if (_activeThreadId == null && canDepartmentMessage)
                       _ModeChip(
                         label: 'Mesh Post',
                         active: _mode == 'post',
@@ -436,7 +511,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 border: Border.all(color: dc.warmBorder),
               ),
               child: const Text(
-                'No messages yet. Compose a broadcast above or wait for nearby nodes to relay traffic.',
+                _isDirectThread
+                    ? 'No direct messages in this thread yet. Send one and nearby nodes will relay it across the mesh.'
+                    : 'No messages yet. Compose a broadcast above or wait for nearby nodes to relay traffic.',
                 style: TextStyle(color: dc.mutedInk, height: 1.45),
               ),
             ),
@@ -594,3 +671,14 @@ class _Badge extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+

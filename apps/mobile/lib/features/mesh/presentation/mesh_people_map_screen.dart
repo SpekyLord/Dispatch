@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
@@ -51,6 +53,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   List<Map<String, dynamic>> _signals = [];
   List<Map<String, dynamic>> _devices = [];
   List<Map<String, dynamic>> _localPeers = [];
+  List<Map<String, dynamic>> _reports = [];
+  final List<RealtimeSubscriptionHandle> _realtimeHandles = [];
 
   /// Currently selected node for the bottom sheet.
   Map<String, dynamic>? _selectedNode;
@@ -59,13 +63,48 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   @override
   void initState() {
     super.initState();
+    ref.read(meshTransportProvider).addListener(_handleTransportUpdated);
     _refresh();
     unawaited(_detectGpsCenter());
     unawaited(_loadLocalPeers());
     _startGpsWatch();
+    _bindRealtime();
   }
 
   // ── Data fetching ────────────────────────────────────────────────────────
+
+  void _bindRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    if (!realtime.isConfigured) {
+      return;
+    }
+
+    _realtimeHandles.addAll([
+      realtime.subscribeToTable(
+        table: 'mesh_topology_nodes',
+        onChange: () => unawaited(_refresh()),
+      ),
+      realtime.subscribeToTable(
+        table: 'survivor_signals',
+        onChange: () => unawaited(_refresh()),
+      ),
+      realtime.subscribeToTable(
+        table: 'device_location_trail',
+        onChange: () => unawaited(_hydrateTrailForSelectedNode()),
+      ),
+      realtime.subscribeToTable(
+        table: 'incident_reports',
+        onChange: () => unawaited(_refresh()),
+      ),
+    ]);
+  }
+
+  void _handleTransportUpdated() {
+    unawaited(_loadLocalPeers());
+    if (_locationTrailEnabled) {
+      unawaited(_hydrateTrailForSelectedNode());
+    }
+  }
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
@@ -79,6 +118,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
           _nodes = const [];
           _signals = const [];
           _devices = const [];
+          _reports = const [];
           _loading = false;
         });
       }
@@ -92,6 +132,13 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
       final topology = await auth.getMeshTopology();
       final survivorSignals = await auth.getSurvivorSignals(status: 'active');
       final lastSeen = await auth.getMeshLastSeen();
+      final reports = await auth.getReports();
+      ref.read(meshTransportProvider).ingestServerLastSeen(
+            (lastSeen['devices'] as List<dynamic>? ?? const [])
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(growable: false),
+          );
       if (!mounted) return;
       setState(() {
         _nodes = (topology['nodes'] as List<dynamic>? ?? const [])
@@ -99,10 +146,17 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
         _signals = survivorSignals;
         _devices = (lastSeen['devices'] as List<dynamic>? ?? const [])
             .cast<Map<String, dynamic>>();
+        _reports = reports
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
         _loading = false;
       });
       _moveCameraToPreferredCenter();
       unawaited(_loadLocalPeers());
+      if (_locationTrailEnabled) {
+        unawaited(_hydrateTrailForSelectedNode());
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -120,21 +174,27 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
     setState(() {
       _localPeers = nodes
           .where((n) => n['lat'] != null && n['lng'] != null)
-          .map((n) => <String, dynamic>{
-                'id': n['nodeDeviceId'],
-                'node_id': n['nodeDeviceId'],
-                'name': n['displayName'] ?? 'Dispatch Node',
-                'lat': n['lat'],
-                'lng': n['lng'],
-                'last_seen': n['lastSeenTimestamp'] != null
-                    ? DateTime.fromMillisecondsSinceEpoch(
-                        (n['lastSeenTimestamp'] as num).toInt(),
-                        isUtc: true,
-                      ).toIso8601String()
-                    : null,
-                'role': 'Mesh Relay',
-                'status': 'connected',
-              })
+          .map((n) {
+            final metadata = n['metadata'] as Map<String, dynamic>? ?? const {};
+            final nodeDeviceId = n['nodeDeviceId'] as String? ?? 'unknown-peer';
+            return <String, dynamic>{
+              'id': nodeDeviceId,
+              'node_id': nodeDeviceId,
+              'node_device_id': nodeDeviceId,
+              'message_id': 'node:' + nodeDeviceId,
+              'device_fingerprint':
+                  metadata['deviceFingerprint'] as String? ??
+                      MeshTransportService.anonymizeDeviceFingerprint(
+                        nodeDeviceId,
+                      ),
+              'name': n['displayName'] ?? 'Dispatch Node',
+              'lat': n['lat'],
+              'lng': n['lng'],
+              'last_seen': n['lastSeenTimestamp'] as String?,
+              'role': 'Mesh Relay',
+              'status': 'connected',
+            };
+          })
           .toList();
     });
   }
@@ -170,7 +230,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   LatLng _preferredCenter() {
     if (_gpsCenter != null) return _gpsCenter!;
-    for (final row in [..._signals, ..._devices, ..._nodes, ..._localPeers]) {
+    for (final row in [..._signals, ..._devices, ..._nodes, ..._localPeers, ..._reports]) {
       final point = _readPoint(row);
       if (point != null) return point;
     }
@@ -227,6 +287,119 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
+
+  String? _nodeDeviceId(Map<String, dynamic> node) {
+    return node['node_device_id'] as String? ??
+        node['node_id'] as String? ??
+        node['device_id'] as String? ??
+        node['id'] as String?;
+  }
+
+  String? _nodeFingerprint(Map<String, dynamic> node) {
+    final metadata = node['metadata'] as Map<String, dynamic>?;
+    return node['device_fingerprint'] as String? ??
+        node['detected_device_identifier'] as String? ??
+        metadata?['deviceFingerprint'] as String? ??
+        (_nodeDeviceId(node) != null
+            ? MeshTransportService.anonymizeDeviceFingerprint(
+                _nodeDeviceId(node)!,
+              )
+            : null);
+  }
+
+  Future<void> _hydrateTrailForSelectedNode() async {
+    final selectedNode = _selectedNode;
+    if (selectedNode == null) {
+      return;
+    }
+    await _hydrateTrailForNode(selectedNode);
+  }
+
+  Future<void> _hydrateTrailForNode(Map<String, dynamic> node) async {
+    final fingerprint = _nodeFingerprint(node);
+    if (fingerprint == null || fingerprint.isEmpty) {
+      return;
+    }
+
+    try {
+      final response = await ref
+          .read(authServiceProvider)
+          .getMeshTrail(fingerprint, limit: 120);
+      ref.read(meshTransportProvider).ingestServerTrail(
+            fingerprint,
+            (response['points'] as List<dynamic>? ?? const [])
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(growable: false),
+          );
+    } catch (_) {}
+  }
+
+  void _openDirectThread(Map<String, dynamic> node) {
+    final nodeDeviceId = _nodeDeviceId(node);
+    if (nodeDeviceId == null) {
+      return;
+    }
+    final transport = ref.read(meshTransportProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OfflineCommsScreen(
+          initialMode: 'direct',
+          initialRecipientIdentifier: nodeDeviceId,
+          initialRecipientLabel: _nodeTitle(node),
+          initialThreadId: transport.directThreadIdForNode(nodeDeviceId),
+        ),
+      ),
+    );
+  }
+
+  void _openCompassForNode(Map<String, dynamic> node) {
+    final existingMessageId = node['message_id'] as String?;
+    if (existingMessageId != null && !existingMessageId.startsWith('node:')) {
+      unawaited(_hydrateTrailForNode(node));
+      _openCompass(existingMessageId);
+      return;
+    }
+
+    final point = _readPoint(node);
+    final nodeDeviceId = _nodeDeviceId(node);
+    if (point == null || nodeDeviceId == null) {
+      return;
+    }
+
+    ref.read(sarModeControllerProvider.notifier).upsertExternalSignal(
+          SurvivorSignalEvent(
+            messageId: 'node:' + nodeDeviceId,
+            detectionMethod: SarDetectionMethod.blePassive,
+            signalStrengthDbm: -62,
+            estimatedDistanceMeters: _gpsCenter == null
+                ? 0
+                : const Distance().as(
+                    LengthUnit.Meter,
+                    _gpsCenter!,
+                    point,
+                  ),
+            detectedDeviceIdentifier:
+                _nodeFingerprint(node) ??
+                    MeshTransportService.anonymizeDeviceFingerprint(
+                      nodeDeviceId,
+                    ),
+            lastSeenTimestamp:
+                DateTime.tryParse(node['last_seen'] as String? ?? '') ??
+                    DateTime.now().toUtc(),
+            nodeLocation: SarNodeLocation(
+              lat: point.latitude,
+              lng: point.longitude,
+              accuracyMeters: 10,
+            ),
+            confidence: 0.82,
+            acousticPatternMatched: AcousticPatternMatched.none,
+          ),
+          pin: true,
+        );
+    unawaited(_hydrateTrailForNode(node));
+    _openCompass('node:' + nodeDeviceId);
+  }
 
   Future<void> _resolveSignal(String signalId) async {
     setState(() => _resolvingSignalId = signalId);
@@ -347,6 +520,40 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
         ),
       );
     }
+    // Incident reports - warning markers (tappable)
+    for (final report in _reports) {
+      final point = _readPoint(report);
+      if (point == null) continue;
+      markers.add(
+        Marker(
+          point: point,
+          width: 28,
+          height: 28,
+          child: GestureDetector(
+            onTap: () => _selectNode({
+              ...report,
+              'role': 'Incident Report',
+              'status': report['status'] as String? ?? 'active',
+              'name': report['title'] as String? ??
+                  report['description'] as String? ??
+                  'Incident Report',
+            }),
+            child: Container(
+              decoration: BoxDecoration(
+                color: dc.error,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.report_problem_outlined,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     // Device last-seen locations — small gray dots
     for (final device in _devices) {
@@ -402,6 +609,30 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
   }
 
   // ── Selected node helpers ────────────────────────────────────────────────
+  List<Polyline> _trailLines() {
+    if (!_locationTrailEnabled || _selectedNode == null) {
+      return const [];
+    }
+    final fingerprint = _nodeFingerprint(_selectedNode!);
+    if (fingerprint == null || fingerprint.isEmpty) {
+      return const [];
+    }
+    final trailPoints = ref
+        .read(meshTransportProvider)
+        .trailForDevice(fingerprint)
+        .map((point) => LatLng(point.lat, point.lng))
+        .toList(growable: false);
+    if (trailPoints.length < 2) {
+      return const [];
+    }
+    return [
+      Polyline(
+        points: trailPoints,
+        strokeWidth: 3.5,
+        color: dc.primary.withValues(alpha: 0.75),
+      ),
+    ];
+  }
 
   String _nodeTitle(Map<String, dynamic> node) {
     final label = node['label'] as String? ?? node['name'] as String?;
@@ -473,6 +704,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
 
   @override
   void dispose() {
+    ref.read(meshTransportProvider).removeListener(_handleTransportUpdated);
+    for (final handle in _realtimeHandles) {
+      unawaited(handle.dispose());
+    }
     _gpsSubscription?.cancel();
     super.dispose();
   }
@@ -511,6 +746,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                       _MapGridOverlay(isDark: isDark),
                       // Network connection lines
                       PolylineLayer(polylines: _networkLines()),
+                      PolylineLayer(polylines: _trailLines()),
                       // Node markers
                       MarkerLayer(markers: _markers()),
                     ],
@@ -559,20 +795,17 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen> {
                 locationTrailEnabled: _locationTrailEnabled,
                 onToggleTrail: (v) =>
                     setState(() => _locationTrailEnabled = v),
-                onOpenCompass: () => _openCompass(
-                  _selectedNode!['message_id'] as String?,
-                ),
-                onChat: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const OfflineCommsScreen(),
-                  ),
-                ),
-                allowResolve: widget.allowResolveActions,
+                onOpenCompass: () => _openCompassForNode(_selectedNode!),
+                onChat: () => _openDirectThread(_selectedNode!),
+                allowResolve: widget.allowResolveActions &&
+                    (_selectedNode!['message_id'] as String?) != null &&
+                    !((_selectedNode!['message_id'] as String?)?.startsWith('node:') ?? false),
                 isResolving: _resolvingSignalId ==
                     (_selectedNode!['id'] as String?),
-                onResolve: _selectedNode!['id'] != null
-                    ? () =>
-                        _resolveSignal(_selectedNode!['id'] as String)
+                onResolve: _selectedNode!['id'] != null &&
+                    (_selectedNode!['message_id'] as String?) != null &&
+                    !((_selectedNode!['message_id'] as String?)?.startsWith('node:') ?? false)
+                    ? () => _resolveSignal(_selectedNode!['id'] as String)
                     : null,
               ),
             ),
@@ -618,48 +851,50 @@ class _YouMarkerState extends State<_YouMarker>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 32,
-          height: 32,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Pulsing halo ring
-              AnimatedBuilder(
-                animation: _ctrl,
-                builder: (context, child) {
-                  final scale = 0.8 + _ctrl.value * 1.6;
-                  final opacity = 0.5 * (1 - _ctrl.value);
-                  return Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dc.primary.withValues(alpha: opacity.clamp(0.0, 1.0)),
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (context, child) {
+                    final scale = 0.8 + _ctrl.value * 1.6;
+                    final opacity = 0.5 * (1 - _ctrl.value);
+                    return Transform.scale(
+                      scale: scale,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: dc.primary.withValues(
+                            alpha: opacity.clamp(0.0, 1.0),
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              // Center dot
-              Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: dc.primary,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: dc.surface, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: dc.onSurface.withValues(alpha: 0.12),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            ],
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: dc.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: dc.surface, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: dc.onSurface.withValues(alpha: 0.12),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 4),
@@ -675,14 +910,12 @@ class _YouMarkerState extends State<_YouMarker>
               ),
             ],
           ),
-          child: Text(
+          child: const Text(
             'You',
             style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
+              color: dc.ink,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-              color: dc.onSurface,
             ),
           ),
         ),
@@ -690,10 +923,6 @@ class _YouMarkerState extends State<_YouMarker>
     );
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Node Marker — small dot with optional label
-// ═══════════════════════════════════════════════════════════════════════════
 
 class _NodeMarker extends StatelessWidget {
   const _NodeMarker({required this.label, this.showLabel = false, this.isPeer = false});
@@ -1347,3 +1576,21 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

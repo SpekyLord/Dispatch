@@ -95,7 +95,7 @@ class _CitizenMeshDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final transport = ref.read(meshTransportProvider);
+    final transport = ref.watch(meshTransportProvider);
     final activeNodes = transport.peerCount + 1;
     final recentDispatches = transport.inboxItems.length;
     final rangeDisplay = _rangeDisplay(transport);
@@ -653,3 +653,5 @@ class _DashboardActivity {
   final String subtitle;
   final String timeLabel;
 }
+
+

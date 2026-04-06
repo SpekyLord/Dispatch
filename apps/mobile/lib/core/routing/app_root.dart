@@ -1,4 +1,5 @@
 import 'package:dispatch_mobile/core/permissions/mesh_permission_gate.dart';
+import 'package:dispatch_mobile/core/routing/mesh_runtime_coordinator.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/features/auth/presentation/auth_gate_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_home_screen.dart';
@@ -24,6 +25,8 @@ class AppRoot extends ConsumerWidget {
       AppRole.municipality => const MunicipalityHomeScreen(),
     };
 
-    return MeshPermissionGate(child: home);
+    return MeshPermissionGate(
+      child: MeshRuntimeCoordinator(child: home),
+    );
   }
 }

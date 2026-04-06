@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/compass_sensor_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
@@ -49,6 +50,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   bool _resolving = false;
   bool _pulseActive = false;
   DateTime? _lastHapticAt;
+  final List<RealtimeSubscriptionHandle> _realtimeHandles = [];
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -68,17 +70,85 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
             .pinTarget(initialTargetMessageId);
       });
     }
+    // Listen to transport updates for real-time target location changes
+    ref.read(meshTransportProvider).addListener(_handleTransportUpdate);
     unawaited(_bindSensors());
+    _bindRealtime();
     unawaited(Future<void>.microtask(() => _hydrateSignals(silent: true)));
   }
 
   @override
   void dispose() {
+    ref.read(meshTransportProvider).removeListener(_handleTransportUpdate);
     _resolutionController.dispose();
     unawaited(_headingSub?.cancel());
     unawaited(_locationSub?.cancel());
+    for (final handle in _realtimeHandles) {
+      unawaited(handle.dispose());
+    }
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _handleTransportUpdate() {
+    if (!mounted) return;
+    // Re-inject peer locations into SAR controller so compass tracks live positions
+    _updateTargetFromTransport();
+    _syncPulseState();
+  }
+
+  void _updateTargetFromTransport() {
+    final target = ref.read(sarModeControllerProvider).activeTarget;
+    if (target == null) return;
+
+    final fingerprint = target.detectedDeviceIdentifier;
+    if (fingerprint.isEmpty) return;
+
+    final transport = ref.read(meshTransportProvider);
+    final lastSeen = transport.lastSeenForDevice(fingerprint);
+    if (lastSeen == null) return;
+
+    // Update the SAR signal with the latest known location
+    ref.read(sarModeControllerProvider.notifier).upsertExternalSignal(
+      SurvivorSignalEvent(
+        messageId: target.messageId,
+        detectionMethod: target.detectionMethod,
+        signalStrengthDbm: target.signalStrengthDbm,
+        estimatedDistanceMeters: _rescuerLocation != null
+            ? _computeDistance(
+                _rescuerLocation!.latitude,
+                _rescuerLocation!.longitude,
+                lastSeen.lat,
+                lastSeen.lng,
+              )
+            : target.estimatedDistanceMeters,
+        detectedDeviceIdentifier: fingerprint,
+        lastSeenTimestamp: lastSeen.recordedAt,
+        nodeLocation: SarNodeLocation(
+          lat: lastSeen.lat,
+          lng: lastSeen.lng,
+          accuracyMeters: lastSeen.accuracyMeters ?? 10,
+        ),
+        confidence: target.confidence,
+        acousticPatternMatched: target.acousticPatternMatched,
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  double _computeDistance(
+    double lat1, double lng1, double lat2, double lng2,
+  ) {
+    const degToRad = math.pi / 180;
+    const earthRadiusM = 6371000.0;
+    final dLat = (lat2 - lat1) * degToRad;
+    final dLng = (lng2 - lng1) * degToRad;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * degToRad) *
+            math.cos(lat2 * degToRad) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return earthRadiusM * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   // ── Sensor & data management ─────────────────────────────────────────────
@@ -105,6 +175,28 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
     });
 
     if (mounted) setState(() => _bootstrapping = false);
+  }
+
+  void _bindRealtime() {
+    final realtime = ref.read(realtimeServiceProvider);
+    if (!realtime.isConfigured) {
+      return;
+    }
+
+    _realtimeHandles.addAll([
+      realtime.subscribeToTable(
+        table: 'survivor_signals',
+        onChange: () => unawaited(_hydrateSignals(silent: true)),
+      ),
+      realtime.subscribeToTable(
+        table: 'device_location_trail',
+        onChange: () => unawaited(_hydrateSignals(silent: true)),
+      ),
+      realtime.subscribeToTable(
+        table: 'mesh_topology_nodes',
+        onChange: () => unawaited(_hydrateSignals(silent: true)),
+      ),
+    ]);
   }
 
   Future<void> _hydrateSignals({bool silent = false}) async {
@@ -143,13 +235,32 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
         final lng = (node['lng'] as num?)?.toDouble();
         final deviceId = node['nodeDeviceId'] as String?;
         if (lat == null || lng == null || deviceId == null) continue;
-        sarController.registerBlePassiveScan(
-          rawDeviceIdentifier: deviceId,
-          signalStrengthDbm: -70,
-          nodeLocation: SarNodeLocation(
-            lat: lat,
-            lng: lng,
-            accuracyMeters: 10,
+
+        final metadata = node['metadata'];
+        final metadataMap = metadata is Map<String, dynamic>
+            ? metadata
+            : metadata is Map
+                ? Map<String, dynamic>.from(metadata)
+                : const <String, dynamic>{};
+        final fingerprint =
+            (metadataMap['deviceFingerprint'] as String?) ??
+            MeshTransportService.anonymizeDeviceFingerprint(deviceId);
+
+        sarController.upsertExternalSignal(
+          SurvivorSignalEvent(
+            messageId: 'node:' + deviceId,
+            detectionMethod: SarDetectionMethod.blePassive,
+            signalStrengthDbm: -62,
+            estimatedDistanceMeters: 0,
+            detectedDeviceIdentifier: fingerprint,
+            lastSeenTimestamp: DateTime.now().toUtc(),
+            nodeLocation: SarNodeLocation(
+              lat: lat,
+              lng: lng,
+              accuracyMeters: 10,
+            ),
+            confidence: 0.82,
+            acousticPatternMatched: AcousticPatternMatched.none,
           ),
         );
       }
@@ -271,11 +382,15 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   void _syncPulseState() {
     final location = _rescuerLocation;
     final target = ref.read(sarModeControllerProvider).activeTarget;
+
+    // Always keep pulse animating for the ambient ripple effect
+    if (!_pulseController.isAnimating) {
+      _pulseController.repeat();
+    }
+
     if (location == null || target == null) {
-      if (_pulseActive) {
+      if (_pulseActive && mounted) {
         setState(() => _pulseActive = false);
-        _pulseController.stop();
-        _pulseController.value = 0;
       }
       return;
     }
@@ -287,17 +402,11 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
       peers: ref.read(meshTransportProvider).peers,
     );
 
-    if (snapshot.shouldPulse != _pulseActive) {
-      if (!mounted) return;
+    if (snapshot.shouldPulse != _pulseActive && mounted) {
       setState(() => _pulseActive = snapshot.shouldPulse);
       if (snapshot.shouldPulse) {
-        _pulseController.repeat(reverse: true);
         _emitHaptic(const Duration(milliseconds: 1), impact: true);
-      } else {
-        _pulseController.stop();
-        _pulseController.value = 0;
       }
-      return;
     }
 
     if (snapshot.shouldPulse) {
@@ -366,7 +475,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   @override
   Widget build(BuildContext context) {
     final sarState = ref.watch(sarModeControllerProvider);
-    final transport = ref.read(meshTransportProvider);
+    final transport = ref.watch(meshTransportProvider);
     final target = sarState.activeTarget;
     final snapshot = target != null && _rescuerLocation != null
         ? SurvivorCompassService.buildSnapshot(
@@ -841,6 +950,11 @@ class _PrecisionCompass extends StatelessWidget {
     final ringColor = isDark ? dc.darkBorder : dc.outlineVariant;
     final primaryColor = isDark ? dc.darkPrimaryAccent : dc.primary;
 
+    // Proximity-based intensity: closer = faster & brighter pulsation
+    final proximityFactor = distanceMeters != null
+        ? (1.0 - (distanceMeters! / 500).clamp(0.0, 1.0))
+        : 0.0;
+
     return Center(
       child: SizedBox(
         width: 288,
@@ -849,75 +963,42 @@ class _PrecisionCompass extends StatelessWidget {
           clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            // ── Decorative outer ring ──
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: ringColor.withValues(alpha: 0.2),
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Second ring ──
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: ringColor.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Third ring (primary tint) ──
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.1),
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Proximity pulse halo ──
-            if (shouldPulse)
-              AnimatedBuilder(
-                animation: pulseController,
-                builder: (_, _) {
-                  final scale = 1 + pulseController.value * 0.15;
-                  return Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 200,
-                      height: 200,
+            // Dynamic locator ripples — always visible, intensity scales with proximity
+            AnimatedBuilder(
+              animation: pulseController,
+              builder: (_, _) {
+                final emphasis = shouldPulse ? 1.0 : 0.3 + proximityFactor * 0.4;
+                final wave = pulseController.value;
+                final rippleCount = distanceMeters != null ? 4 : 3;
+                final baseWidth = shouldPulse
+                    ? 2.2 + proximityFactor * 1.8
+                    : 1.2 + proximityFactor * 0.8;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: List.generate(rippleCount, (index) {
+                    final phaseOffset = index / rippleCount;
+                    final progress = (wave + phaseOffset) % 1.0;
+                    final size = 140 + (progress * 110);
+                    final opacity = ((1 - progress) * (0.12 + 0.22 * emphasis))
+                        .clamp(0.03, 0.40)
+                        .toDouble();
+                    return Container(
+                      width: size,
+                      height: size,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: primaryColor.withValues(
-                            alpha: 0.3 - pulseController.value * 0.2,
-                          ),
-                          width: 3,
+                          color: primaryColor.withValues(alpha: opacity),
+                          width: baseWidth * (1.0 - progress * 0.3),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  }),
+                );
+              },
+            ),
 
-            // ── Rotating directional arrow ──
+            // Rotating directional arrow ──
             Transform.rotate(
               angle: angle,
               child: SizedBox(
@@ -1715,12 +1796,36 @@ class _ResolveSheet extends StatelessWidget {
 
 String _formatNodeLabel(SurvivorSignalEvent? target) {
   if (target == null) return 'None';
+
+  if (target.messageId.startsWith('node:')) {
+    final nodeId = target.messageId.substring(5);
+    final digits = nodeId.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length >= 3) {
+      return 'Node #${digits.substring(digits.length - 3)}';
+    }
+
+    final cleaned = nodeId.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (cleaned.isNotEmpty) {
+      final suffix = cleaned.length <= 6
+          ? cleaned.toUpperCase()
+          : cleaned.substring(cleaned.length - 6).toUpperCase();
+      return 'Node $suffix';
+    }
+  }
+
   final id = target.detectedDeviceIdentifier;
   final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
   if (digits.length >= 3) {
     return 'Node #${digits.substring(digits.length - 3)}';
   }
-  return 'Node #${id.hashCode.abs() % 1000}';
+  final cleaned = id.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  if (cleaned.isNotEmpty) {
+    final suffix = cleaned.length <= 4
+        ? cleaned.toUpperCase()
+        : cleaned.substring(cleaned.length - 4).toUpperCase();
+    return 'Node #$suffix';
+  }
+  return 'Node #???';
 }
 
 String _signalLabel(SurvivorCompassConfidenceBand? band) {
@@ -1731,3 +1836,16 @@ String _signalLabel(SurvivorCompassConfidenceBand? band) {
     SurvivorCompassConfidenceBand.broadSearch => 'Weak Signal',
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -67,8 +67,48 @@ class MeshPlatformBridge(
     private val wifiP2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     private val wifiP2pChannel = wifiP2pManager?.initialize(context, Looper.getMainLooper(), null)
     private val knownPeers = mutableMapOf<String, WifiP2pDevice>()
+    private val deviceIdsByEndpoint = mutableMapOf<String, String>()
     private val connectionAttempts = mutableSetOf<String>()
     private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
+    private val reconnectionHosts = mutableSetOf<String>()
+    private var consecutiveReconnectFailures = 0
+    private val discoveryMaintenanceRunnable = object : Runnable {
+        override fun run() {
+            if (!discoveryActive) {
+                return
+            }
+
+            if (hasBlePermissions()) {
+                startBleScan()
+                startAdvertising(localDeviceId, gatewayNode)
+            }
+            if (hasWifiDirectPermissions()) {
+                startWifiDirectDiscovery()
+                requestWifiPeers()
+            }
+
+            // Auto-reconnect to previously connected hosts
+            val hostsToReconnect = reconnectionHosts.toList()
+            for (host in hostsToReconnect) {
+                if (peerConnections.values.any { it.hostAddress == host }) {
+                    reconnectionHosts.remove(host)
+                    continue
+                }
+                connectSocketToHost(host)
+            }
+
+            val interval = if (reconnectionHosts.isNotEmpty()) {
+                // Faster maintenance while reconnecting
+                val backoff = (2000L * (1 shl consecutiveReconnectFailures.coerceAtMost(4)))
+                    .coerceAtMost(15000L)
+                backoff
+            } else {
+                consecutiveReconnectFailures = 0
+                8000L
+            }
+            mainHandler.postDelayed(this, interval)
+        }
+    }
 
     private var eventSink: EventChannel.EventSink? = null
     private var meshScanCallback: ScanCallback? = null
@@ -166,8 +206,9 @@ class MeshPlatformBridge(
         ensureWifiReceiverRegistered()
         startServerSocketIfNeeded()
 
-        val bleStarted = if (hasBlePermissions()) {
-            startBleScan() || startAdvertising(localDeviceId, isGateway)
+        val bleScanStarted = if (hasBlePermissions()) startBleScan() else false
+        val bleAdvertisingStarted = if (hasBlePermissions()) {
+            startAdvertising(localDeviceId, isGateway)
         } else {
             false
         }
@@ -176,23 +217,31 @@ class MeshPlatformBridge(
         } else {
             false
         }
+        scheduleDiscoveryMaintenance(initialDelayMs = if (wifiStarted) 2500 else 5000)
         emitTransportState(
             note = if (wifiStarted) {
                 "Scanning for Wi-Fi Direct peers and keeping the relay socket ready."
+            } else if (bleScanStarted || bleAdvertisingStarted) {
+                "Mesh BLE discovery is live while Wi-Fi Direct retries in the background."
             } else {
                 "Discovery started with BLE only because Wi-Fi Direct permissions are missing or unsupported."
             },
         )
-        return bleStarted || wifiStarted
+        return bleScanStarted || bleAdvertisingStarted || wifiStarted
     }
 
     private fun stopDiscovery() {
         discoveryActive = false
+        cancelDiscoveryMaintenance()
         stopBleScan()
         stopAdvertising()
         stopWifiDirectDiscovery()
+        cancelWifiDirectConnect()
+        removeWifiDirectGroup()
         closePeerConnections()
         stopServerSocket()
+        reconnectionHosts.clear()
+        consecutiveReconnectFailures = 0
         emitTransportState(note = "Mesh discovery stopped.")
     }
 
@@ -215,6 +264,14 @@ class MeshPlatformBridge(
 
             override fun onBatchScanResults(results: MutableList<ScanResult>) {
                 results.forEach(::emitBlePeer)
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                meshScanCallback = null
+                emitTransportState(
+                    note = "BLE discovery paused (code $errorCode). Restarting scan.",
+                )
+                scheduleDiscoveryMaintenance(initialDelayMs = 1500)
             }
         }
 
@@ -268,6 +325,10 @@ class MeshPlatformBridge(
 
             override fun onStartFailure(errorCode: Int) {
                 meshAdvertiseCallback = null
+                emitTransportState(
+                    note = "BLE advertising paused (code $errorCode). Restarting broadcast.",
+                )
+                scheduleDiscoveryMaintenance(initialDelayMs = 1500)
             }
         }
 
@@ -307,6 +368,7 @@ class MeshPlatformBridge(
             mapOf(
                 "type" to "peer_seen",
                 "endpointId" to endpointId,
+                "deviceId" to null,
                 "deviceName" to deviceName,
                 "isGateway" to isGateway,
                 "supportsWifiDirect" to false,
@@ -329,7 +391,10 @@ class MeshPlatformBridge(
                     }
 
                     override fun onFailure(reason: Int) {
-                        emitTransportState(note = "Wi-Fi Direct discovery failed with code $reason.")
+                        emitTransportState(
+                            note = "Wi-Fi Direct discovery failed with code $reason. Retrying nearby node scan.",
+                        )
+                        scheduleDiscoveryMaintenance(initialDelayMs = 2000)
                     }
                 },
             )
@@ -367,6 +432,7 @@ class MeshPlatformBridge(
                         mapOf(
                             "type" to "peer_seen",
                             "endpointId" to device.deviceAddress,
+                            "deviceId" to deviceIdsByEndpoint[device.deviceAddress],
                             "deviceName" to (device.deviceName ?: "Dispatch Node"),
                             "isGateway" to (gatewayNode && device.deviceAddress != localWifiEndpointId),
                             "supportsWifiDirect" to true,
@@ -389,7 +455,11 @@ class MeshPlatformBridge(
     private fun connectToPeer(device: WifiP2pDevice) {
         val manager = wifiP2pManager ?: return
         val channel = wifiP2pChannel ?: return
-        if (device.status == WifiP2pDevice.CONNECTED || connectionAttempts.contains(device.deviceAddress)) {
+        if (
+            device.status == WifiP2pDevice.CONNECTED ||
+            device.status == WifiP2pDevice.INVITED ||
+            connectionAttempts.contains(device.deviceAddress)
+        ) {
             return
         }
 
@@ -411,7 +481,10 @@ class MeshPlatformBridge(
 
                     override fun onFailure(reason: Int) {
                         connectionAttempts.remove(device.deviceAddress)
-                        emitTransportState(note = "Wi-Fi Direct connect failed with code $reason.")
+                        emitTransportState(
+                            note = "Wi-Fi Direct connect failed with code $reason. Reattempting mesh link.",
+                        )
+                        scheduleDiscoveryMaintenance(initialDelayMs = 2500)
                     }
                 },
             )
@@ -424,7 +497,19 @@ class MeshPlatformBridge(
         val manager = wifiP2pManager ?: return
         val channel = wifiP2pChannel ?: return
         if (networkInfo?.isConnected != true) {
-            emitTransportState(note = "Wi-Fi Direct session disconnected.")
+            // Save connected hosts for reconnection before closing
+            for (connection in peerConnections.values) {
+                reconnectionHosts.add(connection.hostAddress)
+            }
+            closePeerConnections()
+            // Don't remove the Wi-Fi Direct group or cancel connect —
+            // let the framework re-establish the link when the peer returns.
+            consecutiveReconnectFailures++
+            emitTransportState(
+                note = "Wi-Fi Direct session disrupted. Attempting reconnection\u2026",
+            )
+            // Fast retry schedule for reconnection
+            scheduleDiscoveryMaintenance(initialDelayMs = 500)
             return
         }
 
@@ -438,6 +523,7 @@ class MeshPlatformBridge(
                 if (!info.isGroupOwner && info.groupOwnerAddress != null) {
                     connectSocketToHost(info.groupOwnerAddress.hostAddress ?: "192.168.49.1")
                 }
+                scheduleDiscoveryMaintenance(initialDelayMs = 5000)
                 emitTransportState(
                     note = if (info.isGroupOwner) {
                         "Group owner relay ready on Wi-Fi Direct."
@@ -499,6 +585,7 @@ class MeshPlatformBridge(
                 attachSocket(socket)
             } catch (_: Exception) {
                 emitTransportState(note = "Wi-Fi Direct relay socket is waiting for a peer to accept connections.")
+                scheduleDiscoveryMaintenance(initialDelayMs = 2500)
             } finally {
                 connectionAttempts.remove(attemptKey)
             }
@@ -615,6 +702,54 @@ class MeshPlatformBridge(
         wifiReceiver = null
     }
 
+    private fun scheduleDiscoveryMaintenance(initialDelayMs: Long = 0L) {
+        cancelDiscoveryMaintenance()
+        if (!discoveryActive) {
+            return
+        }
+        mainHandler.postDelayed(discoveryMaintenanceRunnable, initialDelayMs)
+    }
+
+    private fun cancelDiscoveryMaintenance() {
+        mainHandler.removeCallbacks(discoveryMaintenanceRunnable)
+    }
+
+    private fun cancelWifiDirectConnect() {
+        val manager = wifiP2pManager ?: return
+        val channel = wifiP2pChannel ?: return
+        try {
+            manager.cancelConnect(
+                channel,
+                object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() = Unit
+                    override fun onFailure(reason: Int) = Unit
+                },
+            )
+        } catch (_: SecurityException) {
+            // Best effort cancel.
+        } catch (_: IllegalStateException) {
+            // Best effort cancel.
+        }
+    }
+
+    private fun removeWifiDirectGroup() {
+        val manager = wifiP2pManager ?: return
+        val channel = wifiP2pChannel ?: return
+        try {
+            manager.removeGroup(
+                channel,
+                object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() = Unit
+                    override fun onFailure(reason: Int) = Unit
+                },
+            )
+        } catch (_: SecurityException) {
+            // Best effort cleanup.
+        } catch (_: IllegalStateException) {
+            // Best effort cleanup.
+        }
+    }
+
     private fun emitTransportState(note: String? = null) {
         emit(
             mapOf(
@@ -727,8 +862,23 @@ class MeshPlatformBridge(
         val hostAddress: String = socket.inetAddress?.hostAddress ?: "unknown-host"
         private var running = true
         private var endpointId: String = hostAddress
+        private var remoteDeviceId: String = hostAddress
         private var deviceName: String = "Dispatch Node"
         private var remoteGateway = false
+        @Volatile private var lastActivityAt = System.currentTimeMillis()
+        private val heartbeatRunnable = object : Runnable {
+            override fun run() {
+                if (!running) return
+                val silentMs = System.currentTimeMillis() - lastActivityAt
+                if (silentMs > 20_000) {
+                    // No activity for 20 seconds — connection is dead.
+                    close()
+                    return
+                }
+                sendFrame(mapOf("type" to "ping", "ts" to System.currentTimeMillis()))
+                mainHandler.postDelayed(this, 6_000)
+            }
+        }
 
         fun start() {
             sendFrame(
@@ -740,14 +890,19 @@ class MeshPlatformBridge(
                     "isGateway" to gatewayNode,
                 ),
             )
+            // Start heartbeat monitoring
+            mainHandler.postDelayed(heartbeatRunnable, 6_000)
             Thread {
                 try {
                     while (running) {
                         val line = reader.readLine() ?: break
+                        lastActivityAt = System.currentTimeMillis()
                         val json = JSONObject(line)
                         when (json.optString("type")) {
                             "hello" -> handleHello(json)
                             "packet" -> handlePacket(json)
+                            "ping" -> sendFrame(mapOf("type" to "pong", "ts" to System.currentTimeMillis()))
+                            "pong" -> { /* heartbeat ack — lastActivityAt already updated */ }
                         }
                     }
                 } catch (_: Exception) {
@@ -780,14 +935,19 @@ class MeshPlatformBridge(
 
         private fun handleHello(json: JSONObject) {
             endpointId = json.optString("endpointId").ifBlank { hostAddress }
+            remoteDeviceId = json.optString("localDeviceId").ifBlank { endpointId }
             deviceName = json.optString("deviceName").ifBlank { "Dispatch Node" }
             remoteGateway = json.optBoolean("isGateway", false)
+            deviceIdsByEndpoint[endpointId] = remoteDeviceId
             peerConnections[endpointId] = this
             connectionAttempts.remove(endpointId)
+            reconnectionHosts.remove(hostAddress)
+            consecutiveReconnectFailures = 0
             emit(
                 mapOf(
                     "type" to "peer_seen",
                     "endpointId" to endpointId,
+                    "deviceId" to remoteDeviceId,
                     "deviceName" to deviceName,
                     "isGateway" to remoteGateway,
                     "supportsWifiDirect" to true,
@@ -817,13 +977,21 @@ class MeshPlatformBridge(
                 return
             }
             running = false
+            mainHandler.removeCallbacks(heartbeatRunnable)
+            connectionAttempts.remove(endpointId)
+            deviceIdsByEndpoint.remove(endpointId)
             peerConnections.remove(endpointId, this)
             try {
                 socket.close()
             } catch (_: Exception) {
                 // Ignore secondary close errors.
             }
-            emitTransportState(note = "Relay link closed for $deviceName.")
+            // Queue for reconnection if discovery is still active
+            if (discoveryActive && hostAddress != "unknown-host") {
+                reconnectionHosts.add(hostAddress)
+            }
+            emitTransportState(note = "Relay link closed for $deviceName. Reconnecting\u2026")
+            scheduleDiscoveryMaintenance(initialDelayMs = 1000)
         }
     }
 }

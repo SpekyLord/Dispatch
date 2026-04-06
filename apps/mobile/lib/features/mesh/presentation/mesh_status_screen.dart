@@ -144,7 +144,7 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final transport = ref.read(meshTransportProvider);
+    final transport = ref.watch(meshTransportProvider);
     final sarState = ref.watch(sarModeControllerProvider);
     final session = ref.watch(sessionControllerProvider);
     final canEnableSarMode =
@@ -1299,3 +1299,5 @@ class _EmptyPanel extends StatelessWidget {
     );
   }
 }
+
+

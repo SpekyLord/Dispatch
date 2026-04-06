@@ -31,10 +31,21 @@ class AuthService {
 
   void setToken(String? token) {
     if (token != null) {
-      _dio.options.headers['Authorization'] = 'Bearer $token';
+      _dio.options.headers['Authorization'] = 'Bearer ';
     } else {
       _dio.options.headers.remove('Authorization');
     }
+  }
+
+  Future<bool> checkHealth() async {
+    final response = await _dio.get(
+      '/api/health',
+      options: Options(
+        sendTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 4),
+      ),
+    );
+    return response.statusCode == 200;
   }
 
   // --- Auth ---
@@ -531,3 +542,4 @@ class AuthService {
     return (response.data['assessments'] as List).cast<Map<String, dynamic>>();
   }
 }
+

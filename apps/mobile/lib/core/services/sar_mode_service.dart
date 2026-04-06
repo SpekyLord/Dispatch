@@ -443,6 +443,32 @@ class SarModeController extends StateNotifier<SarModeState> {
     }
   }
 
+  void upsertExternalSignal(SurvivorSignalEvent event, {bool pin = false}) {
+    if (event.messageId.isEmpty) {
+      return;
+    }
+
+    final mergedById = <String, SurvivorSignalEvent>{
+      for (final signal in state.activeSignals) signal.messageId: signal,
+    };
+    final existing = mergedById[event.messageId];
+    mergedById[event.messageId] = existing == null
+        ? event
+        : _mergeSignal(existing, event);
+
+    final nextSignals = _sortSignals(
+      mergedById.values.toList(growable: false),
+    ).take(40).toList(growable: false);
+
+    state = state.copyWith(
+      activeSignals: nextSignals,
+      activeTargetMessageId: _nextTargetId(
+        nextSignals,
+        pin ? event.messageId : state.activeTargetMessageId,
+      ),
+    );
+  }
+
   void ingestServerSignals(Iterable<Map<String, dynamic>> rows) {
     final mergedById = <String, SurvivorSignalEvent>{
       for (final signal in state.activeSignals) signal.messageId: signal,
@@ -957,3 +983,4 @@ class SarModeController extends StateNotifier<SarModeState> {
     return 'sar-${DateTime.now().toUtc().microsecondsSinceEpoch}';
   }
 }
+

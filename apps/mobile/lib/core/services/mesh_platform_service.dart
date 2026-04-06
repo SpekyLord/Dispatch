@@ -43,6 +43,7 @@ class MeshPlatformCapabilities {
 class MeshPeerObservation {
   const MeshPeerObservation({
     required this.endpointId,
+    required this.deviceId,
     required this.deviceName,
     required this.isGateway,
     required this.supportsWifiDirect,
@@ -52,6 +53,7 @@ class MeshPeerObservation {
   });
 
   final String endpointId;
+  final String? deviceId;
   final String deviceName;
   final bool isGateway;
   final bool supportsWifiDirect;
@@ -62,6 +64,7 @@ class MeshPeerObservation {
   factory MeshPeerObservation.fromPlatformMap(Map<dynamic, dynamic> json) {
     return MeshPeerObservation(
       endpointId: (json['endpointId'] as String?) ?? 'unknown-peer',
+      deviceId: json['deviceId'] as String?,
       deviceName: (json['deviceName'] as String?) ?? 'Dispatch Node',
       isGateway: json['isGateway'] == true,
       supportsWifiDirect: json['supportsWifiDirect'] == true,

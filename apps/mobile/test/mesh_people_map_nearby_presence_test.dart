@@ -188,6 +188,7 @@ void main() {
         gpsEnabled: true,
         trackingActive: true,
         latestLocation: _locationAt(latitude: 14.5995),
+        displayLocation: _locationAt(latitude: 14.5995),
         persistedTrailPoints: const [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: DateTime.now().toUtc(),
@@ -241,6 +242,7 @@ void main() {
           gpsEnabled: true,
           trackingActive: true,
           latestLocation: _locationAt(latitude: 14.5995),
+          displayLocation: _locationAt(latitude: 14.5995),
           persistedTrailPoints: const [],
           lastAcceptedTrailPoint: null,
           lastSampledAt: DateTime.now().toUtc(),
@@ -283,4 +285,57 @@ void main() {
       expect(find.textContaining('CITIZEN TWO'), findsNothing);
     },
   );
+
+  testWidgets('renders nearby citizens beyond 15m when already included by presence logic', (
+    tester,
+  ) async {
+    final locationService = _FakeLocationService(
+      currentPosition: _locationAt(latitude: 14.5995),
+    );
+    final trailController = _SeededCitizenLocationTrailController(
+      locationService: locationService,
+      initialState: CitizenLocationTrailState(
+        permissionResolved: true,
+        permissionGranted: true,
+        gpsEnabled: true,
+        trackingActive: true,
+        latestLocation: _locationAt(latitude: 14.5995, accuracyMeters: 18),
+        displayLocation: _locationAt(latitude: 14.5995, accuracyMeters: 8),
+        persistedTrailPoints: const [],
+        lastAcceptedTrailPoint: null,
+        lastSampledAt: DateTime.now().toUtc(),
+        lastRejectionReason: null,
+      ),
+    );
+    final nearbyController = _SeededCitizenNearbyPresenceController(
+      authService: AuthService(),
+      realtimeService: _FakeRealtimeService(),
+      initialState: CitizenNearbyPresenceState(
+        selfLocation: _locationAt(latitude: 14.5995),
+        nearbyUsers: [
+          NearbyCitizenPin(
+            userId: 'citizen-2',
+            displayName: 'Citizen Two',
+            latitude: 14.5995 + (24 / 111111.0),
+            longitude: 120.9842,
+            accuracyMeters: 8,
+            lastSeenAt: DateTime.now().toUtc(),
+            distanceMeters: 24,
+          ),
+        ],
+        subscribed: true,
+        lastRefreshAt: DateTime.now().toUtc(),
+        lastError: null,
+      ),
+    );
+
+    await _pumpMap(
+      tester,
+      locationService: locationService,
+      trailController: trailController,
+      nearbyController: nearbyController,
+    );
+
+    expect(find.textContaining('CITIZEN TWO'), findsOneWidget);
+  });
 }

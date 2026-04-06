@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -25,8 +27,12 @@ class LocationService {
   static const double _pendingJumpConfirmationRadiusMeters = 45;
   static const int _pendingJumpVotesRequired = 2;
   static const double _minimumMovementMeters = 4;
+  static const int _stationaryReanchorSamples = 5;
 
-  LocationData? _lastAcceptedLocation;
+  LocationData? _lastRawAcceptedLocation;
+  LocationData? _lastOutputLocation;
+  LocationData? _bestStationaryLocation;
+  int _stationarySampleCount = 0;
   LocationData? _pendingJumpCandidate;
   int _pendingJumpVotes = 0;
 
@@ -176,33 +182,37 @@ class LocationService {
       final age = DateTime.now().toUtc().difference(timestamp);
       if (age > _maxLastKnownAge &&
           candidate.accuracyMeters > _maxLastKnownAccuracyMeters) {
-        return _lastAcceptedLocation;
+        return _lastOutputLocation;
       }
     }
 
-    final current = _lastAcceptedLocation;
-    if (current == null) {
+    final currentRaw = _lastRawAcceptedLocation;
+    final currentOutput = _lastOutputLocation;
+    if (currentRaw == null || currentOutput == null) {
       _clearPendingJump();
-      _lastAcceptedLocation = candidate;
+      _lastRawAcceptedLocation = candidate;
+      _lastOutputLocation = candidate;
+      _resetStationaryTracking(anchor: candidate);
       return candidate;
     }
 
     final distanceMeters = Geolocator.distanceBetween(
-      current.latitude,
-      current.longitude,
+      currentRaw.latitude,
+      currentRaw.longitude,
       candidate.latitude,
       candidate.longitude,
     );
     final elapsedSeconds = _elapsedSeconds(
-      current.timestamp,
+      currentRaw.timestamp,
       candidate.timestamp,
     );
     final inferredSpeedMetersPerSecond =
         elapsedSeconds == null || elapsedSeconds <= 0
         ? null
         : distanceMeters / elapsedSeconds;
-    final jitterThresholdMeters = _jitterThresholdMeters(current, candidate);
-    final hasWorseAccuracy = candidate.accuracyMeters > current.accuracyMeters;
+    final jitterThresholdMeters = _jitterThresholdMeters(currentRaw, candidate);
+    final hasWorseAccuracy =
+        candidate.accuracyMeters > currentRaw.accuracyMeters;
     final candidateAccuracyPoor =
         candidate.accuracyMeters > _maxStreamAccuracyMeters;
     final likelyNoisyStreamJump =
@@ -218,28 +228,49 @@ class LocationService {
         inferredSpeedMetersPerSecond > _maxReasonableSpeedMetersPerSecond;
 
     if (distanceMeters <= jitterThresholdMeters) {
-      if (_isMeaningfullyMoreAccurate(candidate, current)) {
-        _clearPendingJump();
-        _lastAcceptedLocation = candidate;
-        return candidate;
-      }
-      return current;
+      _clearPendingJump();
+      _lastRawAcceptedLocation = candidate;
+      final nextOutput = _nextOutputLocation(
+        currentOutput: currentOutput,
+        candidate: candidate,
+      );
+      _lastOutputLocation = nextOutput;
+      return nextOutput;
+    }
+
+    if (_isMeaningfullyMoreAccurate(candidate, currentRaw)) {
+      _clearPendingJump();
+      _lastRawAcceptedLocation = candidate;
+      final nextOutput = _nextOutputLocation(
+        currentOutput: currentOutput,
+        candidate: candidate,
+      );
+      _lastOutputLocation = nextOutput;
+      return nextOutput;
     }
 
     if (impossibleSpeedJump || likelyNoisyStreamJump || likelyStaleFallback) {
       if (_shouldAcceptPendingJump(candidate)) {
-        final promoted = _blendLocation(current, candidate);
         _clearPendingJump();
-        _lastAcceptedLocation = promoted;
-        return promoted;
+        _lastRawAcceptedLocation = candidate;
+        final nextOutput = _nextOutputLocation(
+          currentOutput: currentOutput,
+          candidate: candidate,
+        );
+        _lastOutputLocation = nextOutput;
+        return nextOutput;
       }
-      return current;
+      return currentOutput;
     }
 
     _clearPendingJump();
-    final next = _blendLocation(current, candidate);
-    _lastAcceptedLocation = next;
-    return next;
+    _lastRawAcceptedLocation = candidate;
+    final nextOutput = _nextOutputLocation(
+      currentOutput: currentOutput,
+      candidate: candidate,
+    );
+    _lastOutputLocation = nextOutput;
+    return nextOutput;
   }
 
   void _clearPendingJump() {
@@ -270,6 +301,71 @@ class LocationService {
     _pendingJumpCandidate = candidate;
     _pendingJumpVotes = 1;
     return false;
+  }
+
+  LocationData _nextOutputLocation({
+    required LocationData currentOutput,
+    required LocationData candidate,
+  }) {
+    final distanceFromOutput = Geolocator.distanceBetween(
+      currentOutput.latitude,
+      currentOutput.longitude,
+      candidate.latitude,
+      candidate.longitude,
+    );
+    final stationaryBandMeters = _stationaryBandMeters(candidate);
+
+    if (distanceFromOutput <= stationaryBandMeters) {
+      _stationarySampleCount += 1;
+      _bestStationaryLocation = _moreAccurateLocation(
+        _bestStationaryLocation,
+        candidate,
+      );
+
+      if (_isMeaningfullyMoreAccurate(candidate, currentOutput)) {
+        _resetStationaryTracking(anchor: candidate);
+        return candidate;
+      }
+
+      if (_stationarySampleCount >= _stationaryReanchorSamples &&
+          _bestStationaryLocation != null) {
+        final reanchored = _bestStationaryLocation!;
+        _resetStationaryTracking(anchor: reanchored);
+        return reanchored;
+      }
+
+      return currentOutput;
+    }
+
+    _resetStationaryTracking();
+    return _blendLocation(currentOutput, candidate);
+  }
+
+  double _stationaryBandMeters(LocationData candidate) {
+    return math.max(6, math.min(12, candidate.accuracyMeters)).toDouble();
+  }
+
+  LocationData? _moreAccurateLocation(
+    LocationData? currentBest,
+    LocationData candidate,
+  ) {
+    if (currentBest == null) {
+      return candidate;
+    }
+    if (_isMeaningfullyMoreAccurate(candidate, currentBest)) {
+      return candidate;
+    }
+    if (candidate.accuracyMeters > 0 &&
+        currentBest.accuracyMeters > 0 &&
+        candidate.accuracyMeters < currentBest.accuracyMeters) {
+      return candidate;
+    }
+    return currentBest;
+  }
+
+  void _resetStationaryTracking({LocationData? anchor}) {
+    _bestStationaryLocation = anchor;
+    _stationarySampleCount = anchor == null ? 0 : 1;
   }
 
   double _jitterThresholdMeters(LocationData current, LocationData candidate) {
@@ -339,6 +435,14 @@ class LocationService {
       accuracyMeters: candidate.accuracyMeters,
       timestamp: candidate.timestamp,
     );
+  }
+
+  @visibleForTesting
+  LocationData? acceptPositionForTest(
+    LocationData candidate, {
+    bool fromLastKnown = false,
+  }) {
+    return _acceptPosition(candidate, fromLastKnown: fromLastKnown);
   }
 }
 

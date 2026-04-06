@@ -37,6 +37,7 @@ class CitizenLocationTrailState {
     required this.gpsEnabled,
     required this.trackingActive,
     required this.latestLocation,
+    required this.displayLocation,
     required this.persistedTrailPoints,
     required this.lastAcceptedTrailPoint,
     required this.lastSampledAt,
@@ -49,6 +50,7 @@ class CitizenLocationTrailState {
       gpsEnabled = false,
       trackingActive = false,
       latestLocation = null,
+      displayLocation = null,
       persistedTrailPoints = const [],
       lastAcceptedTrailPoint = null,
       lastSampledAt = null,
@@ -59,6 +61,7 @@ class CitizenLocationTrailState {
   final bool gpsEnabled;
   final bool trackingActive;
   final LocationData? latestLocation;
+  final LocationData? displayLocation;
   final List<CitizenTrailPoint> persistedTrailPoints;
   final CitizenTrailPoint? lastAcceptedTrailPoint;
   final DateTime? lastSampledAt;
@@ -84,6 +87,7 @@ class CitizenLocationTrailState {
     bool? gpsEnabled,
     bool? trackingActive,
     Object? latestLocation = _sentinel,
+    Object? displayLocation = _sentinel,
     List<CitizenTrailPoint>? persistedTrailPoints,
     Object? lastAcceptedTrailPoint = _sentinel,
     Object? lastSampledAt = _sentinel,
@@ -97,6 +101,9 @@ class CitizenLocationTrailState {
       latestLocation: identical(latestLocation, _sentinel)
           ? this.latestLocation
           : latestLocation as LocationData?,
+      displayLocation: identical(displayLocation, _sentinel)
+          ? this.displayLocation
+          : displayLocation as LocationData?,
       persistedTrailPoints: persistedTrailPoints ?? this.persistedTrailPoints,
       lastAcceptedTrailPoint: identical(lastAcceptedTrailPoint, _sentinel)
           ? this.lastAcceptedTrailPoint
@@ -129,6 +136,7 @@ class CitizenLocationTrailController
   StreamSubscription<LocationData>? _locationSubscription;
   Timer? _sampleTimer;
   LocationData? _latestSampleCandidate;
+  LocationData? _pendingDisplayCandidate;
   bool _disposed = false;
 
   Future<void> startTracking() async {
@@ -154,6 +162,7 @@ class CitizenLocationTrailController
         permissionGranted: false,
         gpsEnabled: false,
         latestLocation: null,
+        displayLocation: null,
         lastSampledAt: DateTime.now().toUtc(),
         lastRejectionReason: 'Location permission denied.',
       );
@@ -217,8 +226,10 @@ class CitizenLocationTrailController
     }
 
     _latestSampleCandidate = location;
+    final nextDisplayLocation = _stabilizeDisplayLocation(location);
     state = state.copyWith(
       latestLocation: location,
+      displayLocation: nextDisplayLocation,
       permissionResolved: true,
       permissionGranted: true,
       gpsEnabled: true,
@@ -331,6 +342,68 @@ class CitizenLocationTrailController
     _sampleTimer = null;
     await _locationSubscription?.cancel();
     _locationSubscription = null;
+    _pendingDisplayCandidate = null;
+  }
+
+  LocationData? _stabilizeDisplayLocation(LocationData candidate) {
+    final currentDisplay = state.displayLocation;
+    if (currentDisplay == null) {
+      _pendingDisplayCandidate = null;
+      return candidate;
+    }
+
+    if (candidate.accuracyMeters > 25) {
+      _pendingDisplayCandidate = null;
+      return currentDisplay;
+    }
+
+    final distanceFromDisplay = Geolocator.distanceBetween(
+      currentDisplay.latitude,
+      currentDisplay.longitude,
+      candidate.latitude,
+      candidate.longitude,
+    );
+    final holdRadiusMeters = math
+        .max(6, math.min(10, candidate.accuracyMeters))
+        .toDouble();
+
+    if (distanceFromDisplay <= holdRadiusMeters) {
+      _pendingDisplayCandidate = null;
+      return currentDisplay;
+    }
+
+    if (distanceFromDisplay >= 18) {
+      _pendingDisplayCandidate = null;
+      return candidate;
+    }
+
+    final pending = _pendingDisplayCandidate;
+    if (pending == null) {
+      _pendingDisplayCandidate = candidate;
+      return currentDisplay;
+    }
+
+    final pendingDistanceFromDisplay = Geolocator.distanceBetween(
+      currentDisplay.latitude,
+      currentDisplay.longitude,
+      pending.latitude,
+      pending.longitude,
+    );
+    final pendingAgreementMeters = Geolocator.distanceBetween(
+      pending.latitude,
+      pending.longitude,
+      candidate.latitude,
+      candidate.longitude,
+    );
+
+    if (pendingDistanceFromDisplay > holdRadiusMeters &&
+        pendingAgreementMeters <= 8) {
+      _pendingDisplayCandidate = null;
+      return candidate;
+    }
+
+    _pendingDisplayCandidate = candidate;
+    return currentDisplay;
   }
 
   @override

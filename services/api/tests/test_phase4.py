@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from dispatch_api.app import create_app
@@ -954,6 +955,49 @@ class TestCitizenNearbyPresenceRoutes:
             assert data["count"] == 1
             assert data["users"][0]["user_id"] == "citizen-2"
             assert data["users"][0]["distance_meters"] <= 15
+
+    def test_nearby_presence_returns_migration_hint_when_table_missing(self, settings):
+        class MissingPresenceSupabaseClient(FakeSupabaseClient):
+            def db_query(self, table, *, token=None, params=None, use_service_role=False):
+                if table == "citizen_nearby_presence":
+                    request = httpx.Request(
+                        "GET",
+                        "http://supabase.local/rest/v1/citizen_nearby_presence",
+                    )
+                    response = httpx.Response(
+                        404,
+                        request=request,
+                        json={
+                            "message": "relation \"public.citizen_nearby_presence\" does not exist",
+                            "details": "",
+                            "hint": "",
+                        },
+                    )
+                    raise httpx.HTTPStatusError(
+                        "missing citizen_nearby_presence table",
+                        request=request,
+                        response=response,
+                    )
+                return super().db_query(
+                    table,
+                    token=token,
+                    params=params,
+                    use_service_role=use_service_role,
+                )
+
+        fake = MissingPresenceSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen@test.com", role="citizen"),
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/citizen-presence/nearby?lat=14.6000&lng=120.9842&radius_meters=15&freshness_seconds=15",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 500
+            data = resp.get_json()
+            assert data["error"]["code"] == "schema_outdated"
+            assert "20260406000000_citizen_nearby_presence.sql" in data["error"]["message"]
 
 
 class TestMeshSurvivorResolveStatusUpdate:

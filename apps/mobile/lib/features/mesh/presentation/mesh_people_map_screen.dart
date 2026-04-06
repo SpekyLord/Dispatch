@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
-import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
@@ -95,17 +94,21 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     _selfTrailSubscription = ref.listenManual<CitizenLocationTrailState>(
       citizenLocationTrailControllerProvider,
       (previous, next) {
-        final previousLocation = previous?.latestLocation;
-        final nextLocation = next.latestLocation;
+        final previousLocation = previous?.displayLocation;
+        final nextLocation = next.displayLocation;
         final locationChanged =
             nextLocation != null &&
             (previousLocation == null ||
                 previousLocation.latitude != nextLocation.latitude ||
                 previousLocation.longitude != nextLocation.longitude ||
                 previousLocation.accuracyMeters != nextLocation.accuracyMeters);
+        final previousAccuracy = previous?.latestLocation?.accuracyMeters;
+        final nextAccuracy = next.latestLocation?.accuracyMeters;
+        final accuracyChanged = previousAccuracy != nextAccuracy;
         if (locationChanged) {
           _citizenNearbyPresenceController.updateSelfLocation(
-            next.latestLocation,
+            next.displayLocation,
+            latestAccuracyMeters: next.latestLocation?.accuracyMeters,
           );
           if (widget.initiallySelectSelfNode && _selectedNode == null) {
             final selfNode = _buildSelfNode();
@@ -118,26 +121,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
             }
           }
           _moveCameraToPreferredCenter();
-        }
-        final previousAccepted = previous?.lastAcceptedTrailPoint;
-        final nextAccepted = next.lastAcceptedTrailPoint;
-        final acceptedPointChanged =
-            nextAccepted != null &&
-            (previousAccepted == null ||
-                previousAccepted.latitude != nextAccepted.latitude ||
-                previousAccepted.longitude != nextAccepted.longitude ||
-                previousAccepted.recordedAt != nextAccepted.recordedAt);
-        if (acceptedPointChanged) {
-          final acceptedLocation = LocationData(
-            latitude: nextAccepted.latitude,
-            longitude: nextAccepted.longitude,
-            accuracyMeters: nextAccepted.accuracyMeters,
-            timestamp: nextAccepted.recordedAt,
-          );
-          unawaited(
-            _citizenNearbyPresenceController.publishAcceptedLocation(
-              acceptedLocation,
-            ),
+        } else if (accuracyChanged) {
+          _citizenNearbyPresenceController.updateSelfLocation(
+            next.displayLocation,
+            latestAccuracyMeters: next.latestLocation?.accuracyMeters,
           );
         }
       },
@@ -228,7 +215,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               : 'Citizen',
         );
         _citizenNearbyPresenceController.updateSelfLocation(
-          _selfTrailState().latestLocation,
+          _selfTrailState().displayLocation,
+          latestAccuracyMeters: _selfTrailState().latestLocation?.accuracyMeters,
         );
       }
       await _citizenTrailController.startTracking();
@@ -243,7 +231,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   LatLng? _gpsCenter() {
-    final location = _selfTrailState().latestLocation;
+    final location = _selfTrailState().displayLocation;
     if (location == null) {
       return null;
     }
@@ -252,6 +240,14 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   double? _gpsAccuracyMeters() {
     return _selfTrailState().latestLocation?.accuracyMeters;
+  }
+
+  double? _gpsAccuracyRadiusMeters() {
+    final accuracyMeters = _gpsAccuracyMeters();
+    if (accuracyMeters == null || accuracyMeters <= 0) {
+      return null;
+    }
+    return accuracyMeters.clamp(5, 35).toDouble();
   }
 
   Future<void> _refreshLivePositions() async {
@@ -944,6 +940,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     if (gpsCenter == null) {
       return const [];
     }
+    final accuracyRadiusMeters = _gpsAccuracyRadiusMeters();
 
     return [
       CircleMarker(
@@ -954,6 +951,15 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
         borderStrokeWidth: 1.5,
         borderColor: dc.primary.withValues(alpha: 0.26),
       ),
+      if (accuracyRadiusMeters != null)
+        CircleMarker(
+          point: gpsCenter,
+          radius: accuracyRadiusMeters,
+          useRadiusInMeter: true,
+          color: dc.primary.withValues(alpha: 0.06),
+          borderStrokeWidth: 1.2,
+          borderColor: dc.primary.withValues(alpha: 0.18),
+        ),
       CircleMarker(
         point: gpsCenter,
         radius: 4.5,
@@ -966,7 +972,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   bool _isWithinVisibleNodeRange(Map<String, dynamic> row) {
-    if (_isSelfNode(row)) {
+    if (_isSelfNode(row) || _isNearbyCitizenNode(row)) {
       return true;
     }
     final gpsCenter = _gpsCenter();
@@ -1396,7 +1402,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     );
     final center = _preferredCenter();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final gpsAvailable = selfTrailState.latestLocation != null;
+    final gpsAvailable = selfTrailState.displayLocation != null;
     final gpsAccuracyMeters = selfTrailState.latestLocation?.accuracyMeters;
     final gpsStatusLabel = _gpsStatusLabel(selfTrailState);
     final selectedNode = _effectiveNode(_selectedNode);
@@ -1582,8 +1588,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               left: 16,
               child: _GpsStatusBanner(
                 isDark: isDark,
-                label: 'Nearby presence offline',
+                label: 'Nearby presence unavailable',
                 state: selfTrailState,
+                detail: nearbyPresenceState.lastError,
               ),
             ),
         ],
@@ -2136,11 +2143,13 @@ class _GpsStatusBanner extends StatelessWidget {
     required this.isDark,
     required this.label,
     required this.state,
+    this.detail,
   });
 
   final bool isDark;
   final String label;
   final CitizenLocationTrailState state;
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -2185,16 +2194,41 @@ class _GpsStatusBanner extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 18, color: accentColor),
           const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: isDark ? dc.darkInk : dc.onSurface,
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? dc.darkInk : dc.onSurface,
+                  ),
+                ),
+                if (detail != null && detail!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: isDark
+                          ? dc.darkMutedInk
+                          : dc.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

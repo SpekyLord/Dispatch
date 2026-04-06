@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import httpx
+
 from dispatch_api.errors import ApiError
 from dispatch_api.services.offline_token_service import OfflineTokenService
 from dispatch_api.validation import sanitize_postgrest_value
@@ -344,26 +346,29 @@ class MeshService:
             "accuracy_meters": accuracy_meters,
             "last_seen_at": recorded_at.isoformat(),
         }
-        existing = self.client.db_query(
-            "citizen_nearby_presence",
-            params={"select": "*", "user_id": f"eq.{user_id}"},
-            use_service_role=True,
-        )
-        if existing:
-            rows = self.client.db_update(
+        try:
+            existing = self.client.db_query(
                 "citizen_nearby_presence",
-                data=row,
-                params={"user_id": f"eq.{user_id}"},
+                params={"select": "*", "user_id": f"eq.{user_id}"},
                 use_service_role=True,
             )
-            persisted = rows[0] if rows else {**existing[0], **row}
-        else:
-            rows = self.client.db_insert(
-                "citizen_nearby_presence",
-                data=row,
-                use_service_role=True,
-            )
-            persisted = rows[0] if rows else row
+            if existing:
+                rows = self.client.db_update(
+                    "citizen_nearby_presence",
+                    data=row,
+                    params={"user_id": f"eq.{user_id}"},
+                    use_service_role=True,
+                )
+                persisted = rows[0] if rows else {**existing[0], **row}
+            else:
+                rows = self.client.db_insert(
+                    "citizen_nearby_presence",
+                    data=row,
+                    use_service_role=True,
+                )
+                persisted = rows[0] if rows else row
+        except httpx.HTTPStatusError as error:
+            self._raise_nearby_presence_error(error)
 
         return _decorate_citizen_nearby_presence(persisted)
 
@@ -383,20 +388,19 @@ class MeshService:
             center_lng,
             radius_meters,
         )
-        rows = self.client.db_query(
-            "citizen_nearby_presence",
-            params={
-                "select": "*",
-                "last_seen_at": f"gte.{freshness_cutoff.isoformat()}",
-                "and": (
-                    f"(lat.gte.{min_lat},lat.lte.{max_lat},"
-                    f"lng.gte.{min_lng},lng.lte.{max_lng})"
-                ),
-                "order": "last_seen_at.desc",
-                "limit": str(limit),
-            },
-            use_service_role=True,
-        )
+        try:
+            rows = self.client.db_query(
+                "citizen_nearby_presence",
+                params={
+                    "select": "*",
+                    "last_seen_at": f"gte.{freshness_cutoff.isoformat()}",
+                    "order": "last_seen_at.desc",
+                    "limit": str(limit),
+                },
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError as error:
+            self._raise_nearby_presence_error(error)
 
         nearby_rows: list[dict[str, Any]] = []
         for row in rows:
@@ -430,6 +434,47 @@ class MeshService:
 
         nearby_rows.sort(key=lambda row: float(row.get("distance_meters") or 0))
         return nearby_rows
+
+    def _raise_nearby_presence_error(self, error: httpx.HTTPStatusError) -> None:
+        payload: dict[str, Any] = {}
+        try:
+            payload = error.response.json()
+        except ValueError:
+            payload = {}
+
+        diagnostic_text = " ".join(
+            str(payload.get(field) or "")
+            for field in ("message", "details", "hint")
+        ).lower()
+
+        if (
+            "citizen_nearby_presence" in diagnostic_text
+            or error.response.status_code == 404
+        ) and (
+            "does not exist" in diagnostic_text
+            or "relation" in diagnostic_text
+            or "schema cache" in diagnostic_text
+            or error.response.status_code == 404
+        ):
+            raise ApiError(
+                "Nearby presence needs the latest database migration. Apply "
+                "`supabase/migrations/20260406000000_citizen_nearby_presence.sql` "
+                "or run `npx supabase db push`, then try again.",
+                code="schema_outdated",
+                status_code=500,
+            ) from error
+
+        raise ApiError(
+            "Nearby presence backend request failed.",
+            code="nearby_presence_failed",
+            status_code=500,
+            details={
+                "upstream_status": error.response.status_code,
+                "upstream_message": payload.get("message"),
+                "upstream_details": payload.get("details"),
+                "upstream_hint": payload.get("hint"),
+            },
+        ) from error
 
     def list_messages(
         self,

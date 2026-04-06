@@ -71,6 +71,7 @@ void main() {
 
     expect(controller.state.permissionResolved, isTrue);
     expect(controller.state.latestLocation, isNotNull);
+    expect(controller.state.displayLocation, isNotNull);
     expect(controller.state.persistedTrailPoints, hasLength(1));
     expect(controller.state.lastAcceptedTrailPoint, isNotNull);
   });
@@ -98,6 +99,10 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 18));
 
     expect(controller.state.persistedTrailPoints, hasLength(1));
+    expect(
+      controller.state.displayLocation?.latitude,
+      closeTo(14.5995, 0.0000001),
+    );
     expect(
       controller.state.lastRejectionReason,
       contains('movement stayed below the threshold'),
@@ -159,6 +164,10 @@ void main() {
         controller.state.latestLocation?.latitude,
         poorAccuracyLocation.latitude,
       );
+      expect(
+        controller.state.displayLocation?.latitude,
+        closeTo(14.5995, 0.0000001),
+      );
       expect(controller.state.persistedTrailPoints, hasLength(1));
       expect(
         controller.state.lastRejectionReason,
@@ -217,9 +226,80 @@ void main() {
     expect(controller.state.permissionResolved, isTrue);
     expect(controller.state.permissionGranted, isFalse);
     expect(controller.state.latestLocation, isNull);
+    expect(controller.state.displayLocation, isNull);
     expect(
       controller.state.lastRejectionReason,
       'Location permission denied.',
+    );
+  });
+
+  test('requires two confirming samples for moderate display pin movement', () async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
+    );
+    final controller = CitizenLocationTrailController(
+      locationService: fakeLocationService,
+      sampleInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(fakeLocationService.dispose);
+
+    await controller.startTracking();
+    final firstModerateLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(13),
+      accuracyMeters: 8,
+    );
+    await fakeLocationService.emit(firstModerateLocation);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+
+    expect(
+      controller.state.displayLocation?.latitude,
+      closeTo(14.5995, 0.0000001),
+    );
+    expect(
+      controller.state.latestLocation?.latitude,
+      firstModerateLocation.latitude,
+    );
+
+    final secondModerateLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(14),
+      accuracyMeters: 8,
+    );
+    await fakeLocationService.emit(secondModerateLocation);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+
+    expect(
+      controller.state.displayLocation?.latitude,
+      closeTo(secondModerateLocation.latitude, 0.0000001),
+    );
+  });
+
+  test('moves the display pin immediately for large displacement', () async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995, accuracyMeters: 8),
+    );
+    final controller = CitizenLocationTrailController(
+      locationService: fakeLocationService,
+      sampleInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(fakeLocationService.dispose);
+
+    await controller.startTracking();
+    final movedLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(22),
+      accuracyMeters: 8,
+    );
+    await fakeLocationService.emit(movedLocation);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+
+    expect(
+      controller.state.displayLocation?.latitude,
+      closeTo(movedLocation.latitude, 0.0000001),
     );
   });
 }

@@ -100,6 +100,20 @@ LocationData _locationAt({
 
 double _metersToLatitudeDelta(double meters) => meters / 111111.0;
 
+List<Marker> _allMarkers(WidgetTester tester) {
+  return tester
+      .widgetList<MarkerLayer>(find.byType(MarkerLayer))
+      .expand((layer) => layer.markers)
+      .toList(growable: false);
+}
+
+List<CircleMarker> _allCircleMarkers(WidgetTester tester) {
+  return tester
+      .widgetList<CircleLayer>(find.byType(CircleLayer))
+      .expand((layer) => layer.circles)
+      .toList(growable: false);
+}
+
 Future<void> _pumpMap(
   WidgetTester tester, {
   required _FakeLocationService locationService,
@@ -174,6 +188,7 @@ void main() {
         gpsEnabled: true,
         trackingActive: true,
         latestLocation: liveLocation,
+        displayLocation: liveLocation,
         persistedTrailPoints: const [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: liveLocation.timestamp,
@@ -211,6 +226,7 @@ void main() {
         gpsEnabled: true,
         trackingActive: true,
         latestLocation: secondLocation,
+        displayLocation: secondLocation,
         persistedTrailPoints: [
           CitizenTrailPoint.fromLocation(firstLocation),
           CitizenTrailPoint.fromLocation(secondLocation),
@@ -256,6 +272,7 @@ void main() {
         gpsEnabled: false,
         trackingActive: true,
         latestLocation: null,
+        displayLocation: null,
         persistedTrailPoints: [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: null,
@@ -287,6 +304,7 @@ void main() {
           gpsEnabled: false,
           trackingActive: true,
           latestLocation: null,
+          displayLocation: null,
           persistedTrailPoints: [],
           lastAcceptedTrailPoint: null,
           lastSampledAt: null,
@@ -320,6 +338,7 @@ void main() {
         gpsEnabled: false,
         trackingActive: true,
         latestLocation: null,
+        displayLocation: null,
         persistedTrailPoints: [],
         lastAcceptedTrailPoint: null,
         lastSampledAt: null,
@@ -335,4 +354,113 @@ void main() {
 
     expect(find.text('Location services off'), findsOneWidget);
   });
+
+  testWidgets('uses displayLocation for the self marker and map center', (
+    tester,
+  ) async {
+    final fakeLocationService = _FakeLocationService(
+      permissionGranted: true,
+      gpsEnabled: true,
+      currentPosition: _locationAt(latitude: 14.5995),
+    );
+    final displayLocation = _locationAt(latitude: 14.5995);
+    final liveLocation = _locationAt(
+      latitude: 14.5995 + _metersToLatitudeDelta(20),
+      accuracyMeters: 9,
+    );
+    final trailController = _SeededCitizenLocationTrailController(
+      locationService: fakeLocationService,
+      initialState: CitizenLocationTrailState(
+        permissionResolved: true,
+        permissionGranted: true,
+        gpsEnabled: true,
+        trackingActive: true,
+        latestLocation: liveLocation,
+        displayLocation: displayLocation,
+        persistedTrailPoints: const [],
+        lastAcceptedTrailPoint: null,
+        lastSampledAt: liveLocation.timestamp,
+        lastRejectionReason: null,
+      ),
+    );
+
+    await _pumpMap(
+      tester,
+      locationService: fakeLocationService,
+      trailController: trailController,
+    );
+
+    final markers = _allMarkers(tester);
+    expect(
+      markers.any(
+        (marker) =>
+            (marker.point.latitude - displayLocation.latitude).abs() <
+                0.0000001 &&
+            (marker.point.longitude - displayLocation.longitude).abs() <
+                0.0000001,
+      ),
+      isTrue,
+    );
+
+    final flutterMap = tester.widget<FlutterMap>(find.byType(FlutterMap));
+    expect(
+      flutterMap.options.initialCenter.latitude,
+      closeTo(displayLocation.latitude, 0.0000001),
+    );
+    expect(
+      flutterMap.options.initialCenter.longitude,
+      closeTo(displayLocation.longitude, 0.0000001),
+    );
+  });
+
+  testWidgets(
+    'uses latest accuracy for the accuracy ring while keeping the pin stable',
+    (tester) async {
+      final fakeLocationService = _FakeLocationService(
+        permissionGranted: true,
+        gpsEnabled: true,
+        currentPosition: _locationAt(latitude: 14.5995),
+      );
+      final displayLocation = _locationAt(latitude: 14.5995);
+      final liveLocation = _locationAt(
+        latitude: 14.5995 + _metersToLatitudeDelta(16),
+        accuracyMeters: 28,
+      );
+      final trailController = _SeededCitizenLocationTrailController(
+        locationService: fakeLocationService,
+        initialState: CitizenLocationTrailState(
+          permissionResolved: true,
+          permissionGranted: true,
+          gpsEnabled: true,
+          trackingActive: true,
+          latestLocation: liveLocation,
+          displayLocation: displayLocation,
+          persistedTrailPoints: const [],
+          lastAcceptedTrailPoint: null,
+          lastSampledAt: liveLocation.timestamp,
+          lastRejectionReason: null,
+        ),
+      );
+
+      await _pumpMap(
+        tester,
+        locationService: fakeLocationService,
+        trailController: trailController,
+      );
+
+      final circles = _allCircleMarkers(tester);
+      expect(
+        circles.any(
+          (circle) =>
+              (circle.point.latitude - displayLocation.latitude).abs() <
+                  0.0000001 &&
+              (circle.point.longitude - displayLocation.longitude).abs() <
+                  0.0000001 &&
+              circle.useRadiusInMeter &&
+              circle.radius == 28,
+        ),
+        isTrue,
+      );
+    },
+  );
 }

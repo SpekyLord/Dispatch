@@ -24,7 +24,6 @@
   <img src="https://img.shields.io/badge/mobile-Flutter-02569B" alt="Mobile" />
   <img src="https://img.shields.io/badge/database-Supabase-3ECF8E" alt="Database" />
   <img src="https://img.shields.io/badge/mesh-BLE%20%2B%20WiFi%20Direct-orange" alt="Mesh" />
-  <a href="https://github.com/SpekyLord/Dispatch/actions"><img src="https://github.com/SpekyLord/Dispatch/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
 
 ---

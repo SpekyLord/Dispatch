@@ -1,9 +1,31 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/Pictures/dispatch-logo-white.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/Pictures/Dispatch Logo Transparent.png" />
+    <img src="docs/Pictures/dispatch-logo-white.svg" alt="Dispatch Logo" width="200" />
+  </picture>
+</p>
+
 <h1 align="center">DISPATCH</h1>
 
 <p align="center">
   <strong>Unified Disaster Risk Reduction & Emergency Response Platform</strong>
 </p>
 
+<p align="center">
+  <em>Prototype / Hackathon Pitch</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-prototype-yellow" alt="Status" />
+  <img src="https://img.shields.io/badge/platform-web%20%7C%20android-blue" alt="Platform" />
+  <img src="https://img.shields.io/badge/backend-Flask-black" alt="Backend" />
+  <img src="https://img.shields.io/badge/frontend-React%2019-61DAFB" alt="Frontend" />
+  <img src="https://img.shields.io/badge/mobile-Flutter-02569B" alt="Mobile" />
+  <img src="https://img.shields.io/badge/database-Supabase-3ECF8E" alt="Database" />
+  <img src="https://img.shields.io/badge/mesh-BLE%20%2B%20WiFi%20Direct-orange" alt="Mesh" />
+  <a href="https://github.com/SpekyLord/Dispatch/actions"><img src="https://github.com/SpekyLord/Dispatch/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
 
 ---
 
@@ -14,6 +36,8 @@
 It solves the coordination gap during disasters by streamlining incident reporting, emergency response routing, inter-department visibility, and post-disaster recovery — even in areas with zero internet connectivity through offline mesh networking.
 
 Built for local government units, emergency responders, and citizens in disaster-prone regions.
+
+> **Note:** This is a development prototype built for a hackathon pitch. It is not deployed to production.
 
 ---
 
@@ -95,7 +119,7 @@ When internet is unavailable, devices form a local mesh network. Reports and dis
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Mobile | Flutter (Riverpod, GoRouter, Dio) | Field app, mesh node, offline-capable client |
+| Mobile | Flutter (Riverpod, GoRouter, Dio) | Field app, mesh node, offline-capable client (Android) |
 | Mesh Layer | BLE + Wi-Fi Direct | Offline peer-to-peer communication |
 | Backend | Flask (Python 3.12) | REST API, mesh ingestion, auth middleware |
 | Database | Supabase (PostgreSQL + RLS) | Cloud storage, auth, realtime, file storage |
@@ -219,7 +243,7 @@ corepack pnpm --filter @dispatch/web dev
 # Runs on http://localhost:5173
 ```
 
-**Mobile**
+**Mobile (Android)**
 ```bash
 cd apps/mobile
 flutter pub get
@@ -241,8 +265,8 @@ Dispatch/
 │   │   │   ├── components/     # UI components (branding, feed, maps, layout)
 │   │   │   ├── lib/            # API client, auth, realtime helpers
 │   │   │   └── pages/          # Route pages by role (citizen, department, municipality)
-│   │   └── e2e/                # Playwright tests (Phase 1+)
-│   └── mobile/                 # Flutter + Riverpod mobile app
+│   │   └── e2e/                # Playwright tests (planned)
+│   └── mobile/                 # Flutter + Riverpod mobile app (Android)
 │       └── lib/
 │           ├── core/           # Config, services, state, theme, routing
 │           └── features/       # Auth, citizen, department, municipality, mesh
@@ -263,7 +287,7 @@ Dispatch/
 
 ## API Documentation
 
-**Base URL:** `http://127.0.0.1:5000/api` (development)
+**Base URL:** `http://127.0.0.1:5000/api` (local development)
 
 **Authentication:** Bearer token via `Authorization: Bearer <jwt>` header. Supabase JWT for online auth, custom offline JWT for emergency mesh scenarios.
 
@@ -309,7 +333,7 @@ Dispatch/
 
 ## Seeded Accounts
 
-The bootstrap seed script creates test accounts for development:
+The bootstrap seed script creates test accounts for local development:
 
 | Role | Email | Password |
 |------|-------|----------|
@@ -329,7 +353,7 @@ Citizens are not pre-seeded — they self-register through the app.
 ```bash
 corepack pnpm --filter @dispatch/web lint    # ESLint (zero warnings)
 corepack pnpm --filter @dispatch/web test    # Vitest
-corepack pnpm --filter @dispatch/web build   # Production build
+corepack pnpm --filter @dispatch/web build   # Vite build
 ```
 
 **API**
@@ -372,4 +396,4 @@ flutter test      # Unit tests
 
 ## License
 
-This project is developed as part of the DRRM Hackathon initiative.
+This project was developed as part of a DRRM Hackathon initiative. It is a prototype and not intended for production use.

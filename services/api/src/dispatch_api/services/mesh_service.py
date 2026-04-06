@@ -564,11 +564,14 @@ class MeshService:
         viewer_user_id: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        rows = self.client.db_query(
-            "citizen_ble_chat_sessions",
-            params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
-            use_service_role=True,
-        )
+        try:
+            rows = self.client.db_query(
+                "citizen_ble_chat_sessions",
+                params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError as error:
+            self._raise_ble_chat_error(error)
         visible_rows: list[dict[str, Any]] = []
         for row in rows:
             participants = {
@@ -587,11 +590,14 @@ class MeshService:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         del viewer_user_id
-        rows = self.client.db_query(
-            "citizen_ble_chat_rooms",
-            params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
-            use_service_role=True,
-        )
+        try:
+            rows = self.client.db_query(
+                "citizen_ble_chat_rooms",
+                params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
+                use_service_role=True,
+            )
+        except httpx.HTTPStatusError as error:
+            self._raise_ble_chat_error(error)
         rooms: list[dict[str, Any]] = []
         for row in rows:
             normalized = self._expire_ble_chat_room_if_needed(row)
@@ -1127,6 +1133,50 @@ class MeshService:
         raise ApiError(
             "Nearby presence backend request failed.",
             code="nearby_presence_failed",
+            status_code=500,
+            details={
+                "upstream_status": error.response.status_code,
+                "upstream_message": payload.get("message"),
+                "upstream_details": payload.get("details"),
+                "upstream_hint": payload.get("hint"),
+            },
+        ) from error
+
+    def _raise_ble_chat_error(self, error: httpx.HTTPStatusError) -> None:
+        payload: dict[str, Any] = {}
+        try:
+            payload = error.response.json()
+        except ValueError:
+            payload = {}
+
+        diagnostic_text = " ".join(
+            str(payload.get(field) or "")
+            for field in ("message", "details", "hint")
+        ).lower()
+
+        if (
+            "citizen_ble_chat_sessions" in diagnostic_text
+            or "citizen_ble_chat_rooms" in diagnostic_text
+            or "citizen_ble_chat_room_members" in diagnostic_text
+            or error.response.status_code == 404
+        ) and (
+            "does not exist" in diagnostic_text
+            or "relation" in diagnostic_text
+            or "schema cache" in diagnostic_text
+            or error.response.status_code == 404
+        ):
+            raise ApiError(
+                "Nearby chat needs the latest database migrations. Apply "
+                "`supabase/migrations/20260407000000_citizen_ble_chat_sessions.sql` "
+                "and `supabase/migrations/20260408000000_citizen_ble_chat_rooms.sql`, "
+                "then restart the API and try again.",
+                code="schema_outdated",
+                status_code=500,
+            ) from error
+
+        raise ApiError(
+            "Nearby chat backend request failed.",
+            code="nearby_chat_failed",
             status_code=500,
             details={
                 "upstream_status": error.response.status_code,

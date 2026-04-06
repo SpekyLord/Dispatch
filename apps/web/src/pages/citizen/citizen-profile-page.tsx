@@ -12,21 +12,21 @@ import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiRequest, apiUpload } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
 
-type MunicipalityProfileFormState = {
+type CitizenProfileFormState = {
   full_name: string;
   description: string;
   phone: string;
 };
 
+type ReportsCountResponse = { reports: { id: string }[] };
 type ProfileResponse = { profile: {
   id: string; email: string; role: string; full_name?: string | null;
   phone?: string | null; avatar_url?: string | null;
   description?: string | null; header_photo?: string | null; profile_picture?: string | null;
+  is_verified?: boolean;
 } };
 
-type Department = { id: string; name: string; type: string; verification_status: string };
-
-const profileTabs = ["Activity", "Announcements", "Bookmarks", "Archive"] as const;
+const profileTabs = ["Activity", "Reports", "Bookmarks", "Archive"] as const;
 
 const profileLaneEffectClassName =
   "dispatch-profile-publish-lane space-y-5 overflow-x-clip rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]";
@@ -62,28 +62,30 @@ function summarizePostContent(content: string, maxLength = 92) {
   return collapsed.length <= maxLength ? collapsed : `${collapsed.slice(0, maxLength).trimEnd()}...`;
 }
 
-export function MunicipalityProfilePage() {
+export function CitizenProfilePage() {
   const user = useSessionStore((state) => state.user);
   const updateUser = useSessionStore((state) => state.updateUser);
 
   const [posts, setPosts] = useState<ProfileInteractivePost[]>([]);
-  const [totalDepts, setTotalDepts] = useState(0);
-  const [pendingDepts, setPendingDepts] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Local copies of profile fields that can be updated without a page reload
   const [localProfile, setLocalProfile] = useState<{
     description: string | null;
     header_photo: string | null;
     profile_picture: string | null;
-  }>({ description: null, header_photo: null, profile_picture: null });
+    is_verified: boolean;
+  }>({ description: null, header_photo: null, profile_picture: null, is_verified: false });
 
-  const [profileDraft, setProfileDraft] = useState<MunicipalityProfileFormState>({
+  const [profileDraft, setProfileDraft] = useState<CitizenProfileFormState>({
     full_name: "", description: "", phone: "",
   });
 
+  // File upload state
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [headerPhotoFile, setHeaderPhotoFile] = useState<File | null>(null);
   const [profilePhotoPreviewUrl, setProfilePhotoPreviewUrl] = useState<string | null>(null);
@@ -95,20 +97,19 @@ export function MunicipalityProfilePage() {
   const headerPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadProfile = useCallback(async (userId: string) => {
-    const [profileRes, postsRes, allDepts, pendingDepts] = await Promise.all([
+    const [profileRes, postsRes, reportsRes] = await Promise.all([
       apiRequest<ProfileResponse>("/api/users/profile"),
       apiRequest<{ posts: ProfileInteractivePost[] }>(`/api/feed?uploader=${userId}`),
-      apiRequest<{ departments: Department[] }>("/api/municipality/departments").catch(() => ({ departments: [] })),
-      apiRequest<{ departments: Department[] }>("/api/municipality/departments/pending").catch(() => ({ departments: [] })),
+      apiRequest<ReportsCountResponse>(`/api/reports?reporter_id=${userId}`).catch(() => ({ reports: [] })),
     ]);
     setLocalProfile({
       description: profileRes.profile.description ?? null,
       header_photo: profileRes.profile.header_photo ?? null,
       profile_picture: profileRes.profile.profile_picture ?? null,
+      is_verified: profileRes.profile.is_verified ?? false,
     });
     setPosts(postsRes.posts);
-    setTotalDepts(allDepts.departments.length);
-    setPendingDepts(pendingDepts.departments.length);
+    setReportCount(Array.isArray(reportsRes.reports) ? reportsRes.reports.length : 0);
   }, []);
 
   useEffect(() => {
@@ -118,6 +119,7 @@ export function MunicipalityProfilePage() {
       .finally(() => setLoading(false));
   }, [loadProfile, user]);
 
+  // Object URL cleanup
   useEffect(() => {
     if (!profilePhotoFile) { setProfilePhotoPreviewUrl(null); return; }
     const url = URL.createObjectURL(profilePhotoFile);
@@ -175,6 +177,7 @@ export function MunicipalityProfilePage() {
         description: res.profile.description ?? null,
         header_photo: res.profile.header_photo ?? null,
         profile_picture: res.profile.profile_picture ?? null,
+        is_verified: res.profile.is_verified ?? false,
       });
       setIsEditProfileOpen(false);
     } catch (err) {
@@ -198,7 +201,7 @@ export function MunicipalityProfilePage() {
 
   if (loading) {
     return (
-      <AppShell subtitle="Municipality profile" title="Profile">
+      <AppShell subtitle="Citizen profile" title="Profile">
         <Card className="py-16 text-center text-on-surface-variant">
           <LoadingDots className="mb-4" sizeClassName="h-5 w-5" />
           Loading profile...
@@ -209,19 +212,19 @@ export function MunicipalityProfilePage() {
 
   if (!user) {
     return (
-      <AppShell subtitle="Municipality profile" title="Profile">
+      <AppShell subtitle="Citizen profile" title="Profile">
         <Card className="py-16 text-center text-on-surface-variant">No active session.</Card>
       </AppShell>
     );
   }
 
-  const displayName = user.full_name || "Municipality Administrator";
-  const handle = user.email?.split("@")[0] ?? "admin";
+  const displayName = user.full_name || "Citizen";
+  const handle = user.email?.split("@")[0] ?? "citizen";
   const postCount = posts.length;
   const profilePhoto = localProfile.profile_picture ?? user.profile_picture ?? user.avatar_url;
   const headerPhoto = (removeHeaderPhoto ? null : headerPhotoPreviewUrl ?? localProfile.header_photo) ?? headerPlaceholderImage;
   const profileDescription = (localProfile.description ?? user.description)?.trim()
-    || "Municipality administrator profile. Oversees department verification, escalated reports, and community response coordination.";
+    || "This citizen profile is ready to customise. Add a short bio, your contact details, and keep your community updated.";
   const railPosts = posts.slice(0, 2);
 
   const draftProfilePhoto = removeProfilePhoto
@@ -237,11 +240,11 @@ export function MunicipalityProfilePage() {
     type: null,
     profile_picture: profilePhoto ?? null,
     profile_photo: profilePhoto ?? null,
-    verification_status: "approved",
+    verification_status: localProfile.is_verified ? "approved" : "pending",
   };
 
   return (
-    <AppShell subtitle="Municipality profile" title="Profile">
+    <AppShell subtitle="Citizen profile" title="Profile">
       <div className="dispatch-profile-page">
         <style>{`
           .dispatch-shell-dark .dispatch-profile-page .text-on-surface { color: #f4eee8 !important; }
@@ -286,6 +289,7 @@ export function MunicipalityProfilePage() {
           {/* ── Main column ── */}
           <div className={`min-w-0 ${profileLaneEffectClassName}`}>
             <section className={`overflow-hidden rounded-[28px] border text-on-surface ${profileSurfaceClassName} ${profileRaisedCardClassName} ${profileCardHoverClassName}`}>
+              {/* Header photo */}
               <div className="relative h-56 overflow-hidden md:h-64">
                 <img alt="Profile header" className="h-full w-full object-cover" src={headerPhoto} />
                 <div className="dispatch-profile-header-overlay absolute inset-0 bg-[linear-gradient(180deg,rgba(255,252,247,0.06),rgba(56,56,49,0.18))]" />
@@ -293,19 +297,30 @@ export function MunicipalityProfilePage() {
 
               <div className="relative px-5 pb-6 pt-5 md:px-8">
                 <div className="relative flex flex-col gap-5 md:flex-row md:items-start">
+                  {/* Avatar */}
                   <div className="dispatch-profile-avatar-shell absolute right-0 top-[-84px] h-28 w-28 overflow-hidden rounded-full border-4 border-[#fff8f3] bg-[#f2e7de] text-[#8f4427] shadow-lg md:h-36 md:w-36">
                     {profilePhoto ? (
                       <img alt={`${displayName} profile`} className="h-full w-full object-cover" src={profilePhoto} />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
-                        <span className="material-symbols-outlined text-[56px] md:text-[68px]">shield_person</span>
+                        <span className="material-symbols-outlined text-[56px] md:text-[68px]">person</span>
                       </div>
                     )}
                   </div>
 
                   <div className="w-full">
                     <div className="pr-8 md:pr-36">
-                      <h2 className="font-headline text-3xl text-on-surface md:text-4xl">{displayName}</h2>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="font-headline text-3xl text-on-surface md:text-4xl">{displayName}</h2>
+                        {localProfile.is_verified && (
+                          <span
+                            className="material-symbols-outlined text-[#ff8a1f]"
+                            style={{ fontVariationSettings: '"FILL" 1' }}
+                          >
+                            verified
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-lg text-[#a14b2f]">@{handle}</p>
                     </div>
 
@@ -315,8 +330,8 @@ export function MunicipalityProfilePage() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
-                        <span className="material-symbols-outlined text-[16px]">shield_person</span>
-                        Municipality Admin
+                        <span className="material-symbols-outlined text-[16px]">person</span>
+                        Citizen
                       </span>
                       {user.phone && (
                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm ${profilePillClassName}`}>
@@ -327,9 +342,9 @@ export function MunicipalityProfilePage() {
                     </div>
 
                     <p className="mt-5 text-lg text-on-surface-variant">
-                      <span className="font-semibold text-on-surface">{totalDepts}</span> department{totalDepts === 1 ? "" : "s"} managed
+                      <span className="font-semibold text-on-surface">{postCount}</span> published post{postCount === 1 ? "" : "s"}
                       <span className="mx-2 text-outline">|</span>
-                      <span className="font-semibold text-on-surface">{pendingDepts}</span> pending
+                      <span className="font-semibold text-on-surface">{reportCount}</span> report{reportCount === 1 ? "" : "s"} filed
                     </p>
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_52px]">
@@ -341,14 +356,14 @@ export function MunicipalityProfilePage() {
                       >
                         Edit Profile
                       </Button>
-                      <Link to="/municipality/news-feed">
+                      <Link to="/citizen/news-feed">
                         <button className={`w-full rounded-xl px-6 py-4 text-base font-semibold ${profileActionSurfaceClassName}`} type="button">
                           Open News Feed
                         </button>
                       </Link>
                       <Link
                         className={`flex items-center justify-center rounded-xl ${profileActionSurfaceClassName}`}
-                        to="/municipality"
+                        to="/citizen"
                       >
                         <span className="material-symbols-outlined">more_horiz</span>
                       </Link>
@@ -378,7 +393,7 @@ export function MunicipalityProfilePage() {
             <ProfileInteractivePostStack
               cardClassName={`${profileSurfaceClassName} ${profileRaisedCardClassName}`}
               department={interactiveProfile}
-              emptyMessage="No published announcements yet."
+              emptyMessage="No published posts yet."
               hoverClassName={profileCardHoverClassName}
               posts={posts}
             />
@@ -387,44 +402,47 @@ export function MunicipalityProfilePage() {
           {/* ── Right sidebar ── */}
           <div className="min-w-0">
             <div className="space-y-6 md:sticky md:top-6">
+              {/* Search placeholder */}
               <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
                 <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
                   <span className="material-symbols-outlined text-white/75">search</span>
                   <input
                     aria-label="Search profile"
                     className="w-full bg-transparent text-center text-sm text-white outline-none placeholder:text-center placeholder:text-white/55"
-                    placeholder="Search announcements..."
+                    placeholder="Search posts and activity..."
                     readOnly
                   />
                 </div>
               </section>
 
+              {/* Stats card */}
               <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
                 <div className="flex flex-col items-center gap-4 text-center">
                   <div className="mx-auto max-w-[17rem]">
                     <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
-                      Municipality View
+                      Citizen Profile
                     </span>
                     <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">{displayName}</h2>
                     <p className="mt-3 text-sm leading-relaxed text-white/80">
-                      Oversight of departments, verifications, and community response coordination.
+                      Community member profile — posts, reports, and public activity in one place.
                     </p>
                   </div>
                   <div className="grid w-full max-w-[17rem] gap-3">
                     <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Departments Managed</p>
-                      <p className="mt-2 font-headline text-4xl">{String(totalDepts).padStart(2, "0")}</p>
-                      <p className="mt-1 text-xs text-white/70">Registered response departments</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Published Posts</p>
+                      <p className="mt-2 font-headline text-4xl">{String(postCount).padStart(2, "0")}</p>
+                      <p className="mt-1 text-xs text-white/70">Profile activity and announcements</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Pending Verification</p>
-                      <p className="mt-2 font-headline text-2xl">{String(pendingDepts).padStart(2, "0")}</p>
-                      <p className="mt-1 text-xs text-white/70">Awaiting approval</p>
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Reports Filed</p>
+                      <p className="mt-2 font-headline text-2xl">{String(reportCount).padStart(2, "0")}</p>
+                      <p className="mt-1 text-xs text-white/70">Incident reports submitted</p>
                     </div>
                   </div>
                 </div>
               </section>
 
+              {/* Recent activity */}
               <Card className={profileSurfaceClassName}>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
                   Recent Activity
@@ -459,6 +477,7 @@ export function MunicipalityProfilePage() {
         {isEditProfileOpen && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-md md:p-8">
             <div className={`dispatch-profile-surface relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border text-on-surface shadow-[0_24px_60px_rgba(56,56,49,0.18)] ${profileSurfaceClassName}`}>
+              {/* Modal header */}
               <div className="dispatch-profile-divider flex items-center gap-4 border-b border-[#e2d1c7] bg-[#fff8f3]/95 px-5 py-4 backdrop-blur-sm md:px-6">
                 <button
                   aria-label="Close edit profile"
@@ -480,7 +499,7 @@ export function MunicipalityProfilePage() {
               </div>
 
               <div className="min-h-0 overflow-y-auto px-5 pb-8 pt-5 md:px-6">
-                {/* Header photo */}
+                {/* Header photo editor */}
                 <div className={`relative overflow-hidden rounded-[24px] border bg-[#f7efe7] ${profilePillClassName}`}>
                   <div className="relative h-40 overflow-hidden bg-[#efe3da]">
                     <img alt="Header preview" className="h-full w-full object-cover" src={draftHeaderPhoto} />
@@ -508,14 +527,14 @@ export function MunicipalityProfilePage() {
                   </div>
                 </div>
 
-                {/* Avatar */}
+                {/* Avatar editor */}
                 <div className="mt-4 flex items-center gap-4">
                   <div className="h-20 w-20 overflow-hidden rounded-full border-2 border-[#e2d1c7] bg-[#f2e7de] text-[#8f4427]">
                     {draftProfilePhoto ? (
                       <img alt="Avatar preview" className="h-full w-full object-cover" src={draftProfilePhoto} />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
-                        <span className="material-symbols-outlined text-4xl">shield_person</span>
+                        <span className="material-symbols-outlined text-4xl">person</span>
                       </div>
                     )}
                   </div>
@@ -545,37 +564,38 @@ export function MunicipalityProfilePage() {
                   </div>
                 )}
 
+                {/* Form fields */}
                 <div className="mt-5 space-y-4">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="muni-profile-name">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="citizen-profile-name">
                       Full Name
                     </label>
                     <input
                       className="dispatch-profile-form-input w-full rounded-2xl border border-[#e2d1c7] bg-[#fff8f3] px-4 py-3 text-sm text-on-surface outline-none focus:border-[#a14b2f]"
-                      id="muni-profile-name"
+                      id="citizen-profile-name"
                       type="text"
                       value={profileDraft.full_name}
                       onChange={(e) => setProfileDraft((d) => ({ ...d, full_name: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="muni-profile-bio">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="citizen-profile-bio">
                       Bio
                     </label>
                     <textarea
                       className="dispatch-profile-form-input min-h-[120px] w-full resize-none rounded-2xl border border-[#e2d1c7] bg-[#fff8f3] px-4 py-3 text-sm text-on-surface outline-none focus:border-[#a14b2f]"
-                      id="muni-profile-bio"
+                      id="citizen-profile-bio"
                       value={profileDraft.description}
                       onChange={(e) => setProfileDraft((d) => ({ ...d, description: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="muni-profile-phone">
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-on-surface-variant" htmlFor="citizen-profile-phone">
                       Phone
                     </label>
                     <input
                       className="dispatch-profile-form-input w-full rounded-2xl border border-[#e2d1c7] bg-[#fff8f3] px-4 py-3 text-sm text-on-surface outline-none focus:border-[#a14b2f]"
-                      id="muni-profile-phone"
+                      id="citizen-profile-phone"
                       type="tel"
                       value={profileDraft.phone}
                       onChange={(e) => setProfileDraft((d) => ({ ...d, phone: e.target.value }))}
@@ -583,7 +603,9 @@ export function MunicipalityProfilePage() {
                   </div>
                 </div>
 
-                <p className="mt-5 text-xs text-on-surface-variant">Photos must be JPEG or PNG, max 5 MB.</p>
+                <p className="mt-5 text-xs text-on-surface-variant">
+                  Photos must be JPEG or PNG, max 5 MB.
+                </p>
 
                 <input accept="image/jpeg,image/png" className="hidden" ref={profilePhotoInputRef} type="file" onChange={handleProfilePhotoChange} />
                 <input accept="image/jpeg,image/png" className="hidden" ref={headerPhotoInputRef} type="file" onChange={handleHeaderPhotoChange} />

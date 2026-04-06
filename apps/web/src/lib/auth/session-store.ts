@@ -12,6 +12,9 @@ export type SessionUser = {
   full_name?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
+  description?: string | null;
+  header_photo?: string | null;
+  profile_picture?: string | null;
 };
 
 // Department info — verification_status drives UI (pending/rejected/approved views)

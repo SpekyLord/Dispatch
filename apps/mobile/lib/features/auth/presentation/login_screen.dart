@@ -2,6 +2,7 @@
 
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/features/auth/presentation/widgets/dispatch_brand_mark.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -210,16 +211,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Align(
               alignment: Alignment.topCenter,
               child: Padding(
-                padding: const EdgeInsets.only(top: 36),
-                child: Text(
-                  'DISPATCH',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF9F4E31),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 5,
-                  ),
-                ),
+                padding: const EdgeInsets.only(top: 24),
+                child: const DispatchBrandMark(size: 76),
               ),
             ),
             const Positioned.fill(

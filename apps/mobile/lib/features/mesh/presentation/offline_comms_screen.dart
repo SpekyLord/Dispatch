@@ -428,7 +428,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: _postCategory,
+                    initialValue: _postCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),
@@ -510,7 +510,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: dc.warmBorder),
               ),
-              child: const Text(
+              child: Text(
                 _isDirectThread
                     ? 'No direct messages in this thread yet. Send one and nearby nodes will relay it across the mesh.'
                     : 'No messages yet. Compose a broadcast above or wait for nearby nodes to relay traffic.',

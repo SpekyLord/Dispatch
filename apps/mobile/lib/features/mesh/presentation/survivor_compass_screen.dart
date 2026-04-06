@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/compass_sensor_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/services/survivor_compass_service.dart';

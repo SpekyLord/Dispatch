@@ -8,10 +8,16 @@ class AppBottomNavigationBar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onItemTapped,
+    this.onCenterActionTap,
+    this.centerActionLabel = 'Submit\nReport',
+    this.centerActionIcon = Icons.add_rounded,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onItemTapped;
+  final VoidCallback? onCenterActionTap;
+  final String centerActionLabel;
+  final IconData centerActionIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -42,45 +48,61 @@ class AppBottomNavigationBar extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _NavItem(
-                    icon: Icons.hub_outlined,
-                    activeIcon: Icons.hub,
-                    label: 'MESH',
-                    isSelected: selectedIndex == 0,
-                    selectedColor: selectedColor,
-                    unselectedColor: unselectedColor,
-                    onTap: () => onItemTapped(0),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.hub_outlined,
+                      activeIcon: Icons.hub,
+                      label: 'MESH',
+                      isSelected: selectedIndex == 0,
+                      selectedColor: selectedColor,
+                      unselectedColor: unselectedColor,
+                      onTap: () => onItemTapped(0),
+                    ),
                   ),
-                  _NavItem(
-                    icon: Icons.map_outlined,
-                    activeIcon: Icons.map,
-                    label: 'MAP',
-                    isSelected: selectedIndex == 1,
-                    selectedColor: selectedColor,
-                    unselectedColor: unselectedColor,
-                    onTap: () => onItemTapped(1),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.map_outlined,
+                      activeIcon: Icons.map,
+                      label: 'MAP',
+                      isSelected: selectedIndex == 1,
+                      selectedColor: selectedColor,
+                      unselectedColor: unselectedColor,
+                      onTap: () => onItemTapped(1),
+                    ),
                   ),
-                  _NavItem(
-                    icon: Icons.dynamic_feed_outlined,
-                    activeIcon: Icons.dynamic_feed,
-                    label: 'FEED',
-                    isSelected: selectedIndex == 2,
-                    selectedColor: selectedColor,
-                    unselectedColor: unselectedColor,
-                    onTap: () => onItemTapped(2),
+                  if (onCenterActionTap != null)
+                    Expanded(
+                      child: _CenterActionItem(
+                        icon: centerActionIcon,
+                        label: centerActionLabel,
+                        accentColor: selectedColor,
+                        onTap: onCenterActionTap!,
+                      ),
+                    ),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.dynamic_feed_outlined,
+                      activeIcon: Icons.dynamic_feed,
+                      label: 'FEED',
+                      isSelected: selectedIndex == 2,
+                      selectedColor: selectedColor,
+                      unselectedColor: unselectedColor,
+                      onTap: () => onItemTapped(2),
+                    ),
                   ),
-                  _NavItem(
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings,
-                    label: 'SETTINGS',
-                    isSelected: selectedIndex == 3,
-                    selectedColor: selectedColor,
-                    unselectedColor: unselectedColor,
-                    onTap: () => onItemTapped(3),
+                  Expanded(
+                    child: _NavItem(
+                      icon: Icons.settings_outlined,
+                      activeIcon: Icons.settings,
+                      label: 'SETTINGS',
+                      isSelected: selectedIndex == 3,
+                      selectedColor: selectedColor,
+                      unselectedColor: unselectedColor,
+                      onTap: () => onItemTapped(3),
+                    ),
                   ),
                 ],
               ),
@@ -121,7 +143,7 @@ class _NavItem extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: isSelected
             ? BoxDecoration(
                 color: isDark
@@ -137,12 +159,76 @@ class _NavItem extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              softWrap: false,
               style: TextStyle(
                 fontFamily: 'Inter',
                 color: color,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CenterActionItem extends StatelessWidget {
+  const _CenterActionItem({
+    required this.icon,
+    required this.label,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? dc.darkPrimaryAccent.withValues(alpha: 0.2)
+                    : dc.primaryContainer,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.28),
+                ),
+              ),
+              child: Icon(icon, color: accentColor, size: 24),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                color: accentColor,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                height: 1.05,
+                letterSpacing: 0.3,
               ),
             ),
           ],

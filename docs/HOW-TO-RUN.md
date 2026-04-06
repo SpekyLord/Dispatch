@@ -126,7 +126,7 @@ For full mesh pass/fail execution steps, use [MESH-FIELD-TEST-PROCEDURE.md](MESH
 
 ```bash
 # services/api/.env
-API_HOST=0.0.0.0
+API_HOST=0.0.0.0`
 API_PORT=5000
 ```
 

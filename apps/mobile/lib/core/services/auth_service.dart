@@ -30,8 +30,8 @@ class AuthService {
   }
 
   void setToken(String? token) {
-    if (token != null) {
-      _dio.options.headers['Authorization'] = 'Bearer ';
+    if (token != null && token.isNotEmpty) {
+      _dio.options.headers['Authorization'] = 'Bearer $token';
     } else {
       _dio.options.headers.remove('Authorization');
     }

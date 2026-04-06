@@ -1,6 +1,7 @@
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/citizen_mesh_dashboard_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/mesh_people_map_screen.dart';
@@ -45,6 +46,12 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
     setState(() => _selectedIndex = index);
   }
 
+  Future<void> _openReportComposer() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -69,6 +76,7 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       bottomNavigationBar: AppBottomNavigationBar(
         selectedIndex: _selectedIndex,
         onItemTapped: _onItemTapped,
+        onCenterActionTap: _openReportComposer,
       ),
     );
   }

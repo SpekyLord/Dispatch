@@ -4,6 +4,7 @@ import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart' show ImageSource;
@@ -189,6 +190,31 @@ class _CitizenReportFormScreenState
     );
   }
 
+  String _reportSubmissionError(Object error) {
+    if (error is DioException) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError) {
+        return 'Unable to reach the server right now. Check the mobile API URL and your connection, then try again.';
+      }
+      final payload = error.response?.data;
+      if (payload is Map<String, dynamic>) {
+        final apiError = payload['error'];
+        if (apiError is Map<String, dynamic>) {
+          final message = apiError['message'] as String?;
+          if (message != null && message.isNotEmpty) {
+            return message;
+          }
+        }
+      }
+      if (error.message != null && error.message!.isNotEmpty) {
+        return error.message!;
+      }
+    }
+    return 'Unable to submit the report right now. Please try again.';
+  }
+
   Future<void> _submitReport() async {
     if (_loading) {
       return;
@@ -199,7 +225,7 @@ class _CitizenReportFormScreenState
     if (title.isEmpty && details.isEmpty) {
       setState(
         () => _error =
-            'Add a title or describe the situation before broadcasting.',
+            'Add a title or describe the situation before submitting.',
       );
       return;
     }
@@ -211,7 +237,7 @@ class _CitizenReportFormScreenState
     setState(() {
       _loading = true;
       _error = null;
-      _meshStatus = 'Broadcasting incident to nearby mesh nodes...';
+      _meshStatus = 'Submitting report to Dispatch...';
     });
     try {
       final auth = ref.read(authServiceProvider);
@@ -235,16 +261,15 @@ class _CitizenReportFormScreenState
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report broadcast to the mesh.')),
+        const SnackBar(content: Text('Report submitted successfully.')),
       );
       Navigator.of(context).pop();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error =
-              'Unable to broadcast the report right now. Please try again.';
-          _meshStatus = 'Broadcast failed. Retrying is safe.';
+          _error = _reportSubmissionError(e);
+          _meshStatus = 'Report submission failed. Retrying is safe.';
         });
       }
     }

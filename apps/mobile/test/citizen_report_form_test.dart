@@ -37,10 +37,10 @@ void main() {
     // the submit button which sits below the 200px map).
     return ProviderScope(
       overrides: [
-        locationServiceProvider.overrideWithValue(
-          locationService ?? FakeLocationService(),
+        locationServiceProvider.overrideWith(
+          (ref) => locationService ?? FakeLocationService(),
         ),
-        mediaServiceProvider.overrideWithValue(FakeMediaService()),
+        mediaServiceProvider.overrideWith((ref) => FakeMediaService()),
       ],
       child: MaterialApp(
         home: MediaQuery(

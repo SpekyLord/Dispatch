@@ -128,8 +128,8 @@ Future<void> pumpOfflineCommsScreen(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authServiceProvider.overrideWithValue(authService),
-        meshTransportProvider.overrideWithValue(transport),
+        authServiceProvider.overrideWith((ref) => authService),
+        meshTransportProvider.overrideWith((ref) => transport),
         sessionControllerProvider.overrideWith(
           (ref) => FakeSessionController(sessionState),
         ),

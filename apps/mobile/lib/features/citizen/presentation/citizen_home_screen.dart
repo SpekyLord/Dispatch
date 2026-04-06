@@ -54,6 +54,8 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hideBottomNav =
+        ref.watch(mapNodeOverlayActiveProvider) && _selectedIndex == 1;
     final pages = [
       CitizenMeshDashboardScreen(onOpenMapTab: () => _onItemTapped(2)),
       const MeshPeopleMapScreen(
@@ -73,10 +75,23 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
       backgroundColor: dc.background,
       extendBody: true,
       body: IndexedStack(index: _selectedIndex, children: pages),
-      bottomNavigationBar: AppBottomNavigationBar(
-        selectedIndex: _selectedIndex,
-        onItemTapped: _onItemTapped,
-        onCenterActionTap: _openReportComposer,
+      bottomNavigationBar: IgnorePointer(
+        ignoring: hideBottomNav,
+        child: AnimatedSlide(
+          offset: hideBottomNav ? const Offset(0, 1.15) : Offset.zero,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          child: AnimatedOpacity(
+            opacity: hideBottomNav ? 0 : 1,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            child: AppBottomNavigationBar(
+              selectedIndex: _selectedIndex,
+              onItemTapped: _onItemTapped,
+              onCenterActionTap: _openReportComposer,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -49,3 +49,5 @@ final sarModeControllerProvider =
         platform: ref.read(sarPlatformServiceProvider),
       );
     });
+
+final mapNodeOverlayActiveProvider = StateProvider<bool>((ref) => false);

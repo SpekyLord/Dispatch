@@ -123,11 +123,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authServiceProvider.overrideWithValue(authService),
+          authServiceProvider.overrideWith((ref) => authService),
           sessionControllerProvider.overrideWith(
             (ref) => _FakeSessionController(authService),
           ),
-          meshTransportProvider.overrideWithValue(transport),
+          meshTransportProvider.overrideWith((ref) => transport),
         ],
         child: const MaterialApp(home: Scaffold(body: CitizenProfileScreen())),
       ),

@@ -58,7 +58,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [authServiceProvider.overrideWithValue(auth)],
+          overrides: [authServiceProvider.overrideWith((ref) => auth)],
           child: const MaterialApp(home: DepartmentAssessmentScreen()),
         ),
       );

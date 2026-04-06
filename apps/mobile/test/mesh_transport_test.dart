@@ -496,6 +496,41 @@ void main() {
     );
 
     test(
+      'buildTopologySnapshot can include preview nodes for discovered peers without beacons',
+      () async {
+        locationService.currentPosition = const LocationData(
+          latitude: 14.55,
+          longitude: 121.01,
+          accuracyMeters: 12,
+        );
+        svc.onPeerDiscovered(
+          'endpoint-a',
+          'Nearby Node',
+          deviceId: 'AA:BB:CC:DD:EE:FF',
+          isConnected: true,
+          transport: 'wifi_direct',
+        );
+
+        final snapshot = await svc.buildTopologySnapshot(
+          includePeerPreviews: true,
+          displayName: 'Live GPS Gateway',
+        );
+
+        expect(snapshot, isNotNull);
+        final nodes =
+            (snapshot!['nodes'] as List<dynamic>).cast<Map<String, dynamic>>();
+        expect(nodes, hasLength(1));
+
+        final node = nodes.first;
+        expect(node['nodeDeviceId'], 'AA:BB:CC:DD:EE:FF');
+        expect(node['displayName'], 'Nearby Node');
+        final metadata = node['metadata'] as Map<String, dynamic>;
+        expect(metadata['source'], 'peer_preview');
+        expect(metadata['approximateLocation'], true);
+      },
+    );
+
+    test(
       'buildTopologySnapshot returns null when no gateway location is available',
       () async {
         final snapshot = await svc.buildTopologySnapshot();

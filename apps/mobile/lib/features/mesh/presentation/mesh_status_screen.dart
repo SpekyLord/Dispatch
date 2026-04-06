@@ -286,7 +286,9 @@ class _MeshStatusScreenState extends ConsumerState<MeshStatusScreen> {
                       Expanded(
                         child: _StatCard(
                           icon: Icons.radar,
-                          value: '~${transport.estimatedReach}',
+                          value: transport.estimatedReach >= 1000
+                              ? '~${(transport.estimatedReach / 1000).toStringAsFixed(1)}km'
+                              : '~${transport.estimatedReach}m',
                           label: 'Reach',
                           accent: dc.statusResolved,
                         ),

@@ -26,6 +26,8 @@ enum MeshPayloadType {
 
 const _topologyNodeWindow = Duration(minutes: 30);
 const _topologyNodeCap = 150;
+const _demoEstimatedReachPerPeerMeters = 300;
+const _demoEstimatedReachCapMeters = 12000;
 
 class MeshPacket {
   final String messageId;
@@ -750,6 +752,7 @@ class MeshTransportService extends ChangeNotifier {
     String? departmentName,
     String? displayName,
     int maxNodes = _topologyNodeCap,
+    bool includePeerPreviews = false,
   }) async {
     final capturedAt = DateTime.now().toUtc();
     final effectiveMaxNodes = max(1, maxNodes);
@@ -854,7 +857,96 @@ class MeshTransportService extends ChangeNotifier {
             },
           },
         )
-        .toList(growable: false);
+        .toList(growable: true);
+
+    if (includePeerPreviews && nodes.length < effectiveMaxNodes) {
+      final representedIdentifiers = <String>{
+        for (final point in recentPeerBeacons) point.deviceFingerprint,
+      };
+      for (final point in recentPeerBeacons) {
+        final routingDeviceId = point.routingDeviceId;
+        if (routingDeviceId == null || routingDeviceId.isEmpty) {
+          continue;
+        }
+        representedIdentifiers
+          ..add(routingDeviceId)
+          ..add(anonymizeDeviceFingerprint(routingDeviceId));
+      }
+
+      final previewPeers = _peers
+          .where(
+            (peer) => peer.lastSeen.isAfter(
+              capturedAt.subtract(const Duration(minutes: 5)),
+            ),
+          )
+          .where((peer) {
+            final peerDeviceId = (peer.deviceId ?? '').trim();
+            if (peerDeviceId.isNotEmpty &&
+                representedIdentifiers.contains(peerDeviceId)) {
+              return false;
+            }
+            if (peerDeviceId.isNotEmpty &&
+                representedIdentifiers.contains(
+                  anonymizeDeviceFingerprint(peerDeviceId),
+                )) {
+              return false;
+            }
+            return !representedIdentifiers.contains(peer.endpointId);
+          })
+          .toList(growable: false)
+        ..sort((a, b) {
+          final left = (a.deviceId ?? a.endpointId).toLowerCase();
+          final right = (b.deviceId ?? b.endpointId).toLowerCase();
+          return left.compareTo(right);
+        });
+
+      final latMeters = 111320.0;
+      final lngScale = cos(gatewayPoint.lat * pi / 180).abs();
+      final lngMeters = latMeters * (lngScale < 0.2 ? 0.2 : lngScale);
+
+      for (
+        var index = 0;
+        index < previewPeers.length && nodes.length < effectiveMaxNodes;
+        index += 1
+      ) {
+        final peer = previewPeers[index];
+        final angle = (2 * pi * index) / previewPeers.length;
+        final radiusMeters = 28.0 + (index % 3) * 12.0;
+        final latOffset = (sin(angle) * radiusMeters) / latMeters;
+        final lngOffset = (cos(angle) * radiusMeters) / lngMeters;
+        final peerDeviceId = (peer.deviceId ?? '').trim();
+        final nodeDeviceId =
+            peerDeviceId.isNotEmpty ? peerDeviceId : peer.endpointId;
+        final deviceFingerprint =
+            peerDeviceId.isNotEmpty
+                ? anonymizeDeviceFingerprint(peerDeviceId)
+                : anonymizeDeviceFingerprint(peer.endpointId);
+        final displayLabel =
+            peer.deviceName.trim().isEmpty ? 'Dispatch Node' : peer.deviceName.trim();
+
+        nodes.add(<String, dynamic>{
+          'nodeDeviceId': nodeDeviceId,
+          'gatewayDeviceId': _localDeviceId,
+          'role': 'relay',
+          'lat': gatewayPoint.lat + latOffset,
+          'lng': gatewayPoint.lng + lngOffset,
+          'peerCount': 0,
+          'queueDepth': 0,
+          'displayName': displayLabel,
+          'isResponder': false,
+          'lastSeenTimestamp': peer.lastSeen.toUtc().toIso8601String(),
+          'metadata': {
+            'appState': peer.isConnected ? 'connected' : 'discovered',
+            'transport': peer.transport,
+            'supportsWifiDirect': peer.supportsWifiDirect,
+            'deviceFingerprint': deviceFingerprint,
+            'source': 'peer_preview',
+            'approximateLocation': true,
+            'estimatedDistanceMeters': radiusMeters.round(),
+          },
+        });
+      }
+    }
 
     return <String, dynamic>{
       'gatewayDeviceId': _localDeviceId,
@@ -1273,9 +1365,13 @@ class MeshTransportService extends ChangeNotifier {
         _isDiscovering ||
         _connectedRelayPeerCount > 0 ||
         _peers.isNotEmpty;
+    final activelyMeshed =
+        _isDiscovering || _connectedRelayPeerCount > 0 || _peers.isNotEmpty;
     final nextInterval = shouldBroadcast
         ? (_isSosBeaconBroadcasting
               ? const Duration(seconds: 10)
+              : activelyMeshed
+              ? const Duration(seconds: 8)
               : const Duration(seconds: 30))
         : null;
 
@@ -1330,8 +1426,11 @@ class MeshTransportService extends ChangeNotifier {
   }
 
   int _estimateReach() {
-    if (_peers.isEmpty) return 1;
-    return min(_peers.length * 2, 50);
+    if (_peers.isEmpty) return 0;
+    return min(
+      _peers.length * _demoEstimatedReachPerPeerMeters,
+      _demoEstimatedReachCapMeters,
+    );
   }
 
   List<MeshInboxItem> _sortedInbox() {

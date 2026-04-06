@@ -100,16 +100,16 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          authServiceProvider.overrideWithValue(
-            authService ?? FakeCompassAuthService(),
+          authServiceProvider.overrideWith(
+            (ref) => authService ?? FakeCompassAuthService(),
           ),
-          meshTransportProvider.overrideWithValue(transport),
+          meshTransportProvider.overrideWith((ref) => transport),
           sarModeControllerProvider.overrideWith((ref) => controller),
-          locationServiceProvider.overrideWithValue(
-            FakeLocationService(currentPosition: rescuerLocation),
+          locationServiceProvider.overrideWith(
+            (ref) => FakeLocationService(currentPosition: rescuerLocation),
           ),
-          compassSensorProvider.overrideWithValue(
-            CompassSensorService(
+          compassSensorProvider.overrideWith(
+            (ref) => CompassSensorService(
               headingStream: Stream<CompassHeadingSample>.value(
                 CompassHeadingSample(
                   headingDegrees: headingDegrees,

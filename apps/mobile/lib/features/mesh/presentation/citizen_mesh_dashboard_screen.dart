@@ -179,7 +179,7 @@ class _CitizenMeshDashboardScreenState
                       onTap: widget.onOpenMapTab,
                       child: _ScanMapCard(
                         scanningLabel: transport.peerCount > 0
-                            ? 'Scanning ~${transport.peerCount * 150}m sector...'
+                            ? 'Scanning ~${transport.estimatedReach}m sector...'
                             : 'Scanning for nearby nodes...',
                       ),
                     ),
@@ -257,8 +257,7 @@ class _CitizenMeshDashboardScreenState
 
   ({String value, String? unit}) _rangeDisplay(MeshTransportService transport) {
     if (transport.peerCount == 0) return (value: '--', unit: null);
-    // ~150 m per direct peer is a realistic BLE estimate; cap at 9.9 km
-    final meters = (transport.peerCount * 150).clamp(50, 9900);
+    final meters = transport.estimatedReach.clamp(50, 12000);
     if (meters >= 1000) {
       return (value: (meters / 1000).toStringAsFixed(1), unit: 'km');
     }

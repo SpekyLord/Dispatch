@@ -105,8 +105,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authServiceProvider.overrideWithValue(auth),
-            meshTransportProvider.overrideWithValue(transport),
+            authServiceProvider.overrideWith((ref) => auth),
+            meshTransportProvider.overrideWith((ref) => transport),
             sessionControllerProvider.overrideWith(
               (ref) => _FakeSessionController(sessionState),
             ),

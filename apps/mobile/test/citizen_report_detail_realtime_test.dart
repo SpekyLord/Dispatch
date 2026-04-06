@@ -97,8 +97,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authServiceProvider.overrideWithValue(auth),
-            realtimeServiceProvider.overrideWithValue(realtime),
+            authServiceProvider.overrideWith((ref) => auth),
+            realtimeServiceProvider.overrideWith((ref) => realtime),
           ],
           child: const MaterialApp(
             home: CitizenReportDetailScreen(reportId: 'report-12345'),

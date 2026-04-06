@@ -468,6 +468,25 @@ class MeshService:
                 status_code=400,
             )
 
+        requester_presence = self._get_citizen_nearby_presence_for_user(requester_user_id)
+        recipient_presence = self._get_citizen_nearby_presence_for_user(recipient_user_id)
+        normalized_requester_mesh_device_id = (
+            requester_mesh_device_id.strip()
+            or str((requester_presence or {}).get("mesh_device_id") or "").strip()
+        )
+        normalized_recipient_mesh_device_id = (
+            recipient_mesh_device_id.strip()
+            or str((recipient_presence or {}).get("mesh_device_id") or "").strip()
+        )
+        normalized_requester_display_name = (
+            requester_display_name.strip()
+            or str((requester_presence or {}).get("display_name") or "").strip()
+        )
+        normalized_recipient_display_name = (
+            recipient_display_name.strip()
+            or str((recipient_presence or {}).get("display_name") or "").strip()
+        )
+
         now = datetime.now(tz=UTC)
         expires_at = now + timedelta(seconds=30)
         rows = self.client.db_query(
@@ -484,16 +503,48 @@ class MeshService:
             if participants != {requester_user_id, recipient_user_id}:
                 continue
             if str(row.get("status") or "") in {"pending", "accepted"}:
+                patch: dict[str, Any] = {}
+                if normalized_requester_mesh_device_id and not str(
+                    row.get("requester_mesh_device_id") or ""
+                ).strip():
+                    patch["requester_mesh_device_id"] = normalized_requester_mesh_device_id
+                if normalized_recipient_mesh_device_id and not str(
+                    row.get("recipient_mesh_device_id") or ""
+                ).strip():
+                    patch["recipient_mesh_device_id"] = normalized_recipient_mesh_device_id
+                if normalized_requester_display_name and not str(
+                    row.get("requester_display_name") or ""
+                ).strip():
+                    patch["requester_display_name"] = normalized_requester_display_name
+                if normalized_recipient_display_name and not str(
+                    row.get("recipient_display_name") or ""
+                ).strip():
+                    patch["recipient_display_name"] = normalized_recipient_display_name
+                if patch:
+                    updated_rows = self.client.db_update(
+                        "citizen_ble_chat_sessions",
+                        data=patch,
+                        params={"id": f"eq.{sanitize_postgrest_value(str(row.get('id') or ''))}"},
+                        use_service_role=True,
+                    )
+                    row = updated_rows[0] if updated_rows else {**row, **patch}
                 return _serialize_citizen_ble_chat_session(row)
+
+        if not normalized_requester_mesh_device_id or not normalized_recipient_mesh_device_id:
+            raise ApiError(
+                "Both citizens must publish nearby presence before a BLE chat request can be sent.",
+                code="validation_error",
+                status_code=400,
+            )
 
         payload = {
             "id": str(uuid4()),
             "requester_user_id": requester_user_id,
             "recipient_user_id": recipient_user_id,
-            "requester_mesh_device_id": requester_mesh_device_id.strip(),
-            "recipient_mesh_device_id": recipient_mesh_device_id.strip(),
-            "requester_display_name": requester_display_name.strip(),
-            "recipient_display_name": recipient_display_name.strip(),
+            "requester_mesh_device_id": normalized_requester_mesh_device_id,
+            "recipient_mesh_device_id": normalized_recipient_mesh_device_id,
+            "requester_display_name": normalized_requester_display_name,
+            "recipient_display_name": normalized_recipient_display_name,
             "room_id": None,
             "status": "pending",
             "created_at": now.isoformat(),
@@ -860,6 +911,20 @@ class MeshService:
                 status_code=404,
             )
         return rows[0]
+
+    def _get_citizen_nearby_presence_for_user(self, user_id: str) -> dict[str, Any] | None:
+        if not user_id.strip():
+            return None
+        rows = self.client.db_query(
+            "citizen_nearby_presence",
+            params={
+                "select": "*",
+                "user_id": f"eq.{sanitize_postgrest_value(user_id)}",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        return rows[0] if rows else None
 
     def _require_active_ble_chat_room_member(self, room_id: str, actor_user_id: str) -> dict[str, Any]:
         rows = self.client.db_query(

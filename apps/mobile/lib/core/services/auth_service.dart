@@ -446,6 +446,8 @@ class AuthService {
     required double latitude,
     required double longitude,
     double? accuracyMeters,
+    String? meshDeviceId,
+    String? meshIdentityHash,
     DateTime? lastSeenAt,
   }) async {
     final response = await _dio.put(
@@ -455,6 +457,8 @@ class AuthService {
         'lat': latitude,
         'lng': longitude,
         'accuracy_meters': accuracyMeters,
+        'mesh_device_id': meshDeviceId,
+        'mesh_identity_hash': meshIdentityHash,
         'last_seen_at': lastSeenAt?.toUtc().toIso8601String(),
       },
     );
@@ -477,6 +481,56 @@ class AuthService {
         'freshness_seconds': freshnessSeconds,
         'limit': limit,
       },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> requestCitizenBleChat({
+    required String recipientUserId,
+    required String requesterMeshDeviceId,
+    required String recipientMeshDeviceId,
+    required String requesterDisplayName,
+    required String recipientDisplayName,
+  }) async {
+    final response = await _dio.post(
+      '/api/mesh/citizen-ble-chat-sessions/request',
+      data: {
+        'recipient_user_id': recipientUserId,
+        'requester_mesh_device_id': requesterMeshDeviceId,
+        'recipient_mesh_device_id': recipientMeshDeviceId,
+        'requester_display_name': requesterDisplayName,
+        'recipient_display_name': recipientDisplayName,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> respondToCitizenBleChat({
+    required String sessionId,
+    required bool accept,
+  }) async {
+    final response = await _dio.post(
+      '/api/mesh/citizen-ble-chat-sessions/${Uri.encodeComponent(sessionId)}/respond',
+      data: {'action': accept ? 'accept' : 'reject'},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> closeCitizenBleChat({
+    required String sessionId,
+  }) async {
+    final response = await _dio.post(
+      '/api/mesh/citizen-ble-chat-sessions/${Uri.encodeComponent(sessionId)}/close',
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> listCitizenBleChatSessions({
+    int limit = 50,
+  }) async {
+    final response = await _dio.get(
+      '/api/mesh/citizen-ble-chat-sessions',
+      queryParameters: {'limit': limit},
     );
     return response.data as Map<String, dynamic>;
   }

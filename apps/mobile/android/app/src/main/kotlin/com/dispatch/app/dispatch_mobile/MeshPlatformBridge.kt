@@ -369,6 +369,7 @@ class MeshPlatformBridge(
                 "type" to "peer_seen",
                 "endpointId" to endpointId,
                 "deviceId" to null,
+                "meshIdentityHash" to shortId,
                 "deviceName" to deviceName,
                 "isGateway" to isGateway,
                 "supportsWifiDirect" to false,
@@ -433,6 +434,7 @@ class MeshPlatformBridge(
                             "type" to "peer_seen",
                             "endpointId" to device.deviceAddress,
                             "deviceId" to deviceIdsByEndpoint[device.deviceAddress],
+                            "meshIdentityHash" to deviceIdsByEndpoint[device.deviceAddress]?.let(::meshIdentityHash),
                             "deviceName" to (device.deviceName ?: "Dispatch Node"),
                             "isGateway" to (gatewayNode && device.deviceAddress != localWifiEndpointId),
                             "supportsWifiDirect" to true,
@@ -834,6 +836,10 @@ class MeshPlatformBridge(
         return payload.joinToString(separator = "") { byte -> "%02X".format(byte) }
     }
 
+    private fun meshIdentityHash(raw: String): String {
+        return hashedIdentifier(raw).joinToString(separator = "") { byte -> "%02X".format(byte) }
+    }
+
     private fun hasBlePermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             hasPermission(Manifest.permission.BLUETOOTH_SCAN) &&
@@ -948,6 +954,7 @@ class MeshPlatformBridge(
                     "type" to "peer_seen",
                     "endpointId" to endpointId,
                     "deviceId" to remoteDeviceId,
+                    "meshIdentityHash" to meshIdentityHash(remoteDeviceId),
                     "deviceName" to deviceName,
                     "isGateway" to remoteGateway,
                     "supportsWifiDirect" to true,

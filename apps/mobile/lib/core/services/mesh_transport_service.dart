@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_inbox_storage.dart';
 import 'package:dispatch_mobile/core/services/mesh_platform_service.dart';
@@ -112,6 +113,7 @@ class MeshPacket {
 class MeshPeer {
   final String endpointId;
   String? deviceId;
+  String? meshIdentityHash;
   String deviceName;
   bool isGateway;
   bool supportsWifiDirect;
@@ -122,6 +124,7 @@ class MeshPeer {
   MeshPeer({
     required this.endpointId,
     this.deviceId,
+    this.meshIdentityHash,
     required this.deviceName,
     this.isGateway = false,
     this.supportsWifiDirect = false,
@@ -144,9 +147,11 @@ class MeshInboxItem {
     required this.maxHops,
     required this.isRead,
     required this.needsServerSync,
+    required this.isEphemeral,
     required this.rawPacket,
     required this.createdAt,
     this.threadId,
+    this.sessionId,
     this.recipientIdentifier,
     this.title,
     this.category,
@@ -157,6 +162,7 @@ class MeshInboxItem {
   final String itemType;
   final String recipientScope;
   final String? threadId;
+  final String? sessionId;
   final String? recipientIdentifier;
   final String authorDisplayName;
   final String authorRole;
@@ -167,6 +173,7 @@ class MeshInboxItem {
   final int maxHops;
   final bool isRead;
   final bool needsServerSync;
+  final bool isEphemeral;
   final Map<String, dynamic> rawPacket;
   final String createdAt;
 
@@ -185,6 +192,7 @@ class MeshInboxItem {
           ? 'broadcast'
           : (payload['recipientScope'] as String? ?? 'broadcast'),
       threadId: isPost ? null : payload['threadId'] as String?,
+      sessionId: isPost ? null : payload['sessionId'] as String?,
       recipientIdentifier: isPost
           ? null
           : payload['recipientIdentifier'] as String?,
@@ -203,6 +211,7 @@ class MeshInboxItem {
       maxHops: packet.maxHops,
       isRead: isRead,
       needsServerSync: needsServerSync,
+      isEphemeral: payload['ephemeral'] == true,
       rawPacket: packet.toJson(),
       createdAt: packet.timestamp,
     );
@@ -215,6 +224,7 @@ class MeshInboxItem {
       itemType: json['itemType'] as String? ?? 'mesh_message',
       recipientScope: json['recipientScope'] as String? ?? 'broadcast',
       threadId: json['threadId'] as String?,
+      sessionId: json['sessionId'] as String?,
       recipientIdentifier: json['recipientIdentifier'] as String?,
       authorDisplayName: json['authorDisplayName'] as String? ?? 'Unknown',
       authorRole: json['authorRole'] as String? ?? 'anonymous',
@@ -225,6 +235,7 @@ class MeshInboxItem {
       maxHops: json['maxHops'] as int? ?? 7,
       isRead: json['isRead'] == true,
       needsServerSync: json['needsServerSync'] != false,
+      isEphemeral: json['isEphemeral'] == true,
       rawPacket: json['rawPacket'] as Map<String, dynamic>? ?? {},
       createdAt: json['createdAt'] as String? ?? '',
     );
@@ -237,6 +248,7 @@ class MeshInboxItem {
       'itemType': itemType,
       'recipientScope': recipientScope,
       'threadId': threadId,
+      'sessionId': sessionId,
       'recipientIdentifier': recipientIdentifier,
       'authorDisplayName': authorDisplayName,
       'authorRole': authorRole,
@@ -247,6 +259,7 @@ class MeshInboxItem {
       'maxHops': maxHops,
       'isRead': isRead,
       'needsServerSync': needsServerSync,
+      'isEphemeral': isEphemeral,
       'rawPacket': rawPacket,
       'createdAt': createdAt,
     };
@@ -255,6 +268,7 @@ class MeshInboxItem {
   MeshInboxItem copyWith({
     bool? isRead,
     bool? needsServerSync,
+    bool? isEphemeral,
     int? hopCount,
     int? maxHops,
     Map<String, dynamic>? rawPacket,
@@ -265,6 +279,7 @@ class MeshInboxItem {
       itemType: itemType,
       recipientScope: recipientScope,
       threadId: threadId,
+      sessionId: sessionId,
       recipientIdentifier: recipientIdentifier,
       authorDisplayName: authorDisplayName,
       authorRole: authorRole,
@@ -275,6 +290,7 @@ class MeshInboxItem {
       maxHops: maxHops ?? this.maxHops,
       isRead: isRead ?? this.isRead,
       needsServerSync: needsServerSync ?? this.needsServerSync,
+      isEphemeral: isEphemeral ?? this.isEphemeral,
       rawPacket: rawPacket ?? this.rawPacket,
       createdAt: createdAt,
     );
@@ -467,6 +483,24 @@ class MeshTransportService extends ChangeNotifier {
         .toList(growable: false);
   }
 
+  bool hasPeerForDeviceId(String deviceId) {
+    final normalized = deviceId.trim();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    return _peers.any((peer) => (peer.deviceId ?? '').trim() == normalized);
+  }
+
+  bool hasPeerForMeshIdentityHash(String meshIdentityHash) {
+    final normalized = meshIdentityHash.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    return _peers.any(
+      (peer) => (peer.meshIdentityHash ?? '').trim().toUpperCase() == normalized,
+    );
+  }
+
   DeviceLocationTrailPoint? lastSeenForDevice(String deviceFingerprint) {
     return _lastSeenByDevice[deviceFingerprint];
   }
@@ -552,7 +586,11 @@ class MeshTransportService extends ChangeNotifier {
     final stored = await storage.load();
     _inbox
       ..clear()
-      ..addAll(stored.map(MeshInboxItem.fromJson));
+      ..addAll(
+        stored
+            .where((item) => item['isEphemeral'] != true)
+            .map(MeshInboxItem.fromJson),
+      );
     for (final item in _inbox) {
       _seenMessageIds.add(item.messageId);
     }
@@ -567,14 +605,19 @@ class MeshTransportService extends ChangeNotifier {
     if (storage == null) {
       return;
     }
-    await storage.save(_inbox.map((item) => item.toJson()).toList());
+    await storage.save(
+      _inbox
+          .where((item) => !item.isEphemeral)
+          .map((item) => item.toJson())
+          .toList(),
+    );
   }
 
   void _bindPlatformEvents() {
     if (_platform == null || _platformSubscription != null) {
       return;
     }
-    _platformSubscription = _platform.events.listen((event) {
+      _platformSubscription = _platform.events.listen((event) {
       switch (event.type) {
         case MeshPlatformEventType.peerSeen:
           final peer = event.peer;
@@ -585,6 +628,7 @@ class MeshTransportService extends ChangeNotifier {
             peer.endpointId,
             peer.deviceName,
             deviceId: peer.deviceId,
+            meshIdentityHash: peer.meshIdentityHash,
             isGateway: peer.isGateway,
             supportsWifiDirect: peer.supportsWifiDirect,
             isConnected: peer.isConnected,
@@ -668,7 +712,10 @@ class MeshTransportService extends ChangeNotifier {
   }
 
   void enqueuePacket(MeshPacket packet) {
-    _outboundQueue.add(packet);
+    final isEphemeral = packet.payload['ephemeral'] == true;
+    if (!isEphemeral) {
+      _outboundQueue.add(packet);
+    }
     _seenMessageIds.add(packet.messageId);
     _rememberForRelay(packet);
     _recordLocationTrail(packet);
@@ -794,7 +841,7 @@ class MeshTransportService extends ChangeNotifier {
     final hasDepartmentId =
         effectiveDepartmentId != null && effectiveDepartmentId.trim().isNotEmpty;
     final normalizedDepartmentId = hasDepartmentId
-        ? effectiveDepartmentId!.trim()
+        ? effectiveDepartmentId.trim()
         : null;
     final normalizedDepartmentName = (effectiveDepartmentName ?? '').trim();
     final gatewayDisplayName =
@@ -940,6 +987,11 @@ class MeshTransportService extends ChangeNotifier {
             'transport': peer.transport,
             'supportsWifiDirect': peer.supportsWifiDirect,
             'deviceFingerprint': deviceFingerprint,
+            'meshIdentityHash':
+                peer.meshIdentityHash ??
+                (peerDeviceId.isNotEmpty
+                    ? meshIdentityHash(peerDeviceId)
+                    : null),
             'source': 'peer_preview',
             'approximateLocation': true,
             'estimatedDistanceMeters': radiusMeters.round(),
@@ -1000,6 +1052,7 @@ class MeshTransportService extends ChangeNotifier {
           itemType: 'mesh_message',
           recipientScope: row['recipient_scope'] as String? ?? 'broadcast',
           threadId: row['thread_id'] as String?,
+          sessionId: row['session_id'] as String?,
           recipientIdentifier: row['recipient_identifier'] as String?,
           authorDisplayName: row['author_display_name'] as String? ?? 'Unknown',
           authorRole: row['author_role'] as String? ?? 'anonymous',
@@ -1008,6 +1061,7 @@ class MeshTransportService extends ChangeNotifier {
           maxHops: 7,
           isRead: false,
           needsServerSync: false,
+          isEphemeral: row['ephemeral'] == true,
           rawPacket: const {},
           createdAt: row['created_at'] as String? ?? '',
         ),
@@ -1051,6 +1105,7 @@ class MeshTransportService extends ChangeNotifier {
           maxHops: 7,
           isRead: false,
           needsServerSync: false,
+          isEphemeral: false,
           rawPacket: const {},
           createdAt: row['created_at'] as String? ?? '',
         ),
@@ -1093,10 +1148,32 @@ class MeshTransportService extends ChangeNotifier {
     }
   }
 
+  void clearThread(String threadId, {bool ephemeralOnly = false}) {
+    final originalLength = _inbox.length;
+    _inbox.removeWhere(
+      (item) =>
+          item.threadId == threadId && (!ephemeralOnly || item.isEphemeral),
+    );
+    if (_inbox.length != originalLength) {
+      unawaited(_persistInbox());
+      notifyListeners();
+    }
+  }
+
+  void clearSession(String sessionId) {
+    final originalLength = _inbox.length;
+    _inbox.removeWhere((item) => item.sessionId == sessionId);
+    if (_inbox.length != originalLength) {
+      unawaited(_persistInbox());
+      notifyListeners();
+    }
+  }
+
   void onPeerDiscovered(
     String endpointId,
     String deviceName, {
     String? deviceId,
+    String? meshIdentityHash,
     bool isGateway = false,
     bool supportsWifiDirect = false,
     bool isConnected = false,
@@ -1109,6 +1186,7 @@ class MeshTransportService extends ChangeNotifier {
       wasDisconnected = !peer.isConnected;
       peer
         ..deviceId = deviceId ?? peer.deviceId
+        ..meshIdentityHash = meshIdentityHash ?? peer.meshIdentityHash
         ..deviceName = deviceName
         ..isGateway = isGateway
         ..supportsWifiDirect = supportsWifiDirect
@@ -1120,6 +1198,7 @@ class MeshTransportService extends ChangeNotifier {
         MeshPeer(
           endpointId: endpointId,
           deviceId: deviceId,
+          meshIdentityHash: meshIdentityHash,
           deviceName: deviceName,
           isGateway: isGateway,
           supportsWifiDirect: supportsWifiDirect,
@@ -1281,7 +1360,7 @@ class MeshTransportService extends ChangeNotifier {
     final nextItem = MeshInboxItem.fromPacket(
       packet,
       isRead: authoredLocally,
-      needsServerSync: true,
+      needsServerSync: packet.payload['ephemeral'] == true ? false : true,
     );
     final index = _inbox.indexWhere(
       (item) => item.messageId == packet.messageId,
@@ -1524,6 +1603,8 @@ class MeshTransportService extends ChangeNotifier {
     required String authorDisplayName,
     required String authorRole,
     String? authorOfflineToken,
+    String? sessionId,
+    bool ephemeral = false,
   }) {
     return MeshPacket(
       messageId: _generateUuid(),
@@ -1538,6 +1619,8 @@ class MeshTransportService extends ChangeNotifier {
         'authorDisplayName': authorDisplayName,
         'authorRole': authorRole,
         'authorOfflineToken': authorOfflineToken,
+        'sessionId': sessionId,
+        'ephemeral': ephemeral,
       },
     );
   }
@@ -1637,6 +1720,13 @@ class MeshTransportService extends ChangeNotifier {
         '${digest.substring(20, 32)}';
   }
 
+  static String ephemeralSessionThreadId(String sessionId) {
+    final digest = md5Hash('blechat:$sessionId');
+    return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-'
+        '4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-'
+        '${digest.substring(20, 32)}';
+  }
+
   static String anonymizeDeviceFingerprint(String rawIdentifier) {
     final segments = rawIdentifier
         .toUpperCase()
@@ -1661,6 +1751,15 @@ class MeshTransportService extends ChangeNotifier {
     }
     final seed = hash.toRadixString(16).padLeft(8, '0');
     return (seed * 4).substring(0, 32);
+  }
+
+  static String meshIdentityHash(String rawIdentifier) {
+    final digest = crypto.sha256.convert(utf8.encode(rawIdentifier)).bytes;
+    return digest
+        .take(6)
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .toUpperCase();
   }
 
   static Map<String, dynamic> _buildSurvivorResolvePayload(

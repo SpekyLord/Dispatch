@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
+import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
@@ -57,7 +58,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   late final MeshTransportService _meshTransport;
   late final CitizenLocationTrailController _citizenTrailController;
   late final CitizenNearbyPresenceController _citizenNearbyPresenceController;
+  late final CitizenBleChatSessionController _citizenBleChatController;
   ProviderSubscription<CitizenLocationTrailState>? _selfTrailSubscription;
+  ProviderSubscription<CitizenBleChatSessionState>? _bleChatSubscription;
+  String? _shownIncomingBleSessionId;
   bool _loading = true;
   bool _hasUserInteracted = false;
   bool _mapReady = false;
@@ -89,6 +93,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     );
     _citizenNearbyPresenceController = ref.read(
       citizenNearbyPresenceControllerProvider.notifier,
+    );
+    _citizenBleChatController = ref.read(
+      citizenBleChatSessionControllerProvider.notifier,
     );
     _meshTransport.addListener(_handleTransportUpdated);
     _selfTrailSubscription = ref.listenManual<CitizenLocationTrailState>(
@@ -126,6 +133,20 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
             next.displayLocation,
             latestAccuracyMeters: next.latestLocation?.accuracyMeters,
           );
+        }
+      },
+    );
+    _bleChatSubscription = ref.listenManual<CitizenBleChatSessionState>(
+      citizenBleChatSessionControllerProvider,
+      (previous, next) {
+        final incoming = _pendingIncomingSession(next);
+        if (incoming != null && incoming.id != _shownIncomingBleSessionId) {
+          _shownIncomingBleSessionId = incoming.id;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              unawaited(_showIncomingBleRequestDialog(incoming));
+            }
+          });
         }
       },
     );
@@ -214,6 +235,14 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               ? session.email!.trim()
               : 'Citizen',
         );
+        await _citizenBleChatController.start(
+          userId: session.userId!,
+          displayName: session.fullName?.trim().isNotEmpty == true
+              ? session.fullName!.trim()
+              : session.email?.trim().isNotEmpty == true
+              ? session.email!.trim()
+              : 'Citizen',
+        );
         _citizenNearbyPresenceController.updateSelfLocation(
           _selfTrailState().displayLocation,
           latestAccuracyMeters: _selfTrailState().latestLocation?.accuracyMeters,
@@ -223,6 +252,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       return;
     }
     await _citizenNearbyPresenceController.stop();
+    await _citizenBleChatController.stop();
     await _citizenTrailController.stopTracking();
   }
 
@@ -642,6 +672,75 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     );
   }
 
+  void _openBleChatSession(CitizenBleChatSession session) {
+    final appSession = ref.read(sessionControllerProvider);
+    if (appSession.userId == null) {
+      return;
+    }
+    final remoteDeviceId = session.remoteMeshDeviceId(appSession.userId!);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OfflineCommsScreen(
+          initialMode: 'direct',
+          initialRecipientIdentifier: remoteDeviceId,
+          initialRecipientLabel: session.remoteDisplayName(appSession.userId!),
+          initialThreadId: session.threadId(),
+          initialEphemeral: true,
+          initialSessionId: session.id,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showIncomingBleRequestDialog(
+    CitizenBleChatSession incoming,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Nearby chat request'),
+          content: Text(
+            '${incoming.requesterDisplayName} wants to open a nearby BLE-gated chat session.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Decline'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Accept'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted) {
+      return;
+    }
+    if (accepted == true) {
+      await _citizenBleChatController.respondToSession(
+        session: incoming,
+        accept: true,
+      );
+      final active = _citizenBleChatController.sessionForRemoteUser(
+        incoming.requesterUserId,
+      );
+      if (active != null && mounted) {
+        _openBleChatSession(active);
+      }
+      return;
+    }
+    await _citizenBleChatController.respondToSession(
+      session: incoming,
+      accept: false,
+    );
+  }
+
   void _openCompassForNode(Map<String, dynamic> node) {
     final existingMessageId = node['message_id'] as String?;
     if (existingMessageId != null && !existingMessageId.startsWith('node:')) {
@@ -921,6 +1020,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
             'id': 'citizen:${pin.userId}',
             'message_id': 'citizen:${pin.userId}',
             'user_id': pin.userId,
+            'mesh_device_id': pin.meshDeviceId,
+            'mesh_identity_hash': pin.meshIdentityHash,
             'name': pin.displayName,
             'role': 'Nearby Citizen',
             'status': 'active',
@@ -933,6 +1034,115 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
           },
         )
         .toList(growable: false);
+  }
+
+  NearbyCitizenPin? _nearbyPinForNode(Map<String, dynamic>? node) {
+    final userId = node?['user_id'] as String?;
+    if (userId == null || userId.isEmpty) {
+      return null;
+    }
+    final presenceState = ref.read(citizenNearbyPresenceControllerProvider);
+    for (final pin in presenceState.nearbyUsers) {
+      if (pin.userId == userId) {
+        return pin;
+      }
+    }
+    return null;
+  }
+
+  CitizenBleChatSession? _sessionForNode(Map<String, dynamic>? node) {
+    final userId = node?['user_id'] as String?;
+    if (userId == null || userId.isEmpty) {
+      return null;
+    }
+    return _citizenBleChatController.sessionForRemoteUser(userId);
+  }
+
+  CitizenBleChatSession? _pendingIncomingSession(
+    CitizenBleChatSessionState state,
+  ) {
+    final session = ref.read(sessionControllerProvider);
+    if (session.userId == null) {
+      return null;
+    }
+    for (final item in state.sessions) {
+      if (item.isPendingIncoming(session.userId!)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  VoidCallback? _chatActionForNode(
+    Map<String, dynamic> node,
+    NearbyCitizenPin? pin,
+    CitizenBleChatSession? session,
+  ) {
+    if (_isSelfNode(node)) {
+      return null;
+    }
+    if (_isNearbyCitizenNode(node)) {
+      if (session != null &&
+          session.status == CitizenBleChatSessionStatus.accepted) {
+        return () => _openBleChatSession(session);
+      }
+      if (session != null &&
+          session.status == CitizenBleChatSessionStatus.pending) {
+        return null;
+      }
+      if (pin == null || !_citizenBleChatController.canRequestChatForPin(pin)) {
+        return null;
+      }
+      return () => unawaited(_citizenBleChatController.requestChatForPin(pin));
+    }
+    return () => _openDirectThread(node);
+  }
+
+  String? _chatActionLabelForNode(
+    Map<String, dynamic> node,
+    CitizenBleChatSession? session,
+  ) {
+    if (_isSelfNode(node)) {
+      return null;
+    }
+    if (_isNearbyCitizenNode(node)) {
+      if (session != null &&
+          session.status == CitizenBleChatSessionStatus.accepted) {
+        return 'Open Nearby Chat';
+      }
+      if (session != null &&
+          session.status == CitizenBleChatSessionStatus.pending) {
+        return session.requesterUserId == ref.read(sessionControllerProvider).userId
+            ? 'BLE Request Pending'
+            : 'Incoming BLE Request';
+      }
+      return 'Request BLE Connection';
+    }
+    return 'Chat via Mesh';
+  }
+
+  String? _chatHelperTextForNode(
+    Map<String, dynamic> node,
+    NearbyCitizenPin? pin,
+    CitizenBleChatSession? session,
+  ) {
+    if (!_isNearbyCitizenNode(node)) {
+      return null;
+    }
+    if (session != null &&
+        session.status == CitizenBleChatSessionStatus.pending) {
+      return session.requesterUserId == ref.read(sessionControllerProvider).userId
+          ? 'Waiting for the other citizen to accept the BLE chat request.'
+          : 'Open the incoming request prompt to accept or decline.';
+    }
+    if (session != null &&
+        session.status == CitizenBleChatSessionStatus.accepted) {
+      return 'Temporary nearby chat is active and will clear when the session ends.';
+    }
+    if (pin == null) {
+      return 'Nearby citizen details are still loading.';
+    }
+    return _citizenBleChatController.requestAvailabilityReason(pin);
   }
 
   List<CircleMarker> _gpsCircles() {
@@ -1380,9 +1590,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   @override
   void dispose() {
+    unawaited(_citizenBleChatController.stop());
     unawaited(_citizenNearbyPresenceController.stop());
     unawaited(_citizenTrailController.stopTracking());
     _selfTrailSubscription?.close();
+    _bleChatSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     _meshTransport.removeListener(_handleTransportUpdated);
     for (final handle in _realtimeHandles) {
@@ -1400,12 +1612,15 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     final nearbyPresenceState = ref.watch(
       citizenNearbyPresenceControllerProvider,
     );
+    final bleChatState = ref.watch(citizenBleChatSessionControllerProvider);
     final center = _preferredCenter();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final gpsAvailable = selfTrailState.displayLocation != null;
     final gpsAccuracyMeters = selfTrailState.latestLocation?.accuracyMeters;
     final gpsStatusLabel = _gpsStatusLabel(selfTrailState);
     final selectedNode = _effectiveNode(_selectedNode);
+    final selectedNearbyPin = _nearbyPinForNode(selectedNode);
+    final selectedBleSession = _sessionForNode(selectedNode);
     final detailBottomOffset = 0.0;
 
     return Scaffold(
@@ -1552,11 +1767,20 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
                           }
                           _openCompassForNode(selectedNode);
                         },
-                        onChat:
-                            _isSelfNode(selectedNode) ||
-                                _isNearbyCitizenNode(selectedNode)
-                            ? null
-                            : () => _openDirectThread(selectedNode),
+                        chatActionLabel: _chatActionLabelForNode(
+                          selectedNode,
+                          selectedBleSession,
+                        ),
+                        onChat: _chatActionForNode(
+                          selectedNode,
+                          selectedNearbyPin,
+                          selectedBleSession,
+                        ),
+                        chatHelperText: _chatHelperTextForNode(
+                          selectedNode,
+                          selectedNearbyPin,
+                          selectedBleSession,
+                        ),
                         allowResolve:
                             widget.allowResolveActions &&
                             !_isSelfNode(selectedNode) &&
@@ -1591,6 +1815,19 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
                 label: 'Nearby presence unavailable',
                 state: selfTrailState,
                 detail: nearbyPresenceState.lastError,
+              ),
+            ),
+          if (widget.enableSelfTracking &&
+              bleChatState.lastError != null &&
+              bleChatState.lastError!.isNotEmpty)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 220,
+              left: 16,
+              child: _GpsStatusBanner(
+                isDark: isDark,
+                label: 'Nearby chat unavailable',
+                state: selfTrailState,
+                detail: bleChatState.lastError,
               ),
             ),
         ],
@@ -2338,6 +2575,8 @@ class _NodeDetailSheet extends StatelessWidget {
     required this.onToggleTrail,
     required this.onOpenCompass,
     this.primaryActionLabel = 'Open Compass Locator',
+    this.chatActionLabel,
+    this.chatHelperText,
     this.onChat,
     this.allowResolve = false,
     this.isResolving = false,
@@ -2355,6 +2594,8 @@ class _NodeDetailSheet extends StatelessWidget {
   final ValueChanged<bool> onToggleTrail;
   final VoidCallback onOpenCompass;
   final String primaryActionLabel;
+  final String? chatActionLabel;
+  final String? chatHelperText;
   final VoidCallback? onChat;
   final bool allowResolve;
   final bool isResolving;
@@ -2543,7 +2784,7 @@ class _NodeDetailSheet extends StatelessWidget {
               ],
 
               // Chat button
-              if (onChat != null)
+              if (chatActionLabel != null)
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -2573,7 +2814,7 @@ class _NodeDetailSheet extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              'Chat via Mesh',
+                              chatActionLabel!,
                               style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 16,
@@ -2589,7 +2830,22 @@ class _NodeDetailSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (onChat != null) const SizedBox(height: 12),
+              if (chatActionLabel != null && chatHelperText != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    chatHelperText!,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: subtextColor,
+                    ),
+                  ),
+                ),
+              ],
+              if (chatActionLabel != null) const SizedBox(height: 12),
 
               // Open Compass Locator button
               Material(

@@ -8,8 +8,6 @@ import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeLocationService extends LocationService {
-  _FakeLocationService({this.currentPosition});
-
   LocationData? currentPosition;
 
   @override
@@ -340,6 +338,7 @@ void main() {
     test(
       'location beacon scheduler switches between normal and SOS cadence',
       () {
+        svc.setConnectivity(true);
         svc.setConnectivity(false);
         expect(svc.activeLocationBeaconInterval, const Duration(seconds: 30));
 

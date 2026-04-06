@@ -316,6 +316,8 @@ def upsert_citizen_presence():
         latitude=_body_float("lat"),
         longitude=_body_float("lng"),
         accuracy_meters=_float_body_optional("accuracy_meters"),
+        mesh_device_id=str(body.get("mesh_device_id") or "").strip() or None,
+        mesh_identity_hash=str(body.get("mesh_identity_hash") or "").strip() or None,
         last_seen_at=body.get("last_seen_at"),
     )
     return jsonify({"presence": presence})
@@ -357,3 +359,94 @@ def get_nearby_citizen_presence():
         limit=_int_arg("limit", 100),
     )
     return jsonify({"users": nearby_users, "count": len(nearby_users)})
+
+
+@blueprint.get("/citizen-ble-chat-sessions")
+@require_role("citizen")
+def list_citizen_ble_chat_sessions():
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    sessions = svc.list_citizen_ble_chat_sessions(
+        viewer_user_id=current_user.id,
+        limit=_int_arg("limit", 50),
+    )
+    return jsonify({"sessions": sessions, "count": len(sessions)})
+
+
+@blueprint.post("/citizen-ble-chat-sessions/request")
+@require_role("citizen")
+def request_citizen_ble_chat_session():
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    session = svc.request_citizen_ble_chat_session(
+        requester_user_id=current_user.id,
+        recipient_user_id=str(body.get("recipient_user_id") or "").strip(),
+        requester_mesh_device_id=str(body.get("requester_mesh_device_id") or "").strip(),
+        recipient_mesh_device_id=str(body.get("recipient_mesh_device_id") or "").strip(),
+        requester_display_name=str(body.get("requester_display_name") or "").strip(),
+        recipient_display_name=str(body.get("recipient_display_name") or "").strip(),
+    )
+    return jsonify({"session": session})
+
+
+@blueprint.post("/citizen-ble-chat-sessions/<path:session_id>/respond")
+@require_role("citizen")
+def respond_to_citizen_ble_chat_session(session_id: str):
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    action = str(body.get("action") or "").strip().lower()
+    if action not in {"accept", "reject"}:
+        raise ApiError(
+            "action must be either accept or reject.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        )
+
+    svc = _mesh_service()
+    session = svc.respond_to_citizen_ble_chat_session(
+        session_id=session_id,
+        actor_user_id=current_user.id,
+        accept=action == "accept",
+    )
+    return jsonify({"session": session})
+
+
+@blueprint.post("/citizen-ble-chat-sessions/<path:session_id>/close")
+@require_role("citizen")
+def close_citizen_ble_chat_session(session_id: str):
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    session = svc.close_citizen_ble_chat_session(
+        session_id=session_id,
+        actor_user_id=current_user.id,
+    )
+    return jsonify({"session": session})

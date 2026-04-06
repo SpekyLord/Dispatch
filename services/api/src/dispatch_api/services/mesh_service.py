@@ -9,7 +9,7 @@ import logging
 import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 
@@ -331,6 +331,8 @@ class MeshService:
         latitude: float,
         longitude: float,
         accuracy_meters: float | None,
+        mesh_device_id: str | None = None,
+        mesh_identity_hash: str | None = None,
         last_seen_at: str | None = None,
     ) -> dict[str, Any]:
         recorded_at = _parse_iso_datetime(last_seen_at) or datetime.now(tz=UTC)
@@ -344,6 +346,8 @@ class MeshService:
                 "lng": longitude,
             },
             "accuracy_meters": accuracy_meters,
+            "mesh_device_id": (mesh_device_id or "").strip() or None,
+            "mesh_identity_hash": (mesh_identity_hash or "").strip().upper() or None,
             "last_seen_at": recorded_at.isoformat(),
         }
         try:
@@ -434,6 +438,197 @@ class MeshService:
 
         nearby_rows.sort(key=lambda row: float(row.get("distance_meters") or 0))
         return nearby_rows
+
+    def request_citizen_ble_chat_session(
+        self,
+        *,
+        requester_user_id: str,
+        recipient_user_id: str,
+        requester_mesh_device_id: str,
+        recipient_mesh_device_id: str,
+        requester_display_name: str,
+        recipient_display_name: str,
+    ) -> dict[str, Any]:
+        if not recipient_user_id.strip():
+            raise ApiError(
+                "recipient_user_id is required.",
+                code="validation_error",
+                status_code=400,
+            )
+        if not requester_mesh_device_id.strip() or not recipient_mesh_device_id.strip():
+            raise ApiError(
+                "Both requester and recipient mesh device ids are required.",
+                code="validation_error",
+                status_code=400,
+            )
+        if requester_user_id == recipient_user_id:
+            raise ApiError(
+                "Cannot create a BLE chat session with yourself.",
+                code="validation_error",
+                status_code=400,
+            )
+
+        now = datetime.now(tz=UTC)
+        expires_at = now + timedelta(seconds=30)
+        rows = self.client.db_query(
+            "citizen_ble_chat_sessions",
+            params={"select": "*", "order": "created_at.desc", "limit": "50"},
+            use_service_role=True,
+        )
+        for row in rows:
+            row = self._expire_ble_chat_session_if_needed(row)
+            participants = {
+                str(row.get("requester_user_id") or ""),
+                str(row.get("recipient_user_id") or ""),
+            }
+            if participants != {requester_user_id, recipient_user_id}:
+                continue
+            if str(row.get("status") or "") in {"pending", "accepted"}:
+                return _serialize_citizen_ble_chat_session(row)
+
+        payload = {
+            "id": str(uuid4()),
+            "requester_user_id": requester_user_id,
+            "recipient_user_id": recipient_user_id,
+            "requester_mesh_device_id": requester_mesh_device_id.strip(),
+            "recipient_mesh_device_id": recipient_mesh_device_id.strip(),
+            "requester_display_name": requester_display_name.strip(),
+            "recipient_display_name": recipient_display_name.strip(),
+            "status": "pending",
+            "created_at": now.isoformat(),
+            "expires_at": expires_at.isoformat(),
+        }
+        rows = self.client.db_insert(
+            "citizen_ble_chat_sessions",
+            data=payload,
+            use_service_role=True,
+        )
+        persisted = rows[0] if rows else payload
+        return _serialize_citizen_ble_chat_session(persisted)
+
+    def list_citizen_ble_chat_sessions(
+        self,
+        *,
+        viewer_user_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        rows = self.client.db_query(
+            "citizen_ble_chat_sessions",
+            params={"select": "*", "order": "created_at.desc", "limit": str(limit)},
+            use_service_role=True,
+        )
+        visible_rows: list[dict[str, Any]] = []
+        for row in rows:
+            participants = {
+                str(row.get("requester_user_id") or ""),
+                str(row.get("recipient_user_id") or ""),
+            }
+            if viewer_user_id not in participants:
+                continue
+            visible_rows.append(self._expire_ble_chat_session_if_needed(row))
+        return [_serialize_citizen_ble_chat_session(row) for row in visible_rows]
+
+    def respond_to_citizen_ble_chat_session(
+        self,
+        *,
+        session_id: str,
+        actor_user_id: str,
+        accept: bool,
+    ) -> dict[str, Any]:
+        row = self._get_ble_chat_session(session_id)
+        row = self._expire_ble_chat_session_if_needed(row)
+        if str(row.get("recipient_user_id") or "") != actor_user_id:
+            raise ApiError(
+                "Only the recipient can respond to this BLE chat request.",
+                code="forbidden",
+                status_code=403,
+            )
+        if str(row.get("status") or "") != "pending":
+            return _serialize_citizen_ble_chat_session(row)
+
+        now = datetime.now(tz=UTC).isoformat()
+        data = {
+            "status": "accepted" if accept else "rejected",
+            "accepted_at": now if accept else None,
+            "closed_at": None if accept else now,
+        }
+        rows = self.client.db_update(
+            "citizen_ble_chat_sessions",
+            data=data,
+            params={"id": f"eq.{sanitize_postgrest_value(session_id)}"},
+            use_service_role=True,
+        )
+        updated = rows[0] if rows else {**row, **data}
+        return _serialize_citizen_ble_chat_session(updated)
+
+    def close_citizen_ble_chat_session(
+        self,
+        *,
+        session_id: str,
+        actor_user_id: str,
+    ) -> dict[str, Any]:
+        row = self._get_ble_chat_session(session_id)
+        participants = {
+            str(row.get("requester_user_id") or ""),
+            str(row.get("recipient_user_id") or ""),
+        }
+        if actor_user_id not in participants:
+            raise ApiError(
+                "Only participants can close this BLE chat session.",
+                code="forbidden",
+                status_code=403,
+            )
+        if str(row.get("status") or "") in {"closed", "rejected", "expired"}:
+            return _serialize_citizen_ble_chat_session(row)
+
+        data = {
+            "status": "closed",
+            "closed_at": datetime.now(tz=UTC).isoformat(),
+        }
+        rows = self.client.db_update(
+            "citizen_ble_chat_sessions",
+            data=data,
+            params={"id": f"eq.{sanitize_postgrest_value(session_id)}"},
+            use_service_role=True,
+        )
+        updated = rows[0] if rows else {**row, **data}
+        return _serialize_citizen_ble_chat_session(updated)
+
+    def _get_ble_chat_session(self, session_id: str) -> dict[str, Any]:
+        rows = self.client.db_query(
+            "citizen_ble_chat_sessions",
+            params={
+                "select": "*",
+                "id": f"eq.{sanitize_postgrest_value(session_id)}",
+                "limit": "1",
+            },
+            use_service_role=True,
+        )
+        if not rows:
+            raise ApiError(
+                "BLE chat session not found.",
+                code="not_found",
+                status_code=404,
+            )
+        return rows[0]
+
+    def _expire_ble_chat_session_if_needed(self, row: dict[str, Any]) -> dict[str, Any]:
+        if str(row.get("status") or "") != "pending":
+            return row
+        expires_at = _parse_iso_datetime(row.get("expires_at"))
+        if expires_at is None or expires_at > datetime.now(tz=UTC):
+            return row
+        data = {
+            "status": "expired",
+            "closed_at": datetime.now(tz=UTC).isoformat(),
+        }
+        rows = self.client.db_update(
+            "citizen_ble_chat_sessions",
+            data=data,
+            params={"id": f"eq.{sanitize_postgrest_value(str(row.get('id') or ''))}"},
+            use_service_role=True,
+        )
+        return rows[0] if rows else {**row, **data}
 
     def _raise_nearby_presence_error(self, error: httpx.HTTPStatusError) -> None:
         payload: dict[str, Any] = {}
@@ -1219,6 +1414,23 @@ def _decorate_citizen_nearby_presence(
     )
     enriched["distance_meters"] = distance_meters
     return enriched
+
+
+def _serialize_citizen_ble_chat_session(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "requester_user_id": row.get("requester_user_id"),
+        "recipient_user_id": row.get("recipient_user_id"),
+        "requester_mesh_device_id": row.get("requester_mesh_device_id"),
+        "recipient_mesh_device_id": row.get("recipient_mesh_device_id"),
+        "requester_display_name": row.get("requester_display_name"),
+        "recipient_display_name": row.get("recipient_display_name"),
+        "status": row.get("status"),
+        "created_at": row.get("created_at"),
+        "accepted_at": row.get("accepted_at"),
+        "expires_at": row.get("expires_at"),
+        "closed_at": row.get("closed_at"),
+    }
 
 
 def _build_topology_row(

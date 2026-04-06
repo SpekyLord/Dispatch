@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,8 @@ class NearbyCitizenPin {
   const NearbyCitizenPin({
     required this.userId,
     required this.displayName,
+    required this.meshDeviceId,
+    required this.meshIdentityHash,
     required this.latitude,
     required this.longitude,
     required this.lastSeenAt,
@@ -27,6 +30,8 @@ class NearbyCitizenPin {
     return NearbyCitizenPin(
       userId: json['user_id'] as String? ?? '',
       displayName: json['display_name'] as String? ?? 'Nearby User',
+      meshDeviceId: json['mesh_device_id'] as String? ?? '',
+      meshIdentityHash: json['mesh_identity_hash'] as String? ?? '',
       latitude: (json['lat'] as num?)?.toDouble() ?? 0,
       longitude: (json['lng'] as num?)?.toDouble() ?? 0,
       accuracyMeters: (json['accuracy_meters'] as num?)?.toDouble(),
@@ -39,6 +44,8 @@ class NearbyCitizenPin {
 
   final String userId;
   final String displayName;
+  final String meshDeviceId;
+  final String meshIdentityHash;
   final double latitude;
   final double longitude;
   final double? accuracyMeters;
@@ -100,6 +107,7 @@ class CitizenNearbyPresenceController
   CitizenNearbyPresenceController({
     required AuthService authService,
     required RealtimeService realtimeService,
+    required MeshTransportService transport,
     Duration refreshInterval = const Duration(seconds: 5),
     Duration heartbeatInterval = const Duration(seconds: 10),
     Duration freshnessWindow = const Duration(seconds: 20),
@@ -108,6 +116,7 @@ class CitizenNearbyPresenceController
     double maxVisibleRadiusMeters = 35,
   }) : _authService = authService,
        _realtimeService = realtimeService,
+       _transport = transport,
        _refreshInterval = refreshInterval,
        _heartbeatInterval = heartbeatInterval,
        _freshnessWindow = freshnessWindow,
@@ -118,6 +127,7 @@ class CitizenNearbyPresenceController
 
   final AuthService _authService;
   final RealtimeService _realtimeService;
+  final MeshTransportService _transport;
   final Duration _refreshInterval;
   final Duration _heartbeatInterval;
   final Duration _freshnessWindow;
@@ -245,6 +255,8 @@ class CitizenNearbyPresenceController
                 return NearbyCitizenPin(
                   userId: pin.userId,
                   displayName: pin.displayName,
+                  meshDeviceId: pin.meshDeviceId,
+                  meshIdentityHash: pin.meshIdentityHash,
                   latitude: pin.latitude,
                   longitude: pin.longitude,
                   accuracyMeters: pin.accuracyMeters,
@@ -396,6 +408,10 @@ class CitizenNearbyPresenceController
         latitude: location.latitude,
         longitude: location.longitude,
         accuracyMeters: accuracyMeters,
+        meshDeviceId: _transport.localDeviceId,
+        meshIdentityHash: MeshTransportService.meshIdentityHash(
+          _transport.localDeviceId,
+        ),
         lastSeenAt: publishedAt,
       );
       if (_disposed) {

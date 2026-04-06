@@ -44,6 +44,7 @@ class MeshPeerObservation {
   const MeshPeerObservation({
     required this.endpointId,
     required this.deviceId,
+    required this.meshIdentityHash,
     required this.deviceName,
     required this.isGateway,
     required this.supportsWifiDirect,
@@ -54,6 +55,7 @@ class MeshPeerObservation {
 
   final String endpointId;
   final String? deviceId;
+  final String? meshIdentityHash;
   final String deviceName;
   final bool isGateway;
   final bool supportsWifiDirect;
@@ -65,6 +67,7 @@ class MeshPeerObservation {
     return MeshPeerObservation(
       endpointId: (json['endpointId'] as String?) ?? 'unknown-peer',
       deviceId: json['deviceId'] as String?,
+      meshIdentityHash: json['meshIdentityHash'] as String?,
       deviceName: (json['deviceName'] as String?) ?? 'Dispatch Node',
       isGateway: json['isGateway'] == true,
       supportsWifiDirect: json['supportsWifiDirect'] == true,

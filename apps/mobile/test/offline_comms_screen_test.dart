@@ -146,7 +146,6 @@ void main() {
     final transport = MeshTransportService(
       inboxStorage: InMemoryMeshInboxStorage(),
     );
-    addTearDown(transport.dispose);
 
     await pumpOfflineCommsScreen(
       tester,
@@ -164,7 +163,11 @@ void main() {
     );
 
     expect(find.text('Offline Comms'), findsOneWidget);
-    expect(find.text('Mesh-Routed Communications'), findsOneWidget);
+    expect(find.text('Mesh Comms'), findsOneWidget);
+    expect(
+      find.text('Stay connected even when the network is down.'),
+      findsOneWidget,
+    );
     expect(find.text('Compose'), findsOneWidget);
     expect(find.text('Broadcast'), findsOneWidget);
     expect(find.text('Mesh Post'), findsOneWidget);
@@ -176,7 +179,6 @@ void main() {
       final transport = MeshTransportService(
         inboxStorage: InMemoryMeshInboxStorage(),
       );
-      addTearDown(transport.dispose);
 
       await pumpOfflineCommsScreen(
         tester,
@@ -219,7 +221,6 @@ void main() {
     final transport = MeshTransportService(
       inboxStorage: InMemoryMeshInboxStorage(),
     );
-    addTearDown(transport.dispose);
     final auth = FakeOfflineCommsAuthService();
     final localFingerprint = MeshTransportService.anonymizeDeviceFingerprint(
       transport.localDeviceId,

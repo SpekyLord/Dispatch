@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
+import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/session_storage.dart';
+import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
+import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
@@ -70,6 +73,52 @@ class _SeededCitizenLocationTrailController
   Future<void> stopTracking() async {}
 }
 
+class _FakeRealtimeService extends RealtimeService {
+  _FakeRealtimeService() : super();
+}
+
+class _SeededCitizenNearbyPresenceController
+    extends CitizenNearbyPresenceController {
+  _SeededCitizenNearbyPresenceController({
+    required super.authService,
+    required super.realtimeService,
+    required super.transport,
+    required CitizenNearbyPresenceState initialState,
+  }) {
+    state = initialState;
+  }
+
+  @override
+  Future<void> start({
+    required String userId,
+    required String displayName,
+  }) async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
+class _SeededCitizenBleChatSessionController
+    extends CitizenBleChatSessionController {
+  _SeededCitizenBleChatSessionController({
+    required super.authService,
+    required super.realtimeService,
+    required super.transport,
+    required CitizenBleChatSessionState initialState,
+  }) {
+    state = initialState;
+  }
+
+  @override
+  Future<void> start({
+    required String userId,
+    required String displayName,
+  }) async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
 class _NoopSessionStorage extends SessionStorage {
   _NoopSessionStorage(this._state);
 
@@ -118,6 +167,8 @@ Future<void> _pumpMap(
   WidgetTester tester, {
   required _FakeLocationService locationService,
   required CitizenLocationTrailController trailController,
+  CitizenNearbyPresenceController? nearbyController,
+  CitizenBleChatSessionController? bleChatController,
   bool initiallySelectSelfNode = false,
 }) async {
   tester.view.physicalSize = const Size(1080, 1920);
@@ -134,6 +185,28 @@ Future<void> _pumpMap(
     locationService: locationService,
     automaticLocationBeaconing: false,
   );
+  final resolvedNearbyController =
+      nearbyController ??
+      _SeededCitizenNearbyPresenceController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: transport,
+        initialState: CitizenNearbyPresenceState(
+          selfLocation: locationService.currentPosition,
+          nearbyUsers: const [],
+          subscribed: true,
+          lastRefreshAt: DateTime.now().toUtc(),
+          lastError: null,
+        ),
+      );
+  final resolvedBleChatController =
+      bleChatController ??
+      _SeededCitizenBleChatSessionController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: transport,
+        initialState: const CitizenBleChatSessionState.initial(),
+      );
 
   await tester.pumpWidget(
     ProviderScope(
@@ -142,6 +215,12 @@ Future<void> _pumpMap(
         meshTransportProvider.overrideWith((ref) => transport),
         citizenLocationTrailControllerProvider.overrideWith(
           (ref) => trailController,
+        ),
+        citizenNearbyPresenceControllerProvider.overrideWith(
+          (ref) => resolvedNearbyController,
+        ),
+        citizenBleChatSessionControllerProvider.overrideWith(
+          (ref) => resolvedBleChatController,
         ),
         sessionControllerProvider.overrideWith(
           (ref) => _FakeSessionController(

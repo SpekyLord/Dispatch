@@ -4,6 +4,7 @@ import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
+import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
 import 'package:dispatch_mobile/core/services/session_storage.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
@@ -83,6 +84,7 @@ class _SeededCitizenNearbyPresenceController
   _SeededCitizenNearbyPresenceController({
     required super.authService,
     required super.realtimeService,
+    required super.transport,
     required CitizenNearbyPresenceState initialState,
   }) {
     state = initialState;
@@ -100,6 +102,27 @@ class _SeededCitizenNearbyPresenceController
   void setNearbyUsers(List<NearbyCitizenPin> nearbyUsers) {
     state = state.copyWith(nearbyUsers: nearbyUsers);
   }
+}
+
+class _SeededCitizenBleChatSessionController
+    extends CitizenBleChatSessionController {
+  _SeededCitizenBleChatSessionController({
+    required super.authService,
+    required super.realtimeService,
+    required super.transport,
+    required CitizenBleChatSessionState initialState,
+  }) {
+    state = initialState;
+  }
+
+  @override
+  Future<void> start({
+    required String userId,
+    required String displayName,
+  }) async {}
+
+  @override
+  Future<void> stop() async {}
 }
 
 LocationData _locationAt({
@@ -120,6 +143,7 @@ Future<void> _pumpMap(
   required _FakeLocationService locationService,
   required CitizenLocationTrailController trailController,
   required CitizenNearbyPresenceController nearbyController,
+  required CitizenBleChatSessionController bleChatController,
 }) async {
   tester.view.physicalSize = const Size(1080, 1920);
   tester.view.devicePixelRatio = 1.0;
@@ -146,6 +170,9 @@ Future<void> _pumpMap(
         ),
         citizenNearbyPresenceControllerProvider.overrideWith(
           (ref) => nearbyController,
+        ),
+        citizenBleChatSessionControllerProvider.overrideWith(
+          (ref) => bleChatController,
         ),
         realtimeServiceProvider.overrideWith((ref) => _FakeRealtimeService()),
         sessionControllerProvider.overrideWith(
@@ -198,12 +225,15 @@ void main() {
     final nearbyController = _SeededCitizenNearbyPresenceController(
       authService: AuthService(),
       realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       initialState: CitizenNearbyPresenceState(
         selfLocation: _locationAt(latitude: 14.5995),
         nearbyUsers: [
           NearbyCitizenPin(
             userId: 'citizen-2',
             displayName: 'Citizen Two',
+            meshDeviceId: 'mesh-device-2',
+            meshIdentityHash: 'ABC123',
             latitude: 14.59955,
             longitude: 120.9842,
             accuracyMeters: 7,
@@ -216,12 +246,19 @@ void main() {
         lastError: null,
       ),
     );
+    final bleChatController = _SeededCitizenBleChatSessionController(
+      authService: AuthService(),
+      realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      initialState: const CitizenBleChatSessionState.initial(),
+    );
 
     await _pumpMap(
       tester,
       locationService: locationService,
       trailController: trailController,
       nearbyController: nearbyController,
+      bleChatController: bleChatController,
     );
 
     expect(find.textContaining('You'), findsOneWidget);
@@ -252,13 +289,16 @@ void main() {
       final nearbyController = _SeededCitizenNearbyPresenceController(
         authService: AuthService(),
         realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
         initialState: CitizenNearbyPresenceState(
           selfLocation: _locationAt(latitude: 14.5995),
           nearbyUsers: [
             NearbyCitizenPin(
-              userId: 'citizen-2',
-              displayName: 'Citizen Two',
-              latitude: 14.59955,
+            userId: 'citizen-2',
+            displayName: 'Citizen Two',
+            meshDeviceId: 'mesh-device-2',
+            meshIdentityHash: 'ABC123',
+            latitude: 14.59955,
               longitude: 120.9842,
               accuracyMeters: 7,
               lastSeenAt: DateTime.now().toUtc(),
@@ -270,12 +310,19 @@ void main() {
           lastError: null,
         ),
       );
+      final bleChatController = _SeededCitizenBleChatSessionController(
+        authService: AuthService(),
+        realtimeService: _FakeRealtimeService(),
+        transport: MeshTransportService(automaticLocationBeaconing: false),
+        initialState: const CitizenBleChatSessionState.initial(),
+      );
 
       await _pumpMap(
         tester,
         locationService: locationService,
         trailController: trailController,
         nearbyController: nearbyController,
+        bleChatController: bleChatController,
       );
       expect(find.textContaining('CITIZEN TWO'), findsOneWidget);
 
@@ -310,12 +357,15 @@ void main() {
     final nearbyController = _SeededCitizenNearbyPresenceController(
       authService: AuthService(),
       realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       initialState: CitizenNearbyPresenceState(
         selfLocation: _locationAt(latitude: 14.5995),
         nearbyUsers: [
           NearbyCitizenPin(
             userId: 'citizen-2',
             displayName: 'Citizen Two',
+            meshDeviceId: 'mesh-device-2',
+            meshIdentityHash: 'ABC123',
             latitude: 14.5995 + (24 / 111111.0),
             longitude: 120.9842,
             accuracyMeters: 8,
@@ -328,12 +378,19 @@ void main() {
         lastError: null,
       ),
     );
+    final bleChatController = _SeededCitizenBleChatSessionController(
+      authService: AuthService(),
+      realtimeService: _FakeRealtimeService(),
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      initialState: const CitizenBleChatSessionState.initial(),
+    );
 
     await _pumpMap(
       tester,
       locationService: locationService,
       trailController: trailController,
       nearbyController: nearbyController,
+      bleChatController: bleChatController,
     );
 
     expect(find.textContaining('CITIZEN TWO'), findsOneWidget);

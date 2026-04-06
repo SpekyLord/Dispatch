@@ -16,12 +16,16 @@ class OfflineCommsScreen extends ConsumerStatefulWidget {
     this.initialRecipientIdentifier,
     this.initialRecipientLabel,
     this.initialThreadId,
+    this.initialEphemeral = false,
+    this.initialSessionId,
   });
 
   final String? initialMode;
   final String? initialRecipientIdentifier;
   final String? initialRecipientLabel;
   final String? initialThreadId;
+  final bool initialEphemeral;
+  final String? initialSessionId;
 
   @override
   ConsumerState<OfflineCommsScreen> createState() => _OfflineCommsScreenState();
@@ -61,6 +65,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   }
 
   void _bindRealtime() {
+    if (widget.initialEphemeral) {
+      return;
+    }
     final realtime = ref.read(realtimeServiceProvider);
     if (!realtime.isConfigured) {
       return;
@@ -90,6 +97,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   }
 
   Future<void> _hydrateServerHistory() async {
+    if (widget.initialEphemeral) {
+      return;
+    }
     final session = ref.read(sessionControllerProvider);
     if (session.accessToken == null) {
       return;
@@ -117,6 +127,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
   }
 
   Future<void> _syncPendingPackets() async {
+    if (widget.initialEphemeral) {
+      return;
+    }
     final session = ref.read(sessionControllerProvider);
     if (session.accessToken == null) {
       return;
@@ -211,6 +224,7 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           throw Exception('Message body is required.');
         }
         if (authenticatedRole != null &&
+            !widget.initialEphemeral &&
             (offlineToken == null ||
                 offlineToken.isEmpty ||
                 _offlineTokenExpired(offlineToken))) {
@@ -248,7 +262,9 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
           body: body,
           authorDisplayName: displayName,
           authorRole: authenticatedRole ?? 'anonymous',
-          authorOfflineToken: offlineToken,
+          authorOfflineToken: widget.initialEphemeral ? null : offlineToken,
+          sessionId: widget.initialSessionId,
+          ephemeral: widget.initialEphemeral,
         );
         transport.enqueuePacket(packet);
         _messageCtrl.clear();
@@ -284,27 +300,28 @@ class _OfflineCommsScreenState extends ConsumerState<OfflineCommsScreen> {
         backgroundColor: dc.warmBackground,
         surfaceTintColor: Colors.transparent,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  onPressed: _syncing
-                      ? null
-                      : () => unawaited(_syncPendingPackets()),
-                  icon: const Icon(Icons.sync),
-                  tooltip: 'Sync queued packets',
-                ),
-                if (transport.unreadMeshMessageCount > 0)
-                  Positioned(
-                    top: 10,
-                    right: 8,
-                    child: _Badge(count: transport.unreadMeshMessageCount),
+          if (!widget.initialEphemeral)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    onPressed: _syncing
+                        ? null
+                        : () => unawaited(_syncPendingPackets()),
+                    icon: const Icon(Icons.sync),
+                    tooltip: 'Sync queued packets',
                   ),
-              ],
+                  if (transport.unreadMeshMessageCount > 0)
+                    Positioned(
+                      top: 10,
+                      right: 8,
+                      child: _Badge(count: transport.unreadMeshMessageCount),
+                    ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
       body: ListView(
@@ -610,7 +627,9 @@ class _InboxCard extends StatelessWidget {
                 _MetaChip(label: item.category!.replaceAll('_', ' ')),
               _MetaChip(label: '${item.hopCount}/${item.maxHops} hops'),
               _MetaChip(
-                label: item.needsServerSync
+                label: item.isEphemeral
+                    ? 'Ephemeral'
+                    : item.needsServerSync
                     ? 'Pending sync'
                     : 'Synced',
               ),

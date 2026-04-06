@@ -1,3 +1,4 @@
+import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
@@ -73,6 +74,19 @@ final citizenNearbyPresenceControllerProvider =
       return CitizenNearbyPresenceController(
         authService: ref.read(authServiceProvider),
         realtimeService: ref.read(realtimeServiceProvider),
+        transport: ref.read(meshTransportProvider),
+      );
+    });
+
+final citizenBleChatSessionControllerProvider =
+    StateNotifierProvider<
+      CitizenBleChatSessionController,
+      CitizenBleChatSessionState
+    >((ref) {
+      return CitizenBleChatSessionController(
+        authService: ref.read(authServiceProvider),
+        realtimeService: ref.read(realtimeServiceProvider),
+        transport: ref.read(meshTransportProvider),
       );
     });
 

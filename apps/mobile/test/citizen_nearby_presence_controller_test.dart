@@ -1,6 +1,7 @@
 import 'package:dispatch_mobile/core/config/app_config.dart';
 import 'package:dispatch_mobile/core/services/auth_service.dart';
 import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dio/dio.dart';
@@ -57,6 +58,8 @@ class _FakeAuthService extends AuthService {
     required double latitude,
     required double longitude,
     double? accuracyMeters,
+    String? meshDeviceId,
+    String? meshIdentityHash,
     DateTime? lastSeenAt,
   }) async {
     if (upsertError != null) {
@@ -67,6 +70,8 @@ class _FakeAuthService extends AuthService {
       'lat': latitude,
       'lng': longitude,
       'accuracy_meters': accuracyMeters,
+      'mesh_device_id': meshDeviceId,
+      'mesh_identity_hash': meshIdentityHash,
       'last_seen_at': lastSeenAt?.toUtc().toIso8601String(),
     };
     upsertCalls.add(payload);
@@ -132,6 +137,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -154,12 +160,13 @@ void main() {
     () async {
       final auth = _FakeAuthService();
       final realtime = _FakeRealtimeService();
-      final controller = CitizenNearbyPresenceController(
-        authService: auth,
-        realtimeService: realtime,
-        refreshInterval: const Duration(milliseconds: 20),
-        heartbeatInterval: const Duration(milliseconds: 20),
-      );
+    final controller = CitizenNearbyPresenceController(
+      authService: auth,
+      realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
+      refreshInterval: const Duration(milliseconds: 20),
+      heartbeatInterval: const Duration(milliseconds: 20),
+    );
       addTearDown(controller.dispose);
 
       await controller.start(userId: 'citizen-1', displayName: 'Citizen One');
@@ -199,6 +206,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -253,6 +261,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -287,6 +296,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -331,6 +341,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -365,6 +376,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -397,6 +409,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -439,6 +452,7 @@ void main() {
       final controller = CitizenNearbyPresenceController(
         authService: auth,
         realtimeService: realtime,
+        transport: MeshTransportService(automaticLocationBeaconing: false),
         refreshInterval: const Duration(hours: 1),
         heartbeatInterval: const Duration(hours: 1),
       );
@@ -486,6 +500,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
     );
@@ -517,6 +532,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(milliseconds: 20),
       heartbeatInterval: const Duration(milliseconds: 20),
     );
@@ -542,6 +558,7 @@ void main() {
     final controller = CitizenNearbyPresenceController(
       authService: auth,
       realtimeService: realtime,
+      transport: MeshTransportService(automaticLocationBeaconing: false),
       refreshInterval: const Duration(hours: 1),
       heartbeatInterval: const Duration(hours: 1),
       freshnessWindow: const Duration(seconds: 20),

@@ -1,22 +1,9 @@
-<p align="center">
-  <img src="docs/Pictures/Dispatch Logo Transparent.png" alt="Dispatch Logo" width="200" />
-</p>
-
 <h1 align="center">DISPATCH</h1>
 
 <p align="center">
   <strong>Unified Disaster Risk Reduction & Emergency Response Platform</strong>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/platform-web%20%7C%20android%20%7C%20ios-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/backend-Flask-black" alt="Backend" />
-  <img src="https://img.shields.io/badge/frontend-React%2019-61DAFB" alt="Frontend" />
-  <img src="https://img.shields.io/badge/mobile-Flutter-02569B" alt="Mobile" />
-  <img src="https://img.shields.io/badge/database-Supabase-3ECF8E" alt="Database" />
-  <img src="https://img.shields.io/badge/mesh-BLE%20%2B%20WiFi%20Direct-orange" alt="Mesh" />
-  <a href="https://github.com/SpekyLord/Dispatch/actions"><img src="https://github.com/SpekyLord/Dispatch/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-</p>
 
 ---
 

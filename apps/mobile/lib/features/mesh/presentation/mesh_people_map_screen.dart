@@ -1167,6 +1167,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
         case NearbyCitizenBleAvailabilityStatus.sessionPending:
           return null;
         case NearbyCitizenBleAvailabilityStatus.ready:
+        case NearbyCitizenBleAvailabilityStatus.requestReady:
           final pin = _nearbyPinForNode(node);
           if (pin == null) {
             return null;
@@ -1198,6 +1199,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               ? 'Incoming BLE Request'
               : 'BLE Request Pending',
         NearbyCitizenBleAvailabilityStatus.ready ||
+        NearbyCitizenBleAvailabilityStatus.requestReady ||
         NearbyCitizenBleAvailabilityStatus.missingIdentity ||
         NearbyCitizenBleAvailabilityStatus.awaitingBleDiscovery ||
         NearbyCitizenBleAvailabilityStatus.identityMismatch ||
@@ -1576,6 +1578,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
           node['ble_availability_status'] as String? ?? '';
       final prefix = switch (availabilityStatus) {
         'ready' => 'Nearby Citizen - BLE nearby and ready',
+        'requestReady' => 'Nearby Citizen - ready to request',
         'sessionPending' => 'Nearby Citizen - BLE request pending',
         'roomAvailable' => 'Nearby room available',
         'roomJoined' => 'Nearby room active',

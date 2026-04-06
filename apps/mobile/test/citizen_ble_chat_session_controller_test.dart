@@ -104,7 +104,7 @@ Map<String, dynamic> _memberJson({
 }
 
 void main() {
-  test('availability resolves to awaiting BLE discovery when the peer is not live yet', () async {
+  test('availability remains request-ready when the peer identity is published but BLE is not live yet', () async {
     final auth = _FakeAuthService();
     final transport = MeshTransportService(automaticLocationBeaconing: false);
     addTearDown(transport.dispose);
@@ -131,9 +131,9 @@ void main() {
     final availability = controller.availabilityForPin(pin);
     expect(
       availability.status,
-      NearbyCitizenBleAvailabilityStatus.awaitingBleDiscovery,
+      NearbyCitizenBleAvailabilityStatus.requestReady,
     );
-    expect(availability.canRequest, isFalse);
+    expect(availability.canRequest, isTrue);
   });
 
   test('availability resolves to missing identity when the nearby citizen has no BLE identity', () async {
@@ -267,11 +267,8 @@ void main() {
       distanceMeters: 42,
     );
 
-    expect(controller.canRequestChatForPin(pin), isFalse);
-    expect(
-      controller.requestAvailabilityReason(pin),
-      'Waiting for a live BLE peer match before requesting.',
-    );
+    expect(controller.canRequestChatForPin(pin), isTrue);
+    expect(controller.requestAvailabilityReason(pin), isNull);
 
     transport.onPeerDiscovered(
       'endpoint-2',

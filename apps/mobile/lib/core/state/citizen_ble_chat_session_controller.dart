@@ -17,6 +17,7 @@ enum CitizenBleChatRoomMemberStatus { active, left }
 
 enum NearbyCitizenBleAvailabilityStatus {
   ready,
+  requestReady,
   missingIdentity,
   awaitingBleDiscovery,
   identityMismatch,
@@ -534,12 +535,13 @@ class CitizenBleChatSessionController
 
     return NearbyCitizenBleAvailability(
       userId: normalizedUserId,
-      status: NearbyCitizenBleAvailabilityStatus.awaitingBleDiscovery,
-      reason: 'Waiting for a live BLE peer match before requesting.',
+      status: NearbyCitizenBleAvailabilityStatus.requestReady,
+      reason:
+          'Ready to send a BLE connection request. Live BLE discovery will confirm the peer after the request is delivered.',
       matchedPeerDeviceId:
           matchedPeerDeviceId.isNotEmpty ? matchedPeerDeviceId : null,
       lastSeenAt: matchedPeer?.lastSeen.toUtc(),
-      canRequest: false,
+      canRequest: true,
       canJoin: false,
     );
   }

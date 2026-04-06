@@ -451,20 +451,12 @@ void main() {
 
       expect(find.text('Request BLE Connection'), findsOneWidget);
       expect(
-        find.text('Nearby Citizen - GPS visible, waiting for BLE - +/-7m'),
+        find.text('Nearby Citizen - ready to request - +/-7m'),
         findsOneWidget,
       );
-      expect(
-        find.text('Waiting for a live BLE peer match before requesting.'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.text('Request BLE Connection'));
-      await tester.pump();
-
       expect(
         find.text(
-          'Nearby chat unavailable right now. Waiting for a live BLE peer match before requesting.',
+          'Ready to send a BLE connection request. Live BLE discovery will confirm the peer after the request is delivered.',
         ),
         findsOneWidget,
       );
@@ -504,7 +496,7 @@ void main() {
               displayName: 'Citizen Two',
               meshDeviceId: 'mesh-device-2',
               meshIdentityHash: 'ABC123',
-              latitude: 14.59975,
+              latitude: 14.59955,
               longitude: 120.9842,
               accuracyMeters: 7,
               lastSeenAt: DateTime.now().toUtc(),
@@ -624,16 +616,8 @@ void main() {
         findsNothing,
       );
       expect(
-        find.text('Waiting for a live BLE peer match before requesting.'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.text('Request BLE Connection'));
-      await tester.pump();
-
-      expect(
         find.text(
-          'Nearby chat unavailable right now. Waiting for a live BLE peer match before requesting.',
+          'Ready to send a BLE connection request. Live BLE discovery will confirm the peer after the request is delivered.',
         ),
         findsOneWidget,
       );

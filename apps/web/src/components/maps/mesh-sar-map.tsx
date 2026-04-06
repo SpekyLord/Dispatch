@@ -227,7 +227,7 @@ export function MeshSarMap({
   }
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-[#fff8f3] shadow-[0_18px_40px_rgba(56,56,49,0.08)]">
+    <div className="isolate overflow-hidden rounded-[28px] border border-[#d8b7aa] bg-[#fff8f3] shadow-[0_18px_40px_rgba(56,56,49,0.08)]">
       <MapContainer center={DEFAULT_CENTER} className="mesh-sar-map h-[520px] w-full" scrollWheelZoom zoom={12}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

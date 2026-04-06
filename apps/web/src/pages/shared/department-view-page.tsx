@@ -328,8 +328,8 @@ export function DepartmentViewPage() {
         />
         </div>
 
-        <div className="min-w-0 md:-mt-20">
-          <div className="space-y-6 md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="min-w-0">
+          <div className="space-y-6 md:sticky md:top-6">
             <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
               <div className="mx-auto flex max-w-[17rem] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-sm">
                 <span className="material-symbols-outlined text-white/75">search</span>

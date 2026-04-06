@@ -560,7 +560,7 @@ function DepartmentEmergencyAlert({
   );
 
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/35 p-4 backdrop-blur-md md:p-8">
       <div
         className={`w-full max-w-[640px] overflow-hidden rounded-[32px] border ${bodySurfaceClassName} ${popupPanelShadowClassName}`}
       >

@@ -2255,7 +2255,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               className={`min-w-0 ${departmentLayout ? "" : "xl:col-span-4"}`}
             >
               <div
-                className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:self-start" : ""}`}
+                className={`space-y-6 ${departmentLayout ? "md:sticky md:top-6 md:self-start" : ""}`}
               >
                 {departmentLayout && (
                   <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">

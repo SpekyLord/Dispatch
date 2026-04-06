@@ -65,6 +65,36 @@ def _int_arg(name: str, default: int) -> int:
         ) from exc
 
 
+def _required_float_arg(name: str) -> float:
+    value = _float_arg(name)
+    if value is None:
+        raise ApiError(
+            f"{name} is required.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        )
+    return value
+
+
+def _body_float(name: str) -> float:
+    body = request.get_json(silent=True) or {}
+    raw_value = body.get(name)
+    if raw_value in (None, ""):
+        raise ApiError(
+            f"{name} is required.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        )
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ApiError(
+            f"{name} must be a number.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        ) from exc
+
+
 def _viewer_department_id(user_id: str) -> str | None:
     rows = current_app.extensions["supabase_client"].db_query(
         "departments",
@@ -257,3 +287,73 @@ def get_last_seen_devices():
     svc = _mesh_service()
     devices = svc.list_last_seen_devices()
     return jsonify({"devices": devices, "count": len(devices)})
+
+
+@blueprint.put("/citizen-presence")
+@require_role("citizen")
+def upsert_citizen_presence():
+    body = request.get_json(silent=True) or {}
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    display_name = str(body.get("display_name") or "").strip()
+    if not display_name:
+        raise ApiError(
+            "display_name is required.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        )
+
+    svc = _mesh_service()
+    presence = svc.upsert_citizen_nearby_presence(
+        user_id=current_user.id,
+        display_name=display_name,
+        latitude=_body_float("lat"),
+        longitude=_body_float("lng"),
+        accuracy_meters=_float_body_optional("accuracy_meters"),
+        last_seen_at=body.get("last_seen_at"),
+    )
+    return jsonify({"presence": presence})
+
+
+def _float_body_optional(name: str) -> float | None:
+    body = request.get_json(silent=True) or {}
+    raw_value = body.get(name)
+    if raw_value in (None, ""):
+        return None
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ApiError(
+            f"{name} must be a number.",
+            status_code=HTTPStatus.BAD_REQUEST,
+            code="validation_error",
+        ) from exc
+
+
+@blueprint.get("/citizen-presence/nearby")
+@require_role("citizen")
+def get_nearby_citizen_presence():
+    current_user = get_current_user()
+    if current_user is None:
+        raise ApiError(
+            "Authentication is required to access this resource.",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            code="authentication_required",
+        )
+
+    svc = _mesh_service()
+    nearby_users = svc.list_nearby_citizen_presence(
+        viewer_user_id=current_user.id,
+        center_lat=_required_float_arg("lat"),
+        center_lng=_required_float_arg("lng"),
+        radius_meters=float(_int_arg("radius_meters", 15)),
+        freshness_seconds=_int_arg("freshness_seconds", 15),
+        limit=_int_arg("limit", 100),
+    )
+    return jsonify({"users": nearby_users, "count": len(nearby_users)})

@@ -869,6 +869,93 @@ class TestMeshTopologyRoutes:
             assert data["survivor_signals"][0]["accuracy_radius_meters"] == 7.5
 
 
+class TestCitizenNearbyPresenceRoutes:
+    def test_upsert_citizen_presence_persists_latest_row(self, settings):
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen@test.com", role="citizen"),
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.put(
+                "/api/mesh/citizen-presence",
+                headers={"Authorization": "Bearer valid-token"},
+                json={
+                    "display_name": "Citizen One",
+                    "lat": 14.6001,
+                    "lng": 120.9843,
+                    "accuracy_meters": 6,
+                    "last_seen_at": "2026-04-06T03:00:00Z",
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["presence"]["user_id"] == "citizen-1"
+            assert data["presence"]["display_name"] == "Citizen One"
+            assert data["presence"]["coordinates"] == [120.9843, 14.6001]
+
+        inserts = [(table, row) for table, row in fake._inserts if table == "citizen_nearby_presence"]
+        assert len(inserts) == 1
+        assert inserts[0][1]["user_id"] == "citizen-1"
+
+    def test_get_nearby_citizen_presence_filters_radius_freshness_and_self(self, settings):
+        fresh = (datetime.now(tz=UTC) - timedelta(seconds=5)).isoformat()
+        stale = (datetime.now(tz=UTC) - timedelta(seconds=35)).isoformat()
+        fake = FakeSupabaseClient(
+            user=FakeUser(id="citizen-1", email="citizen@test.com", role="citizen"),
+            db_rows={
+                "citizen_nearby_presence": [
+                    {
+                        "user_id": "citizen-1",
+                        "display_name": "Self",
+                        "lat": 14.6000,
+                        "lng": 120.9842,
+                        "location": {"lat": 14.6000, "lng": 120.9842},
+                        "accuracy_meters": 5,
+                        "last_seen_at": fresh,
+                    },
+                    {
+                        "user_id": "citizen-2",
+                        "display_name": "Citizen Two",
+                        "lat": 14.60009,
+                        "lng": 120.9842,
+                        "location": {"lat": 14.60009, "lng": 120.9842},
+                        "accuracy_meters": 7,
+                        "last_seen_at": fresh,
+                    },
+                    {
+                        "user_id": "citizen-3",
+                        "display_name": "Citizen Three",
+                        "lat": 14.6004,
+                        "lng": 120.9842,
+                        "location": {"lat": 14.6004, "lng": 120.9842},
+                        "accuracy_meters": 9,
+                        "last_seen_at": fresh,
+                    },
+                    {
+                        "user_id": "citizen-4",
+                        "display_name": "Citizen Four",
+                        "lat": 14.60005,
+                        "lng": 120.9842,
+                        "location": {"lat": 14.60005, "lng": 120.9842},
+                        "accuracy_meters": 8,
+                        "last_seen_at": stale,
+                    },
+                ]
+            },
+        )
+        app = make_app(settings, fake)
+        with app.test_client() as c:
+            resp = c.get(
+                "/api/mesh/citizen-presence/nearby?lat=14.6000&lng=120.9842&radius_meters=15&freshness_seconds=15",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["count"] == 1
+            assert data["users"][0]["user_id"] == "citizen-2"
+            assert data["users"][0]["distance_meters"] <= 15
+
+
 class TestMeshSurvivorResolveStatusUpdate:
     def test_survivor_resolve_status_update_applied(self, settings):
         fake = FakeSupabaseClient(

@@ -441,6 +441,46 @@ class AuthService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> upsertCitizenNearbyPresence({
+    required String displayName,
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+    DateTime? lastSeenAt,
+  }) async {
+    final response = await _dio.put(
+      '/api/mesh/citizen-presence',
+      data: {
+        'display_name': displayName,
+        'lat': latitude,
+        'lng': longitude,
+        'accuracy_meters': accuracyMeters,
+        'last_seen_at': lastSeenAt?.toUtc().toIso8601String(),
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getNearbyCitizenPresence({
+    required double latitude,
+    required double longitude,
+    int radiusMeters = 15,
+    int freshnessSeconds = 15,
+    int limit = 100,
+  }) async {
+    final response = await _dio.get(
+      '/api/mesh/citizen-presence/nearby',
+      queryParameters: {
+        'lat': latitude,
+        'lng': longitude,
+        'radius_meters': radiusMeters,
+        'freshness_seconds': freshnessSeconds,
+        'limit': limit,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getMeshTrail(
     String deviceFingerprint, {
     int limit = 120,
@@ -542,4 +582,3 @@ class AuthService {
     return (response.data['assessments'] as List).cast<Map<String, dynamic>>();
   }
 }
-

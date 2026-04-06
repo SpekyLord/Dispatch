@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -319,6 +320,116 @@ class MeshService:
                 latest_by_device[device_fingerprint] = row
 
         return [_decorate_location_trail_point(row) for row in latest_by_device.values()]
+
+    def upsert_citizen_nearby_presence(
+        self,
+        *,
+        user_id: str,
+        display_name: str,
+        latitude: float,
+        longitude: float,
+        accuracy_meters: float | None,
+        last_seen_at: str | None = None,
+    ) -> dict[str, Any]:
+        recorded_at = _parse_iso_datetime(last_seen_at) or datetime.now(tz=UTC)
+        row = {
+            "user_id": user_id,
+            "display_name": display_name.strip(),
+            "lat": latitude,
+            "lng": longitude,
+            "location": {
+                "lat": latitude,
+                "lng": longitude,
+            },
+            "accuracy_meters": accuracy_meters,
+            "last_seen_at": recorded_at.isoformat(),
+        }
+        existing = self.client.db_query(
+            "citizen_nearby_presence",
+            params={"select": "*", "user_id": f"eq.{user_id}"},
+            use_service_role=True,
+        )
+        if existing:
+            rows = self.client.db_update(
+                "citizen_nearby_presence",
+                data=row,
+                params={"user_id": f"eq.{user_id}"},
+                use_service_role=True,
+            )
+            persisted = rows[0] if rows else {**existing[0], **row}
+        else:
+            rows = self.client.db_insert(
+                "citizen_nearby_presence",
+                data=row,
+                use_service_role=True,
+            )
+            persisted = rows[0] if rows else row
+
+        return _decorate_citizen_nearby_presence(persisted)
+
+    def list_nearby_citizen_presence(
+        self,
+        *,
+        viewer_user_id: str,
+        center_lat: float,
+        center_lng: float,
+        radius_meters: float = 15,
+        freshness_seconds: int = 15,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        freshness_cutoff = datetime.now(tz=UTC) - timedelta(seconds=freshness_seconds)
+        min_lat, max_lat, min_lng, max_lng = _bounding_box_for_radius_meters(
+            center_lat,
+            center_lng,
+            radius_meters,
+        )
+        rows = self.client.db_query(
+            "citizen_nearby_presence",
+            params={
+                "select": "*",
+                "last_seen_at": f"gte.{freshness_cutoff.isoformat()}",
+                "and": (
+                    f"(lat.gte.{min_lat},lat.lte.{max_lat},"
+                    f"lng.gte.{min_lng},lng.lte.{max_lng})"
+                ),
+                "order": "last_seen_at.desc",
+                "limit": str(limit),
+            },
+            use_service_role=True,
+        )
+
+        nearby_rows: list[dict[str, Any]] = []
+        for row in rows:
+            if str(row.get("user_id") or "") == viewer_user_id:
+                continue
+            last_seen_at = _parse_iso_datetime(row.get("last_seen_at"))
+            if last_seen_at is None or last_seen_at < freshness_cutoff:
+                continue
+
+            lat, lng = _extract_presence_coordinates(row)
+            if lat is None or lng is None:
+                continue
+            if not (min_lat <= lat <= max_lat and min_lng <= lng <= max_lng):
+                continue
+
+            distance_meters = _distance_between_points_meters(
+                center_lat,
+                center_lng,
+                lat,
+                lng,
+            )
+            if distance_meters > radius_meters:
+                continue
+
+            nearby_rows.append(
+                _decorate_citizen_nearby_presence(
+                    row,
+                    distance_meters=distance_meters,
+                )
+            )
+
+        nearby_rows.sort(key=lambda row: float(row.get("distance_meters") or 0))
+        return nearby_rows
 
     def list_messages(
         self,
@@ -1046,6 +1157,25 @@ def _decorate_location_trail_point(row: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
+def _decorate_citizen_nearby_presence(
+    row: dict[str, Any],
+    *,
+    distance_meters: float | None = None,
+) -> dict[str, Any]:
+    lat, lng = _extract_presence_coordinates(row)
+    enriched = dict(row)
+    enriched["lat"] = lat
+    enriched["lng"] = lng
+    enriched["coordinates"] = [lng, lat] if lat is not None and lng is not None else None
+    enriched["geometry"] = (
+        {"type": "Point", "coordinates": [lng, lat]}
+        if lat is not None and lng is not None
+        else None
+    )
+    enriched["distance_meters"] = distance_meters
+    return enriched
+
+
 def _build_topology_row(
     node: dict[str, Any],
     gateway_device_id: str,
@@ -1167,6 +1297,42 @@ def _location_in_bbox(
     return min_lat <= float(lat) <= max_lat and min_lng <= float(lng) <= max_lng
 
 
+def _bounding_box_for_radius_meters(
+    center_lat: float,
+    center_lng: float,
+    radius_meters: float,
+) -> tuple[float, float, float, float]:
+    latitude_delta = radius_meters / 111111.0
+    longitude_scale = abs(math.cos(math.radians(center_lat)))
+    longitude_delta = radius_meters / max(111111.0 * longitude_scale, 1.0)
+    return (
+        center_lat - latitude_delta,
+        center_lat + latitude_delta,
+        center_lng - longitude_delta,
+        center_lng + longitude_delta,
+    )
+
+
+def _distance_between_points_meters(
+    lat_a: float,
+    lng_a: float,
+    lat_b: float,
+    lng_b: float,
+) -> float:
+    earth_radius_meters = 6371000.0
+    lat1 = math.radians(lat_a)
+    lat2 = math.radians(lat_b)
+    delta_lat = math.radians(lat_b - lat_a)
+    delta_lng = math.radians(lng_b - lng_a)
+
+    haversine = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lng / 2) ** 2
+    )
+    arc = 2 * math.atan2(math.sqrt(haversine), math.sqrt(1 - haversine))
+    return earth_radius_meters * arc
+
+
 def _extract_coordinates(node_location: dict[str, Any]) -> tuple[float | None, float | None]:
     lat = node_location.get("lat")
     lng = node_location.get("lng")
@@ -1176,6 +1342,17 @@ def _extract_coordinates(node_location: dict[str, Any]) -> tuple[float | None, f
         return float(lat), float(lng)
     except (TypeError, ValueError):
         return None, None
+
+
+def _extract_presence_coordinates(row: dict[str, Any]) -> tuple[float | None, float | None]:
+    lat = row.get("lat")
+    lng = row.get("lng")
+    if lat is not None and lng is not None:
+        try:
+            return float(lat), float(lng)
+        except (TypeError, ValueError):
+            pass
+    return _extract_coordinates(row.get("location") or {})
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:

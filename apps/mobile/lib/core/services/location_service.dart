@@ -32,7 +32,7 @@ class LocationService {
 
   Future<bool> isGpsAvailable() => Geolocator.isLocationServiceEnabled();
 
-  Future<bool> _ensurePermission() async {
+  Future<bool> ensurePermission() async {
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -42,7 +42,7 @@ class LocationService {
   }
 
   Future<LocationData?> getCurrentPosition() async {
-    final hasPermission = await _ensurePermission();
+    final hasPermission = await ensurePermission();
     if (!hasPermission) {
       return null;
     }
@@ -62,7 +62,7 @@ class LocationService {
   }
 
   Future<LocationData?> getLastKnownPosition() async {
-    final hasPermission = await _ensurePermission();
+    final hasPermission = await ensurePermission();
     if (!hasPermission) {
       return null;
     }
@@ -78,16 +78,22 @@ class LocationService {
   }
 
   Stream<LocationData> watchPosition() async* {
-    final hasPermission = await _ensurePermission();
+    final hasPermission = await ensurePermission();
     if (!hasPermission) {
       return;
     }
 
     yield* Geolocator.getPositionStream(
-      locationSettings: _streamLocationSettings(),
-    ).asyncMap((position) async {
-      return _acceptPosition(_toLocationData(position), fromLastKnown: false);
-    }).where((location) => location != null).cast<LocationData>();
+          locationSettings: _streamLocationSettings(),
+        )
+        .asyncMap((position) async {
+          return _acceptPosition(
+            _toLocationData(position),
+            fromLastKnown: false,
+          );
+        })
+        .where((location) => location != null)
+        .cast<LocationData>();
   }
 
   LocationSettings _currentLocationSettings() {
@@ -187,11 +193,14 @@ class LocationService {
       candidate.latitude,
       candidate.longitude,
     );
-    final elapsedSeconds = _elapsedSeconds(current.timestamp, candidate.timestamp);
+    final elapsedSeconds = _elapsedSeconds(
+      current.timestamp,
+      candidate.timestamp,
+    );
     final inferredSpeedMetersPerSecond =
         elapsedSeconds == null || elapsedSeconds <= 0
-            ? null
-            : distanceMeters / elapsedSeconds;
+        ? null
+        : distanceMeters / elapsedSeconds;
     final jitterThresholdMeters = _jitterThresholdMeters(current, candidate);
     final hasWorseAccuracy = candidate.accuracyMeters > current.accuracyMeters;
     final candidateAccuracyPoor =
@@ -265,12 +274,17 @@ class LocationService {
 
   double _jitterThresholdMeters(LocationData current, LocationData candidate) {
     final combinedAccuracy =
-        ((current.accuracyMeters + candidate.accuracyMeters) / 2)
-            .clamp(_minimumMovementMeters, 18);
+        ((current.accuracyMeters + candidate.accuracyMeters) / 2).clamp(
+          _minimumMovementMeters,
+          18,
+        );
     return combinedAccuracy.toDouble();
   }
 
-  bool _isMeaningfullyMoreAccurate(LocationData candidate, LocationData current) {
+  bool _isMeaningfullyMoreAccurate(
+    LocationData candidate,
+    LocationData current,
+  ) {
     return candidate.accuracyMeters > 0 &&
         (current.accuracyMeters <= 0 ||
             candidate.accuracyMeters <= current.accuracyMeters * 0.65);
@@ -295,25 +309,25 @@ class LocationService {
       candidate.longitude,
     );
     if (distanceMeters <= _minimumMovementMeters) {
-      return _isMeaningfullyMoreAccurate(candidate, current) ? candidate : current;
+      return _isMeaningfullyMoreAccurate(candidate, current)
+          ? candidate
+          : current;
     }
 
-    final accuracyBlend =
-        candidate.accuracyMeters <= 10
-            ? 0.9
-            : candidate.accuracyMeters <= 20
-            ? 0.72
-            : candidate.accuracyMeters <= 35
-            ? 0.58
-            : candidate.accuracyMeters <= 50
-            ? 0.44
-            : 0.3;
-    final distanceBlend =
-        distanceMeters >= 120
-            ? 0.16
-            : distanceMeters >= 50
-            ? 0.08
-            : 0.0;
+    final accuracyBlend = candidate.accuracyMeters <= 10
+        ? 0.9
+        : candidate.accuracyMeters <= 20
+        ? 0.72
+        : candidate.accuracyMeters <= 35
+        ? 0.58
+        : candidate.accuracyMeters <= 50
+        ? 0.44
+        : 0.3;
+    final distanceBlend = distanceMeters >= 120
+        ? 0.16
+        : distanceMeters >= 50
+        ? 0.08
+        : 0.0;
     final alpha = (accuracyBlend + distanceBlend).clamp(0.25, 0.92);
 
     return LocationData(

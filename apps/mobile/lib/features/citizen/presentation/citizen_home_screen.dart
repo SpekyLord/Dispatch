@@ -47,9 +47,9 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
   }
 
   Future<void> _openReportComposer() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()));
   }
 
   @override
@@ -58,11 +58,13 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
         ref.watch(mapNodeOverlayActiveProvider) && _selectedIndex == 1;
     final pages = [
       CitizenMeshDashboardScreen(onOpenMapTab: () => _onItemTapped(2)),
-      const MeshPeopleMapScreen(
+      MeshPeopleMapScreen(
         title: 'Mesh Feed Map',
         subtitle: 'Interactive map',
         allowResolveActions: false,
         allowCompassActions: true,
+        enableSelfTracking: true,
+        selfTrackingActive: _selectedIndex == 1,
       ),
       CitizenFeedScreen(
         onOpenMapTab: () => _onItemTapped(1),

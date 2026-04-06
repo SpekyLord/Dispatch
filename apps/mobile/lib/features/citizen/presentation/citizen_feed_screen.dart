@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
@@ -193,6 +193,8 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
           subtitle: 'Interactive map',
           allowResolveActions: false,
           allowCompassActions: true,
+          enableSelfTracking: true,
+          selfTrackingActive: true,
         ),
       ),
     );
@@ -277,7 +279,8 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     final feedStories = (hasQuery ? stories : allStories)
         .take(8)
         .toList(growable: false);
-    final profileSeed = (session.fullName ?? session.email ?? 'Dispatch').trim();
+    final profileSeed = (session.fullName ?? session.email ?? 'Dispatch')
+        .trim();
     final profileInitial = profileSeed.isEmpty
         ? 'D'
         : profileSeed.substring(0, 1).toUpperCase();
@@ -569,11 +572,15 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                   scrollDirection: Axis.horizontal,
                   itemCount: hasQuery
                       ? readinessStories.length
-                      : (readinessStories.isEmpty ? 2 : readinessStories.length),
+                      : (readinessStories.isEmpty
+                            ? 2
+                            : readinessStories.length),
                   separatorBuilder: (_, _) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final story = !hasQuery && readinessStories.isEmpty
-                        ? (index == 0 ? _fallbackHeroStory : _fallbackIncidentStory)
+                        ? (index == 0
+                              ? _fallbackHeroStory
+                              : _fallbackIncidentStory)
                         : readinessStories[index];
                     final accent = accentColor(story.category);
                     return InkWell(
@@ -682,10 +689,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                   ),
                   child: const Text(
                     'No feed results matched your search. Try a different keyword or refresh for the latest updates.',
-                    style: TextStyle(
-                      color: dc.onSurfaceVariant,
-                      height: 1.5,
-                    ),
+                    style: TextStyle(color: dc.onSurfaceVariant, height: 1.5),
                   ),
                 )
               else
@@ -2127,4 +2131,3 @@ T? _firstWhereOrNull<T>(Iterable<T> items, bool Function(T item) test) {
   }
   return null;
 }
-

@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
+import 'package:dispatch_mobile/core/services/location_service.dart';
+import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
+import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
@@ -30,12 +32,18 @@ class MeshPeopleMapScreen extends ConsumerStatefulWidget {
     required this.subtitle,
     this.allowResolveActions = false,
     this.allowCompassActions = true,
+    this.enableSelfTracking = false,
+    this.selfTrackingActive = true,
+    this.initiallySelectSelfNode = false,
   });
 
   final String title;
   final String subtitle;
   final bool allowResolveActions;
   final bool allowCompassActions;
+  final bool enableSelfTracking;
+  final bool selfTrackingActive;
+  final bool initiallySelectSelfNode;
 
   @override
   ConsumerState<MeshPeopleMapScreen> createState() =>
@@ -43,19 +51,20 @@ class MeshPeopleMapScreen extends ConsumerStatefulWidget {
 }
 
 class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const double _visibleNodeRangeMeters = 15;
   final MapController _mapController = MapController();
-  StreamSubscription<LocationData>? _gpsSubscription;
   late final AnimationController _cameraMoveController;
+  late final MeshTransportService _meshTransport;
+  late final CitizenLocationTrailController _citizenTrailController;
+  late final CitizenNearbyPresenceController _citizenNearbyPresenceController;
+  ProviderSubscription<CitizenLocationTrailState>? _selfTrailSubscription;
   bool _loading = true;
   bool _hasUserInteracted = false;
   bool _mapReady = false;
   bool _livePositionRefreshInFlight = false;
   bool _pendingLivePositionRefresh = false;
   String? _resolvingSignalId;
-  LatLng? _gpsCenter;
-  double? _gpsAccuracyMeters;
   List<Map<String, dynamic>> _nodes = [];
   List<Map<String, dynamic>> _signals = [];
   List<Map<String, dynamic>> _devices = [];
@@ -70,16 +79,103 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _cameraMoveController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 360),
     );
-    ref.read(meshTransportProvider).addListener(_handleTransportUpdated);
+    _meshTransport = ref.read(meshTransportProvider);
+    _citizenTrailController = ref.read(
+      citizenLocationTrailControllerProvider.notifier,
+    );
+    _citizenNearbyPresenceController = ref.read(
+      citizenNearbyPresenceControllerProvider.notifier,
+    );
+    _meshTransport.addListener(_handleTransportUpdated);
+    _selfTrailSubscription = ref.listenManual<CitizenLocationTrailState>(
+      citizenLocationTrailControllerProvider,
+      (previous, next) {
+        final previousLocation = previous?.latestLocation;
+        final nextLocation = next.latestLocation;
+        final locationChanged =
+            nextLocation != null &&
+            (previousLocation == null ||
+                previousLocation.latitude != nextLocation.latitude ||
+                previousLocation.longitude != nextLocation.longitude ||
+                previousLocation.accuracyMeters != nextLocation.accuracyMeters);
+        if (locationChanged) {
+          _citizenNearbyPresenceController.updateSelfLocation(
+            next.latestLocation,
+          );
+          if (widget.initiallySelectSelfNode && _selectedNode == null) {
+            final selfNode = _buildSelfNode();
+            if (selfNode != null && mounted) {
+              setState(() {
+                _selectedNode = selfNode;
+                _locationTrailEnabled = true;
+              });
+              _setOverlayActive(true);
+            }
+          }
+          _moveCameraToPreferredCenter();
+        }
+        final previousAccepted = previous?.lastAcceptedTrailPoint;
+        final nextAccepted = next.lastAcceptedTrailPoint;
+        final acceptedPointChanged =
+            nextAccepted != null &&
+            (previousAccepted == null ||
+                previousAccepted.latitude != nextAccepted.latitude ||
+                previousAccepted.longitude != nextAccepted.longitude ||
+                previousAccepted.recordedAt != nextAccepted.recordedAt);
+        if (acceptedPointChanged) {
+          final acceptedLocation = LocationData(
+            latitude: nextAccepted.latitude,
+            longitude: nextAccepted.longitude,
+            accuracyMeters: nextAccepted.accuracyMeters,
+            timestamp: nextAccepted.recordedAt,
+          );
+          unawaited(
+            _citizenNearbyPresenceController.publishAcceptedLocation(
+              acceptedLocation,
+            ),
+          );
+        }
+      },
+    );
+    if (widget.initiallySelectSelfNode) {
+      final selfNode = _buildSelfNode();
+      if (selfNode != null) {
+        _selectedNode = selfNode;
+        _locationTrailEnabled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _setOverlayActive(true);
+          }
+        });
+      }
+    }
     _refresh();
-    unawaited(_detectGpsCenter());
     unawaited(_loadLocalPeers());
-    _startGpsWatch();
     _bindRealtime();
+    unawaited(_syncCitizenSelfTracking());
+  }
+
+  @override
+  void didUpdateWidget(covariant MeshPeopleMapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.enableSelfTracking != widget.enableSelfTracking ||
+        oldWidget.selfTrackingActive != widget.selfTrackingActive) {
+      unawaited(_syncCitizenSelfTracking());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        widget.enableSelfTracking &&
+        widget.selfTrackingActive) {
+      unawaited(_syncCitizenSelfTracking());
+    }
   }
 
   // ── Data fetching ────────────────────────────────────────────────────────
@@ -117,6 +213,47 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     }
   }
 
+  Future<void> _syncCitizenSelfTracking() async {
+    if (widget.enableSelfTracking && widget.selfTrackingActive) {
+      final session = ref.read(sessionControllerProvider);
+      if (session.role == AppRole.citizen &&
+          session.userId != null &&
+          session.userId!.isNotEmpty) {
+        await _citizenNearbyPresenceController.start(
+          userId: session.userId!,
+          displayName: session.fullName?.trim().isNotEmpty == true
+              ? session.fullName!.trim()
+              : session.email?.trim().isNotEmpty == true
+              ? session.email!.trim()
+              : 'Citizen',
+        );
+        _citizenNearbyPresenceController.updateSelfLocation(
+          _selfTrailState().latestLocation,
+        );
+      }
+      await _citizenTrailController.startTracking();
+      return;
+    }
+    await _citizenNearbyPresenceController.stop();
+    await _citizenTrailController.stopTracking();
+  }
+
+  CitizenLocationTrailState _selfTrailState() {
+    return ref.read(citizenLocationTrailControllerProvider);
+  }
+
+  LatLng? _gpsCenter() {
+    final location = _selfTrailState().latestLocation;
+    if (location == null) {
+      return null;
+    }
+    return LatLng(location.latitude, location.longitude);
+  }
+
+  double? _gpsAccuracyMeters() {
+    return _selfTrailState().latestLocation?.accuracyMeters;
+  }
+
   Future<void> _refreshLivePositions() async {
     if (_livePositionRefreshInFlight) {
       _pendingLivePositionRefresh = true;
@@ -134,7 +271,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
           final auth = ref.read(authServiceProvider);
           final topology = await auth.getMeshTopology();
           final lastSeen = await auth.getMeshLastSeen();
-          ref.read(meshTransportProvider).ingestServerLastSeen(
+          ref
+              .read(meshTransportProvider)
+              .ingestServerLastSeen(
                 (lastSeen['devices'] as List<dynamic>? ?? const [])
                     .whereType<Map>()
                     .map((row) => Map<String, dynamic>.from(row))
@@ -189,7 +328,6 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
           _loading = false;
         });
       }
-      unawaited(_detectGpsCenter());
       unawaited(_loadLocalPeers());
       return;
     }
@@ -200,7 +338,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       final survivorSignals = await auth.getSurvivorSignals(status: 'active');
       final lastSeen = await auth.getMeshLastSeen();
       final reports = await auth.getReports();
-      ref.read(meshTransportProvider).ingestServerLastSeen(
+      ref
+          .read(meshTransportProvider)
+          .ingestServerLastSeen(
             (lastSeen['devices'] as List<dynamic>? ?? const [])
                 .whereType<Map>()
                 .map((row) => Map<String, dynamic>.from(row))
@@ -237,9 +377,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
-    } finally {
-      unawaited(_detectGpsCenter());
-    }
+    } finally {}
   }
 
   Future<void> _loadLocalPeers() async {
@@ -266,9 +404,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               'message_id': 'node:$nodeDeviceId',
               'device_fingerprint':
                   metadata['deviceFingerprint'] as String? ??
-                      MeshTransportService.anonymizeDeviceFingerprint(
-                        nodeDeviceId,
-                      ),
+                  MeshTransportService.anonymizeDeviceFingerprint(nodeDeviceId),
               'name':
                   n['displayName'] ??
                   (isApproximate ? 'Nearby Dispatch Node' : 'Dispatch Node'),
@@ -279,10 +415,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               'estimated_distance_meters': estimatedDistance,
               'device_model': isApproximate ? 'Awaiting GPS lock' : null,
               'role': isApproximate ? 'Nearby Mesh Relay' : 'Mesh Relay',
-              'status':
-                  (metadata['appState'] as String?) == 'discovered'
-                      ? 'discovered'
-                      : 'connected',
+              'status': (metadata['appState'] as String?) == 'discovered'
+                  ? 'discovered'
+                  : 'connected',
               'is_approximate': isApproximate,
             };
           })
@@ -290,49 +425,16 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     });
   }
 
-  Future<void> _detectGpsCenter() async {
-    final location =
-        await ref.read(locationServiceProvider).getCurrentPosition();
-    if (!mounted || location == null) return;
-    final point = LatLng(location.latitude, location.longitude);
-    final changed = _gpsCenter == null ||
-        _gpsCenter!.latitude != point.latitude ||
-        _gpsCenter!.longitude != point.longitude;
-    final accuracyChanged =
-        _gpsAccuracyMeters != location.accuracyMeters;
-    if (accuracyChanged || changed) {
-      setState(() {
-        _gpsCenter = point;
-        _gpsAccuracyMeters = location.accuracyMeters;
-      });
-    }
-    if (!changed) return;
-    _moveCameraToPreferredCenter();
-  }
-
-  void _startGpsWatch() {
-    _gpsSubscription =
-        ref.read(locationServiceProvider).watchPosition().listen((location) {
-      if (!mounted) return;
-      final nextCenter = LatLng(location.latitude, location.longitude);
-      final currentCenter = _gpsCenter;
-      if (currentCenter != null &&
-          (currentCenter.latitude - nextCenter.latitude).abs() < 0.00005 &&
-          (currentCenter.longitude - nextCenter.longitude).abs() < 0.00005 &&
-          _gpsAccuracyMeters == location.accuracyMeters) {
-        return;
-      }
-      setState(() {
-        _gpsCenter = nextCenter;
-        _gpsAccuracyMeters = location.accuracyMeters;
-      });
-      _moveCameraToPreferredCenter();
-    });
-  }
-
   LatLng _preferredCenter() {
-    if (_gpsCenter != null) return _gpsCenter!;
-    for (final row in [..._signals, ..._devices, ..._nodes, ..._localPeers, ..._reports]) {
+    final gpsCenter = _gpsCenter();
+    if (gpsCenter != null) return gpsCenter;
+    for (final row in [
+      ..._signals,
+      ..._devices,
+      ..._nodes,
+      ..._localPeers,
+      ..._reports,
+    ]) {
       final point = _readPoint(row);
       if (point != null) return point;
     }
@@ -358,9 +460,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     }
 
     final nodeLocation = row['node_location'] as Map<String, dynamic>?;
-    final nodeLat = (nodeLocation?['lat'] as num?)?.toDouble() ??
+    final nodeLat =
+        (nodeLocation?['lat'] as num?)?.toDouble() ??
         (nodeLocation?['latitude'] as num?)?.toDouble();
-    final nodeLng = (nodeLocation?['lng'] as num?)?.toDouble() ??
+    final nodeLng =
+        (nodeLocation?['lng'] as num?)?.toDouble() ??
         (nodeLocation?['longitude'] as num?)?.toDouble();
     if (nodeLat != null && nodeLng != null) return LatLng(nodeLat, nodeLng);
 
@@ -414,7 +518,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   DateTime? _rowTimestamp(Map<String, dynamic> row) {
-    final raw = row['last_seen'] as String? ??
+    final raw =
+        row['last_seen'] as String? ??
         row['lastSeenTimestamp'] as String? ??
         row['updated_at'] as String? ??
         row['created_at'] as String? ??
@@ -432,7 +537,8 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       return 'fp:$fingerprint';
     }
 
-    final routingDeviceId = row['routing_device_id'] as String? ??
+    final routingDeviceId =
+        row['routing_device_id'] as String? ??
         row['routingDeviceId'] as String? ??
         row['origin_device_id'] as String? ??
         row['originDeviceId'] as String?;
@@ -478,10 +584,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       }
     }
 
-    return [
-      ...latestByIdentity.values,
-      ...passthrough,
-    ];
+    return [...latestByIdentity.values, ...passthrough];
   }
 
   Set<String> _activeMarkerIdentities() {
@@ -513,7 +616,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       final response = await ref
           .read(authServiceProvider)
           .getMeshTrail(fingerprint, limit: 120);
-      ref.read(meshTransportProvider).ingestServerTrail(
+      ref
+          .read(meshTransportProvider)
+          .ingestServerTrail(
             fingerprint,
             (response['points'] as List<dynamic>? ?? const [])
                 .whereType<Map>()
@@ -555,26 +660,22 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       return;
     }
 
-    ref.read(sarModeControllerProvider.notifier).upsertExternalSignal(
+    ref
+        .read(sarModeControllerProvider.notifier)
+        .upsertExternalSignal(
           SurvivorSignalEvent(
             messageId: 'node:$nodeDeviceId',
             detectionMethod: SarDetectionMethod.blePassive,
             signalStrengthDbm: -62,
-            estimatedDistanceMeters: _gpsCenter == null
+            estimatedDistanceMeters: _gpsCenter() == null
                 ? 0
-                : const Distance().as(
-                    LengthUnit.Meter,
-                    _gpsCenter!,
-                    point,
-                  ),
+                : const Distance().as(LengthUnit.Meter, _gpsCenter()!, point),
             detectedDeviceIdentifier:
                 _nodeFingerprint(node) ??
-                    MeshTransportService.anonymizeDeviceFingerprint(
-                      nodeDeviceId,
-                    ),
+                MeshTransportService.anonymizeDeviceFingerprint(nodeDeviceId),
             lastSeenTimestamp:
                 DateTime.tryParse(node['last_seen'] as String? ?? '') ??
-                    DateTime.now().toUtc(),
+                DateTime.now().toUtc(),
             nodeLocation: SarNodeLocation(
               lat: point.latitude,
               lng: point.longitude,
@@ -612,8 +713,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   void _selectNode(Map<String, dynamic> node) {
     final point = _readPoint(node);
-    final double zoom =
-        _mapController.camera.zoom < 15.0 ? 15.0 : _mapController.camera.zoom;
+    final double zoom = _mapController.camera.zoom < 15.0
+        ? 15.0
+        : _mapController.camera.zoom;
 
     setState(() {
       _selectedNode = node;
@@ -641,13 +743,14 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   void _focusOnUserLocation() {
-    final gpsCenter = _gpsCenter;
+    final gpsCenter = _gpsCenter();
     if (gpsCenter == null) {
       return;
     }
     setState(() => _hasUserInteracted = false);
-    final double zoom =
-        _mapController.camera.zoom < 15.0 ? 15.0 : _mapController.camera.zoom;
+    final double zoom = _mapController.camera.zoom < 15.0
+        ? 15.0
+        : _mapController.camera.zoom;
     _animateCameraTo(
       _focusCenterForPoint(
         gpsCenter,
@@ -718,22 +821,22 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   Map<String, dynamic>? _buildSelfNode() {
-    final gpsCenter = _gpsCenter;
+    final gpsCenter = _gpsCenter();
     if (gpsCenter == null) {
       return null;
     }
+    final gpsAccuracyMeters = _gpsAccuracyMeters();
     final session = ref.read(sessionControllerProvider);
     final roleLabel = switch (session.role) {
       AppRole.department => 'Department Responder',
       AppRole.municipality => 'Municipal Operator',
       AppRole.citizen || null => 'Citizen',
     };
-    final displayName =
-        session.fullName?.trim().isNotEmpty == true
-            ? session.fullName!.trim()
-            : session.email?.trim().isNotEmpty == true
-            ? session.email!.trim()
-            : 'You';
+    final displayName = session.fullName?.trim().isNotEmpty == true
+        ? session.fullName!.trim()
+        : session.email?.trim().isNotEmpty == true
+        ? session.email!.trim()
+        : 'You';
 
     return <String, dynamic>{
       'id': 'self:${session.userId ?? 'local'}',
@@ -741,9 +844,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       'node_id': session.userId ?? 'local',
       'name': displayName,
       'role': roleLabel,
-      'device_model': _gpsAccuracyMeters == null
+      'device_model': gpsAccuracyMeters == null
           ? 'Live GPS'
-          : 'Live GPS · ${_gpsAccuracyMeters!.round()}m accuracy',
+          : 'Live GPS · ${gpsAccuracyMeters.round()}m accuracy',
       'status': 'connected',
       'last_seen': DateTime.now().toUtc().toIso8601String(),
       'lat': gpsCenter.latitude,
@@ -753,7 +856,41 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     };
   }
 
+  String _gpsStatusLabel(CitizenLocationTrailState state) {
+    if (!widget.enableSelfTracking || !widget.selfTrackingActive) {
+      final gpsAccuracyMeters = state.latestLocation?.accuracyMeters;
+      if (state.latestLocation == null) {
+        return 'GPS off';
+      }
+      if (gpsAccuracyMeters == null) {
+        return 'GPS live';
+      }
+      return 'GPS ${gpsAccuracyMeters.round()}m';
+    }
+
+    if (!state.permissionResolved) {
+      return 'Checking location permission';
+    }
+    if (!state.permissionGranted) {
+      return 'Location permission denied';
+    }
+    if (!state.gpsEnabled) {
+      return 'Location services off';
+    }
+    if (state.latestLocation == null) {
+      return 'Waiting for first GPS fix';
+    }
+    final accuracyMeters = state.latestLocation!.accuracyMeters;
+    if (accuracyMeters <= 0) {
+      return 'Live tracking active';
+    }
+    return 'Live tracking active · ±${accuracyMeters.round()}m';
+  }
+
   bool _isSelfNode(Map<String, dynamic> node) => node['is_self'] == true;
+
+  bool _isNearbyCitizenNode(Map<String, dynamic> node) =>
+      node['is_nearby_citizen'] == true;
 
   String? _selectionKey(Map<String, dynamic>? row) {
     if (row == null) return null;
@@ -769,8 +906,41 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
         _selectionKey(row) == _selectionKey(_selectedNode);
   }
 
+  Map<String, dynamic>? _effectiveNode(Map<String, dynamic>? node) {
+    if (node == null) {
+      return null;
+    }
+    if (_isSelfNode(node)) {
+      return _buildSelfNode() ?? node;
+    }
+    return node;
+  }
+
+  List<Map<String, dynamic>> _nearbyCitizenNodes() {
+    return ref
+        .read(citizenNearbyPresenceControllerProvider)
+        .nearbyUsers
+        .map(
+          (pin) => <String, dynamic>{
+            'id': 'citizen:${pin.userId}',
+            'message_id': 'citizen:${pin.userId}',
+            'user_id': pin.userId,
+            'name': pin.displayName,
+            'role': 'Nearby Citizen',
+            'status': 'active',
+            'lat': pin.latitude,
+            'lng': pin.longitude,
+            'last_seen': pin.lastSeenAt.toIso8601String(),
+            'accuracy_meters': pin.accuracyMeters,
+            'estimated_distance_meters': pin.distanceMeters,
+            'is_nearby_citizen': true,
+          },
+        )
+        .toList(growable: false);
+  }
+
   List<CircleMarker> _gpsCircles() {
-    final gpsCenter = _gpsCenter;
+    final gpsCenter = _gpsCenter();
     if (gpsCenter == null) {
       return const [];
     }
@@ -799,7 +969,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     if (_isSelfNode(row)) {
       return true;
     }
-    final gpsCenter = _gpsCenter;
+    final gpsCenter = _gpsCenter();
     final point = _readPoint(row);
     if (gpsCenter == null || point == null) {
       return true;
@@ -812,28 +982,29 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   List<Marker> _markers() {
     final markers = <Marker>[];
-    final gpsCenter = _gpsCenter;
+    final gpsCenter = _gpsCenter();
     final selfNode = _buildSelfNode();
     final activeIdentities = _activeMarkerIdentities();
+    final gpsAccuracyMeters = _gpsAccuracyMeters();
 
     // "You" marker — pulsing orange with label
     if (gpsCenter != null && selfNode != null) {
       markers.add(
         Marker(
           point: gpsCenter,
-          width: 92,
-          height: 72,
+          width: 104,
+          height: 90,
           alignment: Marker.computePixelAlignment(
-            width: 92,
-            height: 72,
-            left: 46,
+            width: 104,
+            height: 90,
+            left: 52,
             top: 24,
           ),
           rotate: true,
           child: GestureDetector(
             onTap: () => _selectNode(selfNode),
             child: _YouMarker(
-              accuracyMeters: _gpsAccuracyMeters,
+              accuracyMeters: gpsAccuracyMeters,
               onSurfaceColor: Theme.of(context).brightness == Brightness.dark
                   ? dc.darkInk
                   : dc.ink,
@@ -849,11 +1020,11 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       if (!_isWithinVisibleNodeRange(node)) continue;
       final point = _readPoint(node);
       if (point == null) continue;
-      final nodeId = node['node_id'] as String? ??
-          node['id'] as String? ??
-          'Node';
+      final nodeId =
+          node['node_id'] as String? ?? node['id'] as String? ?? 'Node';
       final hasLabel = node['label'] != null || node['name'] != null;
-      final label = node['label'] as String? ??
+      final label =
+          node['label'] as String? ??
           node['name'] as String? ??
           'Node #${nodeId.length > 3 ? nodeId.substring(nodeId.length - 3) : nodeId}';
 
@@ -902,8 +1073,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       if (!_isWithinVisibleNodeRange(peer)) continue;
       final point = _readPoint(peer);
       if (point == null) continue;
-      final peerId = peer['node_id'] as String? ?? peer['id'] as String? ?? 'peer';
-      final label = peer['name'] as String? ??
+      final peerId =
+          peer['node_id'] as String? ?? peer['id'] as String? ?? 'peer';
+      final label =
+          peer['name'] as String? ??
           'Node #${peerId.length > 3 ? peerId.substring(peerId.length - 3) : peerId}';
       markers.add(
         Marker(
@@ -918,6 +1091,29 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               showLabel: true,
               isPeer: true,
               selected: _isSelectedNode(peer),
+            ),
+          ),
+        ),
+      );
+    }
+
+    for (final citizen in _nearbyCitizenNodes()) {
+      if (!_isWithinVisibleNodeRange(citizen)) continue;
+      final point = _readPoint(citizen);
+      if (point == null) continue;
+      markers.add(
+        Marker(
+          point: point,
+          width: 132,
+          height: 64,
+          rotate: true,
+          child: GestureDetector(
+            onTap: () => _selectNode(citizen),
+            child: _NodeMarker(
+              label: citizen['name'] as String? ?? 'Nearby User',
+              showLabel: true,
+              isCitizenPresence: true,
+              selected: _isSelectedNode(citizen),
             ),
           ),
         ),
@@ -939,13 +1135,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               ...report,
               'role': 'Incident Report',
               'status': report['status'] as String? ?? 'active',
-              'name': report['title'] as String? ??
+              'name':
+                  report['title'] as String? ??
                   report['description'] as String? ??
                   'Incident Report',
             }),
-            child: _AlertMarker(
-              selected: _isSelectedNode(report),
-            ),
+            child: _AlertMarker(selected: _isSelectedNode(report)),
           ),
         ),
       );
@@ -985,7 +1180,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   // ── Network lines (polylines connecting nodes to user) ───────────────────
 
   List<Polyline> _networkLines() {
-    final center = _gpsCenter;
+    final center = _gpsCenter();
     if (center == null) return const [];
     final lines = <Polyline>[];
     final allPoints = <LatLng>[];
@@ -1018,10 +1213,26 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   // ── Selected node helpers ────────────────────────────────────────────────
   List<Polyline> _trailLines() {
-    if (!_locationTrailEnabled || _selectedNode == null) {
+    final selectedNode = _effectiveNode(_selectedNode);
+    if (!_locationTrailEnabled || selectedNode == null) {
       return const [];
     }
-    final fingerprint = _nodeFingerprint(_selectedNode!);
+    if (_isSelfNode(selectedNode)) {
+      final trailPoints = _selfTrailState().persistedTrailPoints
+          .map((point) => LatLng(point.latitude, point.longitude))
+          .toList(growable: false);
+      if (trailPoints.length < 2) {
+        return const [];
+      }
+      return [
+        Polyline(
+          points: trailPoints,
+          strokeWidth: 3.5,
+          color: dc.primary.withValues(alpha: 0.75),
+        ),
+      ];
+    }
+    final fingerprint = _nodeFingerprint(selectedNode);
     if (fingerprint == null || fingerprint.isEmpty) {
       return const [];
     }
@@ -1047,6 +1258,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       final name = node['name'] as String? ?? 'You';
       return name == 'You' ? 'You' : 'You ($name)';
     }
+    if (_isNearbyCitizenNode(node)) {
+      return node['name'] as String? ?? 'Nearby Citizen';
+    }
     final label = node['label'] as String? ?? node['name'] as String?;
     final nodeId = node['node_id'] as String? ?? node['id'] as String?;
     if (label != null && nodeId != null) {
@@ -1065,13 +1279,20 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
       final device = node['device_model'] as String?;
       return device == null ? role : '$role • $device';
     }
+    if (_isNearbyCitizenNode(node)) {
+      final accuracyMeters = (node['accuracy_meters'] as num?)?.toDouble();
+      return accuracyMeters == null
+          ? 'Nearby Citizen • Live pin'
+          : 'Nearby Citizen • ±${accuracyMeters.round()}m';
+    }
     if (node['is_approximate'] == true) {
       final device = node['device_model'] as String?;
       return device == null
           ? 'Nearby discovery • Mesh Relay'
           : '$device • Mesh Relay';
     }
-    final device = node['device_type'] as String? ??
+    final device =
+        node['device_type'] as String? ??
         node['device_model'] as String? ??
         node['detected_device_identifier'] as String?;
     final role = node['role'] as String? ?? 'Mesh Relay';
@@ -1083,8 +1304,7 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     if (_isSelfNode(node)) {
       return '0m (You)';
     }
-    final distance =
-        (node['estimated_distance_meters'] as num?)?.toDouble();
+    final distance = (node['estimated_distance_meters'] as num?)?.toDouble();
     if (distance != null) {
       if (node['is_approximate'] == true) {
         return '~${distance.round()}m nearby';
@@ -1096,9 +1316,10 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     }
     // Compute from GPS if available
     final point = _readPoint(node);
-    if (point != null && _gpsCenter != null) {
+    final gpsCenter = _gpsCenter();
+    if (point != null && gpsCenter != null) {
       const d = Distance();
-      final meters = d.as(LengthUnit.Meter, _gpsCenter!, point);
+      final meters = d.as(LengthUnit.Meter, gpsCenter, point);
       if (node['is_approximate'] == true) {
         return '~${meters.round()}m nearby';
       }
@@ -1112,11 +1333,13 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   String _nodeLastSeen(Map<String, dynamic> node) {
     if (_isSelfNode(node)) {
-      return _gpsAccuracyMeters == null
+      final gpsAccuracyMeters = _gpsAccuracyMeters();
+      return gpsAccuracyMeters == null
           ? 'Live now'
-          : 'Live now · ±${_gpsAccuracyMeters!.round()}m';
+          : 'Live now · ±${gpsAccuracyMeters.round()}m';
     }
-    final raw = node['last_seen'] as String? ??
+    final raw =
+        node['last_seen'] as String? ??
         node['updated_at'] as String? ??
         node['created_at'] as String?;
     if (raw == null) return '—';
@@ -1131,11 +1354,18 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   bool _isConnected(Map<String, dynamic> node) {
     if (_isSelfNode(node)) {
-      return _gpsCenter != null;
+      return _gpsCenter() != null;
+    }
+    if (_isNearbyCitizenNode(node)) {
+      final lastSeen = node['last_seen'] as String?;
+      final parsed = lastSeen == null ? null : DateTime.tryParse(lastSeen);
+      if (parsed == null) return false;
+      return DateTime.now().difference(parsed.toLocal()).inSeconds <= 15;
     }
     final status = node['status'] as String?;
     if (status != null) return status == 'active' || status == 'connected';
-    final lastSeen = node['last_seen'] as String? ?? node['updated_at'] as String?;
+    final lastSeen =
+        node['last_seen'] as String? ?? node['updated_at'] as String?;
     if (lastSeen == null) return false;
     final parsed = DateTime.tryParse(lastSeen);
     if (parsed == null) return false;
@@ -1144,12 +1374,14 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   @override
   void dispose() {
-    _setOverlayActive(false);
-    ref.read(meshTransportProvider).removeListener(_handleTransportUpdated);
+    unawaited(_citizenNearbyPresenceController.stop());
+    unawaited(_citizenTrailController.stopTracking());
+    _selfTrailSubscription?.close();
+    WidgetsBinding.instance.removeObserver(this);
+    _meshTransport.removeListener(_handleTransportUpdated);
     for (final handle in _realtimeHandles) {
       unawaited(handle.dispose());
     }
-    _gpsSubscription?.cancel();
     _cameraMoveController.dispose();
     super.dispose();
   }
@@ -1158,9 +1390,16 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
 
   @override
   Widget build(BuildContext context) {
+    final selfTrailState = ref.watch(citizenLocationTrailControllerProvider);
+    final nearbyPresenceState = ref.watch(
+      citizenNearbyPresenceControllerProvider,
+    );
     final center = _preferredCenter();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final gpsAvailable = _gpsCenter != null;
+    final gpsAvailable = selfTrailState.latestLocation != null;
+    final gpsAccuracyMeters = selfTrailState.latestLocation?.accuracyMeters;
+    final gpsStatusLabel = _gpsStatusLabel(selfTrailState);
+    final selectedNode = _effectiveNode(_selectedNode);
     final detailBottomOffset = 0.0;
 
     return Scaffold(
@@ -1207,17 +1446,27 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
               isDark: isDark,
               onSync: _loading ? null : _refresh,
               gpsLabel: gpsAvailable
-                  ? _gpsAccuracyMeters == null
-                        ? 'GPS live'
-                        : 'GPS ${_gpsAccuracyMeters!.round()}m'
-                  : 'GPS off',
+                  ? gpsAccuracyMeters == null
+                        ? gpsStatusLabel
+                        : 'GPS ${gpsAccuracyMeters.round()}m'
+                  : gpsStatusLabel,
             ),
           ),
 
           // ── Floating Action Overlay (right side) ────────────────────
+          if (widget.enableSelfTracking)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 76,
+              left: 16,
+              child: _GpsStatusBanner(
+                isDark: isDark,
+                label: gpsStatusLabel,
+                state: selfTrailState,
+              ),
+            ),
           Positioned(
             right: 24,
-            top: MediaQuery.of(context).padding.top + 72,
+            top: MediaQuery.of(context).padding.top + 128,
             child: _FloatingActions(
               isDark: isDark,
               onCompass: () => _openCompass(null),
@@ -1232,75 +1481,111 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
             left: 16,
             right: 16,
             child: IgnorePointer(
-              ignoring: _selectedNode == null,
+              ignoring: selectedNode == null,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
                 reverseDuration: const Duration(milliseconds: 180),
                 transitionBuilder: (child, animation) {
-                  final offset = Tween<Offset>(
-                    begin: const Offset(0, 0.12),
-                    end: Offset.zero,
-                  ).animate(
-                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                  );
+                  final offset =
+                      Tween<Offset>(
+                        begin: const Offset(0, 0.12),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      );
                   return FadeTransition(
                     opacity: animation,
                     child: SlideTransition(position: offset, child: child),
                   );
                 },
-                child: _selectedNode == null
+                child: selectedNode == null
                     ? const SizedBox.shrink()
                     : _NodeDetailSheet(
                         key: ValueKey<String>(
-                          _selectionKey(_selectedNode!) ?? 'selected-node',
+                          _selectionKey(selectedNode) ?? 'selected-node',
                         ),
                         isDark: isDark,
-                        title: _nodeTitle(_selectedNode!),
-                        subtitle: _nodeSubtitle(_selectedNode!),
-                        distance: _nodeDistance(_selectedNode!),
-                        lastSeen: _nodeLastSeen(_selectedNode!),
-                        isConnected: _isConnected(_selectedNode!),
+                        title: _nodeTitle(selectedNode),
+                        subtitle: _nodeSubtitle(selectedNode),
+                        distance: _nodeDistance(selectedNode),
+                        lastSeen: _nodeLastSeen(selectedNode),
+                        isConnected: _isConnected(selectedNode),
+                        showTrailToggle: !_isNearbyCitizenNode(selectedNode),
                         locationTrailEnabled: _locationTrailEnabled,
                         onToggleTrail: (v) {
-                          if (_isSelfNode(_selectedNode!)) {
-                            _showMapNotice(
-                              'Personal location trail is a placeholder for now.',
-                            );
-                            return;
-                          }
                           setState(() => _locationTrailEnabled = v);
                         },
-                        primaryActionLabel: _isSelfNode(_selectedNode!)
+                        primaryActionLabel: _isSelfNode(selectedNode)
                             ? 'Center on My Position'
+                            : _isNearbyCitizenNode(selectedNode)
+                            ? 'Focus Nearby User'
                             : 'Open Compass Locator',
                         onOpenCompass: () {
-                          if (_isSelfNode(_selectedNode!)) {
+                          if (_isSelfNode(selectedNode)) {
                             _focusOnUserLocation();
                             _showMapNotice(
-                              'Your live node is centered. More self tools are coming soon.',
+                              'Your live node is centered and the self trail is active.',
                             );
                             return;
                           }
-                          _openCompassForNode(_selectedNode!);
+                          if (_isNearbyCitizenNode(selectedNode)) {
+                            final point = _readPoint(selectedNode);
+                            if (point != null) {
+                              _animateCameraTo(
+                                point,
+                                zoom: _mapController.camera.zoom,
+                              );
+                            }
+                            _showMapNotice(
+                              'Nearby citizen pin centered on the map.',
+                            );
+                            return;
+                          }
+                          _openCompassForNode(selectedNode);
                         },
-                        onChat: _isSelfNode(_selectedNode!)
+                        onChat:
+                            _isSelfNode(selectedNode) ||
+                                _isNearbyCitizenNode(selectedNode)
                             ? null
-                            : () => _openDirectThread(_selectedNode!),
-                        allowResolve: widget.allowResolveActions &&
-                            !_isSelfNode(_selectedNode!) &&
-                            (_selectedNode!['message_id'] as String?) != null &&
-                            !((_selectedNode!['message_id'] as String?)?.startsWith('node:') ?? false),
-                        isResolving: _resolvingSignalId ==
-                            (_selectedNode!['id'] as String?),
-                        onResolve: _selectedNode!['id'] != null &&
-                                (_selectedNode!['message_id'] as String?) != null &&
-                                !((_selectedNode!['message_id'] as String?)?.startsWith('node:') ?? false)
-                            ? () => _resolveSignal(_selectedNode!['id'] as String)
+                            : () => _openDirectThread(selectedNode),
+                        allowResolve:
+                            widget.allowResolveActions &&
+                            !_isSelfNode(selectedNode) &&
+                            (selectedNode['message_id'] as String?) != null &&
+                            !((selectedNode['message_id'] as String?)
+                                    ?.startsWith('node:') ??
+                                false),
+                        isResolving:
+                            _resolvingSignalId ==
+                            (selectedNode['id'] as String?),
+                        onResolve:
+                            selectedNode['id'] != null &&
+                                (selectedNode['message_id'] as String?) !=
+                                    null &&
+                                !((selectedNode['message_id'] as String?)
+                                        ?.startsWith('node:') ??
+                                    false)
+                            ? () => _resolveSignal(selectedNode['id'] as String)
                             : null,
                       ),
               ),
             ),
           ),
+          if (widget.enableSelfTracking &&
+              nearbyPresenceState.lastError != null &&
+              nearbyPresenceState.lastError!.isNotEmpty)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 140,
+              left: 16,
+              child: _GpsStatusBanner(
+                isDark: isDark,
+                label: 'Nearby presence offline',
+                state: selfTrailState,
+              ),
+            ),
         ],
       ),
     );
@@ -1437,17 +1722,23 @@ class _NodeMarker extends StatelessWidget {
     required this.label,
     this.showLabel = false,
     this.isPeer = false,
+    this.isCitizenPresence = false,
     this.selected = false,
   });
 
   final String label;
   final bool showLabel;
   final bool isPeer;
+  final bool isCitizenPresence;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    final dotColor = isPeer ? Colors.amber : dc.secondary;
+    final dotColor = isCitizenPresence
+        ? dc.primary
+        : isPeer
+        ? Colors.amber
+        : dc.secondary;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1457,7 +1748,8 @@ class _NodeMarker extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              if (selected) _PulsingHalo(color: dotColor, minSize: 14, maxSize: 28),
+              if (selected)
+                _PulsingHalo(color: dotColor, minSize: 14, maxSize: 28),
               Container(
                 width: 12,
                 height: 12,
@@ -1528,9 +1820,9 @@ class _SignalMarker extends StatelessWidget {
     return SizedBox(
       width: 40,
       height: 40,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
           if (pulse || selected)
             _PulsingHalo(
               color: haloColor,
@@ -1634,8 +1926,8 @@ class _PulsingHaloState extends State<_PulsingHalo>
         animation: _controller,
         builder: (context, child) {
           final progress = Curves.easeOut.transform(_controller.value);
-          final size = widget.minSize +
-              ((widget.maxSize - widget.minSize) * progress);
+          final size =
+              widget.minSize + ((widget.maxSize - widget.minSize) * progress);
           final opacity = (0.28 * (1 - progress)).clamp(0.0, 0.28).toDouble();
           return Container(
             width: size,
@@ -1701,11 +1993,7 @@ class _DotGridPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _MapAppBar extends StatelessWidget {
-  const _MapAppBar({
-    required this.isDark,
-    this.onSync,
-    required this.gpsLabel,
-  });
+  const _MapAppBar({required this.isDark, this.onSync, required this.gpsLabel});
 
   final bool isDark;
   final VoidCallback? onSync;
@@ -1742,8 +2030,9 @@ class _MapAppBar extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
-                      .withValues(alpha: 0.96),
+                  color:
+                      (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
+                          .withValues(alpha: 0.96),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(Icons.location_on, color: iconColor, size: 18),
@@ -1809,7 +2098,9 @@ class _MapAppBar extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color:
-                          (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
+                          (isDark
+                                  ? dc.darkSurfaceContainer
+                                  : dc.primaryContainer)
                               .withValues(alpha: 0.96),
                       borderRadius: BorderRadius.circular(999),
                     ),
@@ -1839,6 +2130,78 @@ class _MapAppBar extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 // Floating Action Overlay — compass + layers buttons (right side)
 // ═══════════════════════════════════════════════════════════════════════════
+
+class _GpsStatusBanner extends StatelessWidget {
+  const _GpsStatusBanner({
+    required this.isDark,
+    required this.label,
+    required this.state,
+  });
+
+  final bool isDark;
+  final String label;
+  final CitizenLocationTrailState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = isDark
+        ? dc.darkSurface.withValues(alpha: 0.92)
+        : dc.surfaceContainerLowest.withValues(alpha: 0.94);
+    final borderColor = isDark
+        ? dc.darkBorder.withValues(alpha: 0.7)
+        : dc.outlineVariant.withValues(alpha: 0.8);
+    final accentColor = !state.permissionResolved
+        ? dc.secondary
+        : !state.permissionGranted
+        ? dc.error
+        : !state.gpsEnabled
+        ? const Color(0xFFD97757)
+        : state.latestLocation == null
+        ? dc.secondary
+        : dc.primary;
+    final icon = !state.permissionResolved
+        ? Icons.location_searching
+        : !state.permissionGranted
+        ? Icons.location_off
+        : !state.gpsEnabled
+        ? Icons.gps_off
+        : state.latestLocation == null
+        ? Icons.gps_not_fixed
+        : Icons.my_location;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: dc.onSurface.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: accentColor),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isDark ? dc.darkInk : dc.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _FloatingActions extends StatelessWidget {
   const _FloatingActions({
@@ -1936,6 +2299,7 @@ class _NodeDetailSheet extends StatelessWidget {
     required this.distance,
     required this.lastSeen,
     required this.isConnected,
+    this.showTrailToggle = true,
     required this.locationTrailEnabled,
     required this.onToggleTrail,
     required this.onOpenCompass,
@@ -1952,6 +2316,7 @@ class _NodeDetailSheet extends StatelessWidget {
   final String distance;
   final String lastSeen;
   final bool isConnected;
+  final bool showTrailToggle;
   final bool locationTrailEnabled;
   final ValueChanged<bool> onToggleTrail;
   final VoidCallback onOpenCompass;
@@ -1966,8 +2331,7 @@ class _NodeDetailSheet extends StatelessWidget {
     final bg = isDark
         ? dc.darkSurface.withValues(alpha: 0.95)
         : const Color(0xFFFFFCF8).withValues(alpha: 0.98);
-    final cardBg =
-        isDark ? dc.darkSurfaceContainer : const Color(0xFFF4EFE8);
+    final cardBg = isDark ? dc.darkSurfaceContainer : const Color(0xFFF4EFE8);
     final textColor = isDark ? dc.darkInk : dc.onSurface;
     final subtextColor = isDark ? dc.darkMutedInk : dc.onSurfaceVariant;
     final accentColor = isDark ? dc.darkPrimaryAccent : dc.primary;
@@ -1980,9 +2344,7 @@ class _NodeDetailSheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 14, 24, 22),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(32),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             boxShadow: [
               BoxShadow(
                 color: dc.onSurface.withValues(alpha: 0.12),
@@ -2025,11 +2387,7 @@ class _NodeDetailSheet extends StatelessWidget {
                           : const Color(0xFFF7EBDD),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      Icons.person,
-                      size: 32,
-                      color: accentColor,
-                    ),
+                    child: Icon(Icons.person, size: 32, color: accentColor),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -2061,8 +2419,10 @@ class _NodeDetailSheet extends StatelessWidget {
                   ),
                   // Connection status badge
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
                           ? dc.darkPrimaryAccent.withValues(alpha: 0.15)
@@ -2076,7 +2436,9 @@ class _NodeDetailSheet extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.2,
-                        color: isDark ? dc.darkPrimaryAccent : dc.onPrimaryContainer,
+                        color: isDark
+                            ? dc.darkPrimaryAccent
+                            : dc.onPrimaryContainer,
                       ),
                     ),
                   ),
@@ -2108,42 +2470,43 @@ class _NodeDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Location Trail toggle
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.route, size: 24, color: subtextColor),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Turn on Location Trail',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: textColor,
+              if (showTrailToggle) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.route, size: 24, color: subtextColor),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Turn on Location Trail',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: textColor,
+                          ),
                         ),
                       ),
-                    ),
-                    Switch(
-                      value: locationTrailEnabled,
-                      onChanged: onToggleTrail,
-                      activeThumbColor: dc.surfaceContainerLowest,
-                      activeTrackColor: accentColor,
-                      inactiveThumbColor: dc.surfaceContainerLowest,
-                      inactiveTrackColor: isDark
-                          ? dc.darkSurfaceContainerHigh
-                          : const Color(0xFFE3DDD6),
-                    ),
-                  ],
+                      Switch(
+                        value: locationTrailEnabled,
+                        onChanged: onToggleTrail,
+                        activeThumbColor: dc.surfaceContainerLowest,
+                        activeTrackColor: accentColor,
+                        inactiveThumbColor: dc.surfaceContainerLowest,
+                        inactiveTrackColor: isDark
+                            ? dc.darkSurfaceContainerHigh
+                            : const Color(0xFFE3DDD6),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
               // Chat button
               if (onChat != null)
@@ -2181,7 +2544,9 @@ class _NodeDetailSheet extends StatelessWidget {
                                 fontFamily: 'Inter',
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                                color: isDark
+                                    ? dc.darkPrimaryAccent
+                                    : dc.primary,
                               ),
                             ),
                           ],
@@ -2202,7 +2567,9 @@ class _NodeDetailSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          isDark ? dc.darkPrimaryAccent : const Color(0xFFB45E2E),
+                          isDark
+                              ? dc.darkPrimaryAccent
+                              : const Color(0xFFB45E2E),
                           isDark
                               ? dc.darkPrimaryAccent.withValues(alpha: 0.85)
                               : const Color(0xFFA34E22),
@@ -2337,21 +2704,3 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

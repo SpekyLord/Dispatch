@@ -178,7 +178,7 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
   const recentReports = reports.slice(0, 6);
   const alertReports = reports
     .filter((report) => report.status !== "resolved")
-    .slice(0, 4);
+    .slice(0, 8);
   const geoReports = reports
     .filter(
       (
@@ -289,12 +289,18 @@ function DepartmentDashboard({ department }: { department: DepartmentInfo }) {
         </section>
 
         <div className="space-y-6">
-          <DepartmentProfileRail department={department} />
-          <QuickAccessPanel actions={dashboardActions} />
-          <RecentAlertsPanel
-            reports={alertReports}
-            reportsLoading={reportsLoading}
-          />
+          <div className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+            <DepartmentProfileRail department={department} />
+          </div>
+          <div className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+            <QuickAccessPanel actions={dashboardActions} />
+          </div>
+          <div className="overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset]">
+            <RecentAlertsPanel
+              reports={alertReports}
+              reportsLoading={reportsLoading}
+            />
+          </div>
         </div>
       </section>
     </div>
@@ -507,7 +513,7 @@ function QuickAccessPanel({
 
   return (
     <Card
-      className="rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-5 shadow-[0_20px_55px_rgba(82,58,43,0.08)]"
+      className="rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-5 shadow-[0_22px_48px_rgba(132,94,59,0.1)] sm:p-6"
       data-testid="department-quick-access"
     >
       <div className="flex items-center gap-3">
@@ -563,6 +569,8 @@ function RecentAlertsPanel({
   reports: ReportSummary[];
   reportsLoading: boolean;
 }) {
+  const hasScrollableAlerts = reports.length > 2;
+
   return (
     <Card className="rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-6 shadow-[0_20px_55px_rgba(82,58,43,0.08)]">
       <div className="flex items-center justify-between gap-4">
@@ -579,7 +587,9 @@ function RecentAlertsPanel({
         </span>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div
+        className={`mt-5 space-y-4 ${hasScrollableAlerts ? "max-h-[18.25rem] overflow-y-auto pr-2" : ""}`}
+      >
         {reportsLoading ? (
           <div className="py-8 text-center">
             <LoadingDots sizeClassName="h-4 w-4" />
@@ -938,7 +948,7 @@ function DepartmentProfileRail({ department }: { department: DepartmentInfo }) {
   ] as const;
 
   return (
-    <Card className="rounded-[28px] border-[#ead7c8] bg-[#fffdfa] p-5 shadow-[0_22px_48px_rgba(132,94,59,0.1)]">
+    <Card className="rounded-[30px] border-[#eadfd5] bg-[#fffaf6] p-5 shadow-[0_22px_48px_rgba(132,94,59,0.1)] sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex items-center gap-3">
           {profileImage ? (

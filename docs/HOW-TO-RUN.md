@@ -81,6 +81,7 @@ corepack pnpm --filter @dispatch/web test:e2e # Playwright smoke/e2e
 cd services/api
 uv sync --group dev
 uv run dispatch-api
+
 ```
 
 The API starts at **http://127.0.0.1:5000**.

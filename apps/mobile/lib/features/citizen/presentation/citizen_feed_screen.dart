@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
@@ -37,6 +37,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
   final List<RealtimeSubscriptionHandle> _subscriptions = [];
   int _selectedTab = 0;
   bool _loading = true;
+  String _searchQuery = '';
   List<Map<String, dynamic>> _posts = const [];
   List<Map<String, dynamic>> _reports = const [];
   List<Map<String, dynamic>> _topologyNodes = const [];
@@ -243,51 +244,80 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     return stories;
   }
 
+  bool _matchesSearch(_FeedStory story) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return true;
+    }
+    final haystack = [
+      story.title,
+      story.body,
+      story.category,
+      story.address ?? '',
+      story.severity ?? '',
+    ].join(' ').toLowerCase();
+    return haystack.contains(query);
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
-    final transport = ref.read(meshTransportProvider);
-    final stories = _buildStories();
-    final heroStory =
-        _firstWhereOrNull(stories, _isCriticalStory) ?? _fallbackHeroStory;
-    final secondaryStory =
-        _firstOrNull(stories.where((story) => story.id != heroStory.id)) ??
-        _fallbackIncidentStory;
-    final disasterStories = stories
-        .where(_isDisasterStory)
+    final allStories = _buildStories();
+    final hasQuery = _searchQuery.trim().isNotEmpty;
+    final stories = allStories.where(_matchesSearch).toList(growable: false);
+    final readinessStories = (hasQuery ? stories : allStories)
+        .where(
+          (story) =>
+              _isCriticalStory(story) ||
+              story.category.toLowerCase() == 'situational_report' ||
+              story.category.toLowerCase() == 'update',
+        )
+        .take(5)
         .toList(growable: false);
-    final remoteMessageItem = _firstWhereOrNull(
-      _meshMessages,
-      (item) => !_isLocalMessage(
-        item,
-        fullName: session.fullName,
-        email: session.email,
-      ),
-    );
-    final localMessageItem = _firstWhereOrNull(
-      _meshMessages,
-      (item) => _isLocalMessage(
-        item,
-        fullName: session.fullName,
-        email: session.email,
-      ),
-    );
-    final remoteMessage = _messagePreviewFromItem(
-      remoteMessageItem,
-      fallback: _fallbackRemoteMessage,
-      isLocal: false,
-    );
-    final localMessage = _messagePreviewFromItem(
-      localMessageItem,
-      fallback: _fallbackLocalMessage,
-      isLocal: true,
-    );
-    final nodeCount = _topologyNodes.isNotEmpty
-        ? _topologyNodes.length
-        : transport.peerCount > 0
-        ? transport.peerCount
-        : 42;
-    final updateCount = _meshMessages.isNotEmpty ? _meshMessages.length : 3;
+    final feedStories = (hasQuery ? stories : allStories)
+        .take(8)
+        .toList(growable: false);
+    final profileSeed = (session.fullName ?? session.email ?? 'Dispatch').trim();
+    final profileInitial = profileSeed.isEmpty
+        ? 'D'
+        : profileSeed.substring(0, 1).toUpperCase();
+
+    IconData categoryIcon(String category) => switch (category.toLowerCase()) {
+      'alert' || 'warning' => Icons.campaign_rounded,
+      'situational_report' => Icons.assignment_outlined,
+      'fire' => Icons.local_fire_department_rounded,
+      'flood' => Icons.water_drop_outlined,
+      'medical' => Icons.medical_services_outlined,
+      'structural' => Icons.foundation_outlined,
+      'road_accident' => Icons.car_crash_outlined,
+      _ => Icons.notifications_active_outlined,
+    };
+
+    Color accentColor(String category) => switch (category.toLowerCase()) {
+      'alert' || 'warning' => const Color(0xFFA14B2F),
+      'situational_report' => const Color(0xFF8A6B2E),
+      'fire' => const Color(0xFFB05535),
+      'flood' => const Color(0xFF4F7A90),
+      'medical' => const Color(0xFF7A5B88),
+      'structural' => const Color(0xFF8E5F47),
+      _ => const Color(0xFF7E746D),
+    };
+
+    Color accentTint(String category) => switch (category.toLowerCase()) {
+      'alert' || 'warning' => const Color(0xFFF7E8DE),
+      'situational_report' => const Color(0xFFF6F0DE),
+      'fire' => const Color(0xFFF8E7E0),
+      'flood' => const Color(0xFFE7F0F5),
+      'medical' => const Color(0xFFF0E8F5),
+      'structural' => const Color(0xFFF4EBE5),
+      _ => const Color(0xFFF2ECE6),
+    };
+
+    String sourceLabel(_FeedStory story) => switch (story.type) {
+      _FeedStoryType.report => 'Citizen report',
+      _FeedStoryType.meshPost => 'Mesh update',
+      _FeedStoryType.post => 'Dispatch bulletin',
+    };
 
     if (_loading && _posts.isEmpty && _reports.isEmpty && _inboxItems.isEmpty) {
       return Container(
@@ -297,65 +327,504 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
       );
     }
 
-    final content = switch (_selectedTab) {
-      0 => _buildAllReportsContent(
-        heroStory: heroStory,
-        secondaryStory: secondaryStory,
-        remoteMessage: remoteMessage,
-        localMessage: localMessage,
-        nodeCount: nodeCount,
-        updateCount: updateCount,
-      ),
-      1 => _buildDisasterContent(
-        disasterStories: disasterStories,
-        fallbackHero: heroStory,
-        updateCount: updateCount,
-        nodeCount: nodeCount,
-      ),
-      _ => _buildMessagesContent(
-        sessionName: session.fullName,
-        sessionEmail: session.email,
-        updateCount: updateCount,
-        nodeCount: nodeCount,
-      ),
-    };
-
-    return Stack(
-      children: [
-        Container(color: dc.background),
-        Column(
-          children: [
-            SafeArea(
-              bottom: false,
-              child: _FeedTopBar(
-                onMenuTap: widget.onOpenNodesTab,
-                onStatusTap: () => _fetchFeed(showLoader: false),
+    return Container(
+      color: dc.background,
+      child: SafeArea(
+        child: RefreshIndicator(
+          color: dc.primary,
+          onRefresh: () => _fetchFeed(),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
+            children: [
+              Row(
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onOpenNodesTab,
+                      borderRadius: BorderRadius.circular(999),
+                      child: const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Icon(
+                          Icons.menu_rounded,
+                          color: dc.primary,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Dispatch',
+                      style: TextStyle(
+                        fontFamily: 'Georgia',
+                        fontFamilyFallback: ['Times New Roman', 'serif'],
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: dc.primaryDim,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2A35),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: dc.onSurface.withValues(alpha: 0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      profileInitial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            _FeedTabBar(
-              labels: _tabLabels,
-              selectedIndex: _selectedTab,
-              onSelected: (index) => setState(() => _selectedTab = index),
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                color: dc.primary,
-                onRefresh: () => _fetchFeed(),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 144),
-                  children: content,
+              const SizedBox(height: 18),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x12000000),
+                      blurRadius: 14,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: dc.onSurfaceVariant,
+                    ),
+                    hintText: 'response protocols and more',
+                    hintStyle: const TextStyle(color: Color(0xFFB8AEA7)),
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x12000000),
+                      blurRadius: 16,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF182430),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.campaign_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Text(
+                            'Anything urgent to share?',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Color(0xFFC1B5AD),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        for (final icon in const [
+                          Icons.image_outlined,
+                          Icons.location_on_outlined,
+                          Icons.link_rounded,
+                        ]) ...[
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _openReportComposer,
+                              borderRadius: BorderRadius.circular(999),
+                              child: SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: Icon(
+                                  icon,
+                                  size: 20,
+                                  color: const Color(0xFF8B817A),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        const Spacer(),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: dc.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: TextButton(
+                            onPressed: _openReportComposer,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Post',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Active Readiness',
+                      style: TextStyle(
+                        fontFamily: 'Georgia',
+                        fontFamilyFallback: ['Times New Roman', 'serif'],
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: dc.onSurface,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _searchQuery = ''),
+                    style: TextButton.styleFrom(
+                      foregroundColor: dc.primary,
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'VIEW ALL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 164,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: hasQuery
+                      ? readinessStories.length
+                      : (readinessStories.isEmpty ? 2 : readinessStories.length),
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final story = !hasQuery && readinessStories.isEmpty
+                        ? (index == 0 ? _fallbackHeroStory : _fallbackIncidentStory)
+                        : readinessStories[index];
+                    final accent = accentColor(story.category);
+                    return InkWell(
+                      onTap: () => _openStory(story),
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        width: 172,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: accentTint(story.category),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border(
+                            left: BorderSide(color: accent, width: 3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _titleCase(story.category.replaceAll('_', ' ')),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(
+                              child: Text(
+                                story.title,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  height: 1.15,
+                                  fontWeight: FontWeight.w700,
+                                  color: dc.onSurface,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    color: accent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _timeAgo(story.createdAt).toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                      color: dc.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 26),
+              Row(
+                children: const [
+                  Icon(
+                    Icons.emergency_share_outlined,
+                    color: dc.primary,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Situational Reports',
+                    style: TextStyle(
+                      fontFamily: 'Georgia',
+                      fontFamilyFallback: ['Times New Roman', 'serif'],
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: dc.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (feedStories.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Text(
+                    'No feed results matched your search. Try a different keyword or refresh for the latest updates.',
+                    style: TextStyle(
+                      color: dc.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                )
+              else
+                for (final story in feedStories) ...[
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _openStory(story),
+                      borderRadius: BorderRadius.circular(26),
+                      child: Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.96),
+                          borderRadius: BorderRadius.circular(26),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x12000000),
+                              blurRadius: 16,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: accentTint(story.category),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    categoryIcon(story.category),
+                                    color: accentColor(story.category),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        sourceLabel(story),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          color: dc.onSurface,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${_titleCase(story.category.replaceAll('_', ' '))} | ${_timeAgo(story.createdAt)}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.5,
+                                          color: dc.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.more_vert_rounded,
+                                  color: dc.outline,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              story.title,
+                              style: const TextStyle(
+                                fontFamily: 'Georgia',
+                                fontFamilyFallback: [
+                                  'Times New Roman',
+                                  'serif',
+                                ],
+                                fontSize: 20,
+                                height: 1.15,
+                                fontWeight: FontWeight.w700,
+                                color: dc.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              story.body.isEmpty
+                                  ? 'Tap to open the full field update and incident context.'
+                                  : story.body,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.55,
+                                color: dc.onSurfaceVariant,
+                              ),
+                            ),
+                            if ((story.imageUrl ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: Image.network(
+                                    story.imageUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                              color: accentTint(story.category),
+                                              alignment: Alignment.center,
+                                              child: Icon(
+                                                categoryIcon(story.category),
+                                                color: accentColor(
+                                                  story.category,
+                                                ),
+                                                size: 32,
+                                              ),
+                                            ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+            ],
+          ),
         ),
-        Positioned(
-          right: 24,
-          bottom: 104,
-          child: _BroadcastReportButton(onTap: _openReportComposer),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1658,3 +2127,4 @@ T? _firstWhereOrNull<T>(Iterable<T> items, bool Function(T item) test) {
   }
   return null;
 }
+

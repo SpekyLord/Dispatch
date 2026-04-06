@@ -43,3 +43,17 @@ def mark_all_notifications_read():
     user = get_current_user()
     updated_count = _notification_service().mark_all_read(user_id=user.id)
     return jsonify({"updated_count": updated_count})
+
+
+@blueprint.delete("/<notification_id>")
+@require_auth()
+def delete_notification(notification_id: str):
+    user = get_current_user()
+    notification = _notification_service().delete(
+        user_id=user.id, notification_id=notification_id
+    )
+    if notification is None:
+        raise ApiError(
+            "Notification not found.", code="not_found", status_code=HTTPStatus.NOT_FOUND
+        )
+    return jsonify({"deleted": True, "notification": notification}), HTTPStatus.OK

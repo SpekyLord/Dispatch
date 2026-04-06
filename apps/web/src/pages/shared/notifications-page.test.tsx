@@ -42,6 +42,91 @@ describe("NotificationsPage", () => {
     vi.restoreAllMocks();
   });
 
+  it("deletes notifications from the list and backend", async () => {
+    let notifications = [
+      {
+        id: "notif-1",
+        type: "report_update",
+        title: "Team dispatched",
+        message: "Responders are now en route.",
+        is_read: false,
+        reference_id: "report-123",
+        reference_type: "report",
+        created_at: "2026-03-29T03:00:00Z",
+      },
+      {
+        id: "notif-2",
+        type: "announcement",
+        title: "New advisory posted",
+        message: "A fresh department advisory is now available.",
+        is_read: true,
+        created_at: "2026-03-29T03:15:00Z",
+      },
+    ];
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url.endsWith("/api/notifications") && method === "GET") {
+        return new Response(
+          JSON.stringify({
+            notifications,
+            unread_count: notifications.filter(
+              (notification) => !notification.is_read,
+            ).length,
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (url.endsWith("/api/notifications/notif-1") && method === "DELETE") {
+        const deleted = notifications.find(
+          (notification) => notification.id === "notif-1",
+        );
+        notifications = notifications.filter(
+          (notification) => notification.id !== "notif-1",
+        );
+        return new Response(
+          JSON.stringify({ deleted: true, notification: deleted }),
+          { status: 200 },
+        );
+      }
+
+      throw new Error(`Unhandled request: ${method} ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <NotificationsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Team dispatched")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete notification Team dispatched",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Are you sure you want to delete this notification?"),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete notification" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Team dispatched")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("New advisory posted")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 notification")).toBeInTheDocument();
+  });
+
   it("marks notifications read and refreshes on realtime updates", async () => {
     let notifications = [
       {
@@ -111,7 +196,9 @@ describe("NotificationsPage", () => {
       },
     ];
 
-    realtimeMock.subscriptions[0]?.onChange({});
+    realtimeMock.subscriptions
+      .find((subscription) => subscription.table === "notifications")
+      ?.onChange({});
 
     await waitFor(() => {
       expect(screen.getByText("New advisory posted")).toBeInTheDocument();

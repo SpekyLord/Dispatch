@@ -459,7 +459,7 @@ function IncidentBoardCard({
 
   return (
     <Link className="block" to={`/department/reports/${report.id}`}>
-      <Card className="cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]">
+      <Card className="cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]">
         <article className="relative flex min-h-[196px] flex-col overflow-hidden md:min-h-[154px]">
           <IncidentBoardMapPreview isDarkMode={isDarkMode} report={report} />
 

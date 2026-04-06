@@ -21,6 +21,8 @@ type Notification = {
   reference_id?: string;
   reference_type?: string;
   created_at: string;
+  sender_name?: string;
+  sender_avatar_url?: string | null;
 };
 
 // Icon per notification type
@@ -69,7 +71,7 @@ const notificationTypeStyles: Record<
 };
 
 const notificationCardShadowClassName =
-  "shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026]";
+  "shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
 const notificationCardHoverShadowClassName =
   "hover:shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
 const filterTabBaseClassName =
@@ -141,11 +143,13 @@ function formatTimelineTimestamp(value: string) {
 function NotificationBoardCard({
   notification,
   onOpen,
-  target,
+  onDelete,
+  isDeleting,
 }: {
   notification: Notification;
   onOpen: (notification: Notification) => void;
-  target: string | null;
+  onDelete: (notification: Notification) => void;
+  isDeleting: boolean;
 }) {
   const typeStyle = notificationTypeStyles[notification.type] ?? {
     pillClassName: "bg-[#f1e4da] text-[#85563f]",
@@ -158,83 +162,105 @@ function NotificationBoardCard({
   const compactTitle = notification.title?.trim() || typeLabel;
   const compactMessage =
     notification.message?.trim() || "Tap to review this notification.";
+  const senderInitial =
+    notification.sender_name?.trim().charAt(0).toUpperCase() || null;
   const compactContextLabel =
     notification.reference_type === "report" && notification.reference_id
       ? `Report #${String(notification.reference_id).slice(0, 8)}`
       : notification.reference_type
         ? labelize(notification.reference_type)
         : "Dispatch";
+  const leftEdgeClassName = notification.is_read
+    ? "before:bg-[linear-gradient(180deg,#e9d7cc,#d9c2b5)]"
+    : "before:bg-[linear-gradient(180deg,#d97757,#b35e38)]";
 
   return (
-    <button
-      className="block w-full text-left"
+    <Card
+      className={`relative cursor-pointer overflow-hidden rounded-[22px] border-[#ead9cc] bg-[#fff8f3] p-0 before:absolute before:inset-y-0 before:left-0 before:w-[10px] before:content-[''] ${leftEdgeClassName} ${notificationCardShadowClassName} transition-all duration-200 hover:-translate-y-0.5 ${notificationCardHoverShadowClassName}`}
       onClick={() => void onOpen(notification)}
-      type="button"
     >
-      <Card
-        className={`cursor-pointer overflow-hidden border-[#ead9cc] bg-[#fff8f3] p-0 ${notificationCardShadowClassName} transition-all duration-200 hover:-translate-y-0.5 ${notificationCardHoverShadowClassName}`}
+      <article
+        className="relative flex min-h-[90px] items-center overflow-hidden pl-6 pr-4 py-3 md:min-h-[86px] md:pl-7 md:pr-5"
+        aria-label={`Open notification ${compactTitle}`}
       >
-        <article className="relative flex min-h-[98px] items-center overflow-hidden px-4 py-3 md:min-h-[88px] md:px-5">
-          {!notification.is_read ? (
-            <span className="absolute inset-y-0 left-0 w-1.5 bg-[linear-gradient(180deg,#d97757,#b35e38)]" />
-          ) : null}
-
-          <div className="relative z-[3] flex min-w-0 items-center gap-3 pl-1">
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-[0_10px_22px_-18px_rgba(166,92,58,0.55)] ${typeStyle.iconSurfaceClassName} ${typeStyle.iconClassName}`}
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                {typeIcons[notification.type] ?? "notifications"}
-              </span>
+        <div className="relative z-[2] flex w-full min-w-0 items-center">
+          <div className="relative z-[3] flex min-w-0 flex-1 items-center gap-3 pr-4 md:pr-6">
+            <div className="relative shrink-0">
+              {!notification.is_read ? (
+                <span className="absolute -left-2 top-1/2 z-[2] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-[#d97757] shadow-[0_0_0_3px_rgba(255,240,232,0.95)]" />
+              ) : null}
+              <div
+                className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-full shadow-[0_10px_22px_-18px_rgba(166,92,58,0.55)] ${typeStyle.iconSurfaceClassName} ${typeStyle.iconClassName}`}
+              >
+                {notification.sender_avatar_url ? (
+                  <img
+                    alt={notification.sender_name ? `${notification.sender_name} avatar` : "Notification sender avatar"}
+                    className="h-full w-full object-cover"
+                    src={notification.sender_avatar_url}
+                  />
+                ) : senderInitial ? (
+                  <span className="text-[13px] font-semibold text-[#8f5137]">
+                    {senderInitial}
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined text-[16px]">
+                    {typeIcons[notification.type] ?? "notifications"}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#a56a50]">
-                <span
-                  className={`rounded-full px-2 py-1 ${typeStyle.pillClassName}`}
-                >
-                  {typeLabel}
-                </span>
-                <span className="rounded-full border border-[#e8d8cb] bg-[#fbf4ee] px-2 py-1 text-[#9f7b65]">
-                  {compactContextLabel}
-                </span>
-                {!notification.is_read ? (
-                  <span className="rounded-full border border-[#e9cdb9] bg-[#fff3e6] px-2 py-1 text-[#b1683d]">
-                    New
-                  </span>
-                ) : null}
-                <span className="rounded-full border border-[#ead7c7] bg-white/75 px-2 py-1 text-[#9f6a4e] md:hidden">
-                  {formatInlineTimestamp(notification.created_at)}
-                </span>
-              </div>
-
-              <div className="mt-2 flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2">
+              <div className="min-w-0">
                 <h3 className="truncate text-[15px] font-semibold leading-none text-[#4d2b1e]">
                   {compactTitle}
                 </h3>
-                <span className="hidden text-[#c9a893] md:inline">-</span>
-                <p className="truncate text-[12.5px] leading-4 text-[#705d52]">
+                <p className="mt-1 truncate text-[12.5px] leading-5 text-[#705d52]">
                   {compactMessage}
                 </p>
               </div>
+
             </div>
 
-            <div className="ml-2 flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.18em] text-[#a56a50]">
+              <span
+                className={`rounded-full px-2 py-1 ${typeStyle.pillClassName}`}
+              >
+                {typeLabel}
+              </span>
+              <span className="rounded-full border border-[#e8d8cb] bg-[#fbf4ee] px-2 py-1 text-[#9f7b65]">
+                {compactContextLabel}
+              </span>
               {!notification.is_read ? (
-                <span className="h-2.5 w-2.5 rounded-full bg-[#d97757] shadow-[0_0_0_4px_rgba(255,219,208,0.65)]" />
-              ) : null}
-              {target ? (
-                <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#ead7c7] bg-[#fffaf6] text-[#b35e38] md:inline-flex">
-                  <span className="material-symbols-outlined text-[16px]">
-                    arrow_outward
-                  </span>
+                <span className="rounded-full border border-[#e9cdb9] bg-[#fff3e6] px-2 py-1 text-[#b1683d]">
+                  New
                 </span>
               ) : null}
+              <span className="rounded-full border border-[#ead7c7] bg-white/75 px-2 py-1 text-[#9f6a4e] md:hidden">
+                {formatInlineTimestamp(notification.created_at)}
+              </span>
             </div>
           </div>
-        </article>
-      </Card>
-    </button>
+          <div className="relative z-[3] ml-2 flex shrink-0 items-center self-center">
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4d0c3] bg-white/85 text-[#9c684f] transition hover:border-[#cf9a80] hover:bg-[#fff1e8] hover:text-[#8f5137] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(notification);
+              }}
+              aria-label={`Delete notification ${compactTitle}`}
+              disabled={isDeleting}
+              title="Delete notification"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                delete
+              </span>
+            </button>
+          </div>
+        </div>
+      </article>
+    </Card>
   );
 }
 
@@ -280,6 +306,11 @@ export function NotificationsPage() {
       "all",
     );
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteConfirmNotification, setDeleteConfirmNotification] =
+    useState<Notification | null>(null);
+  const [deletingNotificationId, setDeletingNotificationId] = useState<
+    string | null
+  >(null);
   const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
     if (typeof window === "undefined") {
       return true;
@@ -454,6 +485,35 @@ export function NotificationsPage() {
     }
   }
 
+  async function deleteNotification() {
+    if (!deleteConfirmNotification) {
+      return;
+    }
+
+    const prev = notifications;
+    const prevCount = unreadCount;
+    setDeletingNotificationId(deleteConfirmNotification.id);
+    setNotifications((current) =>
+      current.filter((item) => item.id !== deleteConfirmNotification.id),
+    );
+    if (!deleteConfirmNotification.is_read) {
+      setUnreadCount((count) => Math.max(0, count - 1));
+    }
+
+    try {
+      await apiRequest(`/api/notifications/${deleteConfirmNotification.id}`, {
+        method: "DELETE",
+      });
+      setDeleteConfirmNotification(null);
+      void fetchNotifications(false);
+    } catch {
+      setNotifications(prev);
+      setUnreadCount(prevCount);
+    } finally {
+      setDeletingNotificationId(null);
+    }
+  }
+
   return (
     <AppShell subtitle="Stay informed" title="Notifications">
       {userRole === "department" ? (
@@ -588,7 +648,8 @@ export function NotificationsPage() {
               key={notification.id}
               notification={notification}
               onOpen={handleNotificationClick}
-              target={notificationTargets[notification.id]}
+              onDelete={setDeleteConfirmNotification}
+              isDeleting={deletingNotificationId === notification.id}
             />
           ))}
         </div>
@@ -601,7 +662,8 @@ export function NotificationsPage() {
                   key={notification.id}
                   notification={notification}
                   onOpen={handleNotificationClick}
-                  target={notificationTargets[notification.id]}
+                  onDelete={setDeleteConfirmNotification}
+                  isDeleting={deletingNotificationId === notification.id}
                 />
               ))}
             </div>
@@ -617,6 +679,43 @@ export function NotificationsPage() {
               ))}
             </div>
           </aside>
+        </div>
+      )}
+
+      {deleteConfirmNotification && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-on-surface/40 p-4 backdrop-blur-md md:p-8">
+          <div className="relative z-[1201] w-full max-w-md rounded-[28px] border border-[#efd8d0] bg-[#fff8f3] p-6 shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#a14b2f]">
+              Delete notification
+            </p>
+            <h3 className="mt-3 text-2xl text-on-surface">
+              Are you sure you want to delete this notification?
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+              This will remove the notification from your list and delete the
+              linked notification record from the database.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="rounded-full border border-[#ecd8cf] bg-[#f7efe7] px-5 py-3 text-sm font-semibold text-[#6f625b] transition-colors hover:bg-[#f2e7de] disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={deletingNotificationId === deleteConfirmNotification.id}
+                onClick={() => setDeleteConfirmNotification(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-full bg-[#a14b2f] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#89391e] disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={deletingNotificationId === deleteConfirmNotification.id}
+                onClick={() => void deleteNotification()}
+                type="button"
+              >
+                {deletingNotificationId === deleteConfirmNotification.id
+                  ? "Deleting..."
+                  : "Delete notification"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>

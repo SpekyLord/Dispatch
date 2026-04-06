@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 // App config can be injected via --dart-define / --dart-define-from-file.
 // Android emulator defaults to 10.0.2.2 (the emulator's host alias); other
@@ -33,17 +36,77 @@ class AppConfig {
     'MOBILE_SUPABASE_URL',
   );
 
-  static final current = AppConfig(
-    apiBaseUrl: resolveApiBaseUrl(
-      isWeb: kIsWeb,
-      isAndroid: defaultTargetPlatform == TargetPlatform.android,
-      configuredApiBaseUrl: _configuredApiBaseUrl,
-      configuredWebApiBaseUrl: _configuredWebApiBaseUrl,
-      currentUri: Uri.base,
-    ),
-    supabaseAnonKey: _configuredSupabaseAnonKey,
-    supabaseUrl: _configuredSupabaseUrl,
-  );
+  static AppConfig? _current;
+
+  static AppConfig get current => _current ??= _build();
+
+  static Future<void> initialize() async {
+    final bundledConfig = await _loadBundledConfig();
+    _current = _build(bundledConfig);
+  }
+
+  static AppConfig _build([Map<String, String>? bundledConfig]) {
+    final resolvedApiBaseUrl = _firstNonEmpty(
+      _configuredApiBaseUrl,
+      bundledConfig?['MOBILE_API_BASE_URL'],
+    );
+    final resolvedWebApiBaseUrl = _firstNonEmpty(
+      _configuredWebApiBaseUrl,
+      bundledConfig?['MOBILE_WEB_API_BASE_URL'],
+    );
+    final resolvedSupabaseUrl = _firstNonEmpty(
+      _configuredSupabaseUrl,
+      bundledConfig?['MOBILE_SUPABASE_URL'],
+    );
+    final resolvedSupabaseAnonKey = _firstNonEmpty(
+      _configuredSupabaseAnonKey,
+      bundledConfig?['MOBILE_SUPABASE_ANON_KEY'],
+    );
+
+    return AppConfig(
+      apiBaseUrl: resolveApiBaseUrl(
+        isWeb: kIsWeb,
+        isAndroid: defaultTargetPlatform == TargetPlatform.android,
+        configuredApiBaseUrl: resolvedApiBaseUrl,
+        configuredWebApiBaseUrl: resolvedWebApiBaseUrl,
+        currentUri: Uri.base,
+      ),
+      supabaseAnonKey: resolvedSupabaseAnonKey,
+      supabaseUrl: resolvedSupabaseUrl,
+    );
+  }
+
+  static Future<Map<String, String>?> _loadBundledConfig() async {
+    try {
+      final rawConfig = await rootBundle.loadString(
+        'assets/config/app_config.json',
+      );
+      final decoded = jsonDecode(rawConfig);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      return decoded.map(
+        (key, value) => MapEntry(key, value?.toString() ?? ''),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+String _firstNonEmpty(String primary, String? secondary) {
+  final trimmedPrimary = primary.trim();
+  if (trimmedPrimary.isNotEmpty) {
+    return trimmedPrimary;
+  }
+
+  final trimmedSecondary = secondary?.trim() ?? '';
+  if (trimmedSecondary.isNotEmpty) {
+    return trimmedSecondary;
+  }
+
+  return '';
 }
 
 String resolveApiBaseUrl({

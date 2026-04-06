@@ -161,7 +161,7 @@ const basePopupPanelShadowClassName =
 const baseRaisedFeedCardClassName =
   "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
 const publishedFeedCardShadowClassName =
-  "shadow-[0_8px_18px_-12px_rgba(120,78,58,0.42),0_5px_15px_0_#00000026]";
+  "shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
 const basePublishLaneEffectClassName =
   "dispatch-news-feed-publish-lane space-y-5 overflow-visible rounded-[34px] bg-[#f7efe7] p-3 shadow-[rgba(50,50,93,0.18)_0px_30px_50px_-12px_inset,rgba(0,0,0,0.16)_0px_18px_26px_-18px_inset] md:mr-2 xl:mr-4";
 const basePublishedTabHighlightClassName =
@@ -429,14 +429,14 @@ function NewsFeedCaughtUpFooter({
           End of feed
         </span>
         <h3 className="mt-4 font-headline text-[2rem] leading-[1.02] sm:text-[2.25rem]">
-          You&apos;ve catched up with the news chu2.
+          You are up to date with the latest published updates.
         </h3>
         <p
           className={`mt-3 max-w-[26rem] text-sm leading-relaxed ${isDarkMode ? "text-[#c7b8ae]" : "text-[#7f6a60]"}`}
         >
           {isEmpty
-            ? "No published posts are visible yet, but new bulletins will land here as soon as teams publish them."
-            : "That was the latest published bulletin for now. Check back again when new public updates are posted."}
+            ? "There are no published posts available at this time. Newly issued bulletins will appear here once they are released."
+            : "You have reached the most recent published bulletin. Please check back later for additional public updates."}
         </p>
         <div
           className="dispatch-hourglass-background mt-5"
@@ -527,8 +527,8 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
     ? "shadow-[rgba(0,0,0,0.55)_0px_16px_40px,rgba(255,255,255,0.04)_0px_1px_0px_inset]"
     : basePopupPanelShadowClassName;
   const raisedFeedCardClassName = isDarkMode
-    ? "shadow-[14px_14px_28px_rgba(0,0,0,0.34),-10px_-10px_22px_rgba(255,255,255,0.02)]"
-    : baseRaisedFeedCardClassName;
+    ? "shadow-[0_10px_22px_-12px_rgba(0,0,0,0.48),0_5px_5px_0_rgba(0,0,0,0.28)]"
+    : "shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
   const publishLaneEffectClassName = isDarkMode
     ? "space-y-5 overflow-visible rounded-[34px] bg-[#1d1b1a] p-3 shadow-[rgba(255,255,255,0.04)_0px_1px_0px_inset,rgba(0,0,0,0.48)_0px_24px_48px_-18px_inset] md:mr-2 xl:mr-4"
     : basePublishLaneEffectClassName;
@@ -2255,7 +2255,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
               className={`min-w-0 ${departmentLayout ? "" : "xl:col-span-4"}`}
             >
               <div
-                className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:max-h-[calc(100vh-8rem)] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : ""}`}
+                className={`space-y-6 ${departmentLayout ? "md:sticky md:top-28 md:self-start" : ""}`}
               >
                 {departmentLayout && (
                   <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-4 text-white shadow-xl">
@@ -2269,50 +2269,6 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                         placeholder={copy.searchPlaceholder}
                         readOnly
                       />
-                    </div>
-                  </section>
-                )}
-                {departmentLayout && (
-                  <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
-                    <div className="flex flex-col items-center gap-4 text-center">
-                      <div className="mx-auto max-w-[17rem]">
-                        <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
-                          {copy.badge}
-                        </span>
-                        <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">
-                          ResilienceHub Temporary News Desk
-                        </h2>
-                        <p className="mt-3 text-sm leading-relaxed text-white/80">
-                          {copy.intro}
-                        </p>
-                      </div>
-
-                      <div className="grid w-full max-w-[17rem] gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                            Active advisories
-                          </p>
-                          <p className="mt-2 font-headline text-4xl">
-                            {loading
-                              ? "..."
-                              : String(readinessCount).padStart(2, "0")}
-                          </p>
-                          <p className="mt-1 text-xs text-white/70">
-                            Live alerts, warnings, and situational reports
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                            Coordination mode
-                          </p>
-                          <p className="mt-2 font-headline text-2xl">
-                            Steady Watch
-                          </p>
-                          <p className="mt-1 text-xs text-white/70">
-                            Preparedness bulletin enabled
-                          </p>
-                        </div>
-                      </div>
                     </div>
                   </section>
                 )}
@@ -2424,46 +2380,6 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   )}
                 </Card>
 
-                <Card className={warmPanelClassName}>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    Training Hub
-                  </p>
-                  <h3 className="mt-3 text-2xl text-on-surface">
-                    NIMS Webinar Registration
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-                    Register for Friday&apos;s preparedness webinar to keep this
-                    temporary News feed aligned with the project&apos;s response
-                    coordination goals.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="mt-5 w-full"
-                  >
-                    Register Now
-                  </Button>
-                </Card>
-
-                <Card className={warmPanelClassName}>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                    Quick Access
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {footerLinks.map((link) => (
-                      <span
-                        key={link}
-                        className={`rounded-full px-3 py-2 text-xs ${warmTabClassName}`}
-                      >
-                        {link}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="mt-4 text-xs text-outline">
-                    Temporary News feed page added from the supplied HTML
-                    layout.
-                  </p>
-                </Card>
               </div>
             </div>
           </div>

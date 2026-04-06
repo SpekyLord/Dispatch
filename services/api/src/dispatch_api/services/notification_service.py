@@ -22,13 +22,14 @@ class NotificationService:
             },
             use_service_role=True,
         )
-        return sorted(
+        notifications = sorted(
             rows,
             key=lambda row: (
                 row.get("is_read", False),
                 row.get("created_at") or "",
             ),
         )
+        return [self._enrich_sender_context(notification) for notification in notifications]
 
     def mark_read(self, *, user_id: str, notification_id: str) -> dict[str, Any] | None:
         rows = self.client.db_query(
@@ -57,6 +58,14 @@ class NotificationService:
             if updated is not None:
                 updated_count += 1
         return updated_count
+
+    def delete(self, *, user_id: str, notification_id: str) -> dict[str, Any] | None:
+        rows = self.client.db_delete(
+            "notifications",
+            params={"id": f"eq.{notification_id}", "user_id": f"eq.{user_id}"},
+            use_service_role=True,
+        )
+        return rows[0] if rows else None
 
     def create_notification(
         self,
@@ -195,3 +204,45 @@ class NotificationService:
 
     def _labelize(self, value: str) -> str:
         return value.replace("_", " ").strip().title()
+
+    def _enrich_sender_context(self, notification: dict[str, Any]) -> dict[str, Any]:
+        enriched = dict(notification)
+        if enriched.get("reference_type") != "report" or not enriched.get("reference_id"):
+            return enriched
+
+        try:
+            report_rows = self.client.db_query(
+                "incident_reports",
+                params={
+                    "select": "id,reporter_id",
+                    "id": f"eq.{enriched['reference_id']}",
+                },
+                use_service_role=True,
+            )
+            if not report_rows:
+                return enriched
+
+            reporter_id = report_rows[0].get("reporter_id")
+            if not reporter_id:
+                return enriched
+
+            reporter_rows = self.client.db_query(
+                "users",
+                params={
+                    "select": "id,full_name,email,avatar_url",
+                    "id": f"eq.{reporter_id}",
+                },
+                use_service_role=True,
+            )
+            if not reporter_rows:
+                return enriched
+
+            reporter = reporter_rows[0]
+            enriched["sender_name"] = (
+                reporter.get("full_name") or reporter.get("email") or "Citizen Reporter"
+            )
+            enriched["sender_avatar_url"] = reporter.get("avatar_url")
+        except Exception:
+            return enriched
+
+        return enriched

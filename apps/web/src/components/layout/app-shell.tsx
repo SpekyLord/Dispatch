@@ -824,6 +824,7 @@ export function AppShell({
   const accessToken = useSessionStore((state) => state.accessToken);
   const department = useSessionStore((state) => state.department);
   const { locale, setLocale, t } = useLocale();
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -885,6 +886,9 @@ export function AppShell({
     department?.profile_photo ||
     user?.avatar_url;
   const profileInitial = (profileName.trim().charAt(0) || "D").toUpperCase();
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !notification.is_read,
+  ).length;
 
   function openSignOutConfirm() {
     if (!isSigningOut) {
@@ -897,6 +901,40 @@ export function AppShell({
       setIsSignOutConfirmOpen(false);
     }
   }
+
+  useEffect(() => {
+    if (!user || !accessToken) {
+      setNotifications([]);
+      return;
+    }
+
+    const fetchNotifications = () =>
+      fetchShellJson<{ notifications?: NotificationRecord[] }>("/api/notifications")
+        .then((response) => {
+          setNotifications(
+            Array.isArray(response.notifications) ? response.notifications : [],
+          );
+        })
+        .catch(() => {
+          setNotifications([]);
+        });
+
+    queueMicrotask(() => {
+      void fetchNotifications();
+    });
+
+    const subscription = subscribeToTable(
+      "notifications",
+      () => {
+        void fetchNotifications();
+      },
+      { accessToken },
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [accessToken, user]);
 
   async function handleSignOut() {
     if (isSigningOut) {
@@ -1028,8 +1066,16 @@ export function AppShell({
                       title={isSidebarCollapsed ? item.label : undefined}
                       to={item.to}
                     >
-                      <span className="material-symbols-outlined text-[26px]">
-                        {item.icon}
+                      <span className="relative">
+                        {item.to === "/notifications" &&
+                        unreadNotificationCount > 0 ? (
+                          <span className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#d93025] px-1 text-[8px] font-bold leading-none text-white shadow-[0_0_0_2px_rgba(255,253,250,0.96)]">
+                            {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                          </span>
+                        ) : null}
+                        <span className="material-symbols-outlined text-[26px]">
+                          {item.icon}
+                        </span>
                       </span>
                       {!isSidebarCollapsed ? item.label : null}
                     </Link>
@@ -1060,8 +1106,16 @@ export function AppShell({
                       title={isSidebarCollapsed ? item.label : undefined}
                       to={item.to}
                     >
-                      <span className="material-symbols-outlined text-[26px]">
-                        {item.icon}
+                      <span className="relative">
+                        {item.to === "/notifications" &&
+                        unreadNotificationCount > 0 ? (
+                          <span className="absolute -right-1 -top-1 flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#d93025] px-1 text-[8px] font-bold leading-none text-white shadow-[0_0_0_2px_rgba(255,253,250,0.96)]">
+                            {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                          </span>
+                        ) : null}
+                        <span className="material-symbols-outlined text-[26px]">
+                          {item.icon}
+                        </span>
                       </span>
                       {!isSidebarCollapsed ? item.label : null}
                     </NavLink>
@@ -1240,7 +1294,7 @@ export function AppShell({
 
                 <Link
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full border transition-colors",
+                    "relative flex h-9 w-9 items-center justify-center rounded-full border transition-colors",
                     isDarkMode
                       ? "border-white/10 text-white/72 hover:bg-white/8 hover:text-white"
                       : "border-[#ead9cc] text-[#8d705f] hover:bg-[#f7ede5] hover:text-[#a86446]",
@@ -1248,6 +1302,11 @@ export function AppShell({
                   title={t("nav.notifications")}
                   to="/notifications"
                 >
+                  {unreadNotificationCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#d93025] px-1 text-[9px] font-bold leading-none text-white shadow-[0_0_0_2px_rgba(255,253,250,0.96)]">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  ) : null}
                   <span className="material-symbols-outlined text-[18px]">
                     notifications
                   </span>
@@ -1511,8 +1570,15 @@ export function AppShell({
                 )}
                 to={item.to}
               >
-                <span className="material-symbols-outlined text-[20px]">
-                  {item.icon}
+                <span className="relative">
+                  {item.to === "/notifications" && unreadNotificationCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#d93025] px-1 text-[8px] font-bold leading-none text-white shadow-[0_0_0_2px_rgba(255,253,250,0.96)]">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  ) : null}
+                  <span className="material-symbols-outlined text-[20px]">
+                    {item.icon}
+                  </span>
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-tighter">
                   {item.label}
@@ -1533,8 +1599,15 @@ export function AppShell({
                 }
                 to={item.to}
               >
-                <span className="material-symbols-outlined text-[20px]">
-                  {item.icon}
+                <span className="relative">
+                  {item.to === "/notifications" && unreadNotificationCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#d93025] px-1 text-[8px] font-bold leading-none text-white shadow-[0_0_0_2px_rgba(255,253,250,0.96)]">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  ) : null}
+                  <span className="material-symbols-outlined text-[20px]">
+                    {item.icon}
+                  </span>
                 </span>
                 <span className="text-[10px] font-bold uppercase tracking-tighter">
                   {item.label}

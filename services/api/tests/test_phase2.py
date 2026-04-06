@@ -1018,6 +1018,45 @@ def test_notification_endpoints_list_and_mark_items_read(settings):
     assert mark_all_response.json["updated_count"] == 1
 
 
+def test_notification_endpoint_deletes_owned_item(settings):
+    fake = FakeSupabaseClient(
+        user=FakeUser(id="citizen-1", email="citizen@example.com", role="citizen"),
+        db_rows={
+            "notifications": [
+                {
+                    "id": "notif-1",
+                    "user_id": "citizen-1",
+                    "title": "One",
+                    "message": "One",
+                    "type": "report_update",
+                    "is_read": False,
+                    "created_at": iso_now_minus(10),
+                },
+                {
+                    "id": "notif-2",
+                    "user_id": "citizen-1",
+                    "title": "Two",
+                    "message": "Two",
+                    "type": "announcement",
+                    "is_read": False,
+                    "created_at": iso_now_minus(5),
+                },
+            ]
+        },
+    )
+    app = make_app(settings, fake)
+
+    with app.test_client() as client:
+        delete_response = client.delete("/api/notifications/notif-1", headers=auth_header())
+        list_response = client.get("/api/notifications", headers=auth_header())
+
+    assert delete_response.status_code == 200
+    assert delete_response.json["deleted"] is True
+    assert delete_response.json["notification"]["id"] == "notif-1"
+    assert [notification["id"] for notification in fake._db["notifications"]] == ["notif-2"]
+    assert [notification["id"] for notification in list_response.json["notifications"]] == ["notif-2"]
+
+
 def test_department_response_roster_shows_accept_decline_and_pending_states(settings):
     fake = FakeSupabaseClient(
         user=FakeUser(id="dept-fire-user-1", email="one@example.com", role="department"),

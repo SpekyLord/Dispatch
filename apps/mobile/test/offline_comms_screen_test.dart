@@ -45,7 +45,10 @@ class FakeOfflineCommsAuthService extends AuthService {
   }
 
   @override
-  Future<List<dynamic>> getReports() async => reports;
+  Future<List<dynamic>> getReports({
+    String? status,
+    String? category,
+  }) async => reports;
 }
 
 class InMemoryMeshInboxStorage extends MeshInboxStorage {

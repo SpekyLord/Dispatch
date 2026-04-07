@@ -423,6 +423,7 @@ class MeshTransportService extends ChangeNotifier {
       StreamController<MeshPacket>.broadcast();
   final Map<String, MeshPacket> _relayBacklog = {};
   final Map<String, Set<String>> _relayRecipientsByMessage = {};
+  final Map<String, List<MeshPacket>> _pendingRoomPacketsByRoomId = {};
   Set<String> _activeEphemeralRoomIds = <String>{};
   DateTime? _lastSyncTime;
   bool _isDiscovering = false;
@@ -491,10 +492,15 @@ class MeshTransportService extends ChangeNotifier {
   }
 
   void setActiveEphemeralRoomIds(Iterable<String> roomIds) {
-    _activeEphemeralRoomIds = roomIds
-        .map((roomId) => roomId.trim())
+    final normalizedRoomIds = roomIds
+        .map(_normalizeRoomId)
         .where((roomId) => roomId.isNotEmpty)
         .toSet();
+    final becameActive = normalizedRoomIds.difference(_activeEphemeralRoomIds);
+    _activeEphemeralRoomIds = normalizedRoomIds;
+    for (final roomId in becameActive) {
+      _releasePendingRoomPacketsForRoom(roomId);
+    }
     notifyListeners();
   }
 
@@ -768,6 +774,8 @@ class MeshTransportService extends ChangeNotifier {
     }
 
     final shouldRecordLocally = _shouldRecordPacketLocally(packet);
+    final shouldHoldForRoomMembership =
+        !shouldRecordLocally && _shouldHoldRoomPacketForMembershipSync(packet);
 
     _seenMessageIds.add(packet.messageId);
     packet.hopCount++;
@@ -781,6 +789,8 @@ class MeshTransportService extends ChangeNotifier {
     if (shouldRecordLocally) {
       _recordPacketInInbox(packet, authoredLocally: false);
       _packetController.add(packet);
+    } else if (shouldHoldForRoomMembership) {
+      _holdRoomPacketForMembershipSync(packet);
     }
     if (transport != null && transport.isNotEmpty) {
       _activeRelayTransport = transport;
@@ -1200,9 +1210,14 @@ class MeshTransportService extends ChangeNotifier {
   }
 
   void clearRoom(String roomId) {
+    final normalizedRoomId = _normalizeRoomId(roomId);
     final originalLength = _inbox.length;
-    _inbox.removeWhere((item) => item.roomId == roomId);
-    if (_inbox.length != originalLength) {
+    _inbox.removeWhere(
+      (item) => _normalizeRoomId(item.roomId ?? '') == normalizedRoomId,
+    );
+    final clearedPending =
+        _pendingRoomPacketsByRoomId.remove(normalizedRoomId) != null;
+    if (_inbox.length != originalLength || clearedPending) {
       unawaited(_persistInbox());
       notifyListeners();
     }
@@ -1550,12 +1565,46 @@ class MeshTransportService extends ChangeNotifier {
   }
 
   bool _isPacketForActiveRoom(MeshPacket packet) {
-    final roomId = packet.payload['roomId'] as String?;
-    if (roomId == null || roomId.isEmpty) {
+    final roomId = _normalizeRoomId(packet.payload['roomId'] as String? ?? '');
+    if (roomId.isEmpty) {
       return false;
     }
     return _activeEphemeralRoomIds.contains(roomId);
   }
+
+  bool _shouldHoldRoomPacketForMembershipSync(MeshPacket packet) {
+    if (!_isRoomMessage(packet)) {
+      return false;
+    }
+    final roomId = _normalizeRoomId(packet.payload['roomId'] as String? ?? '');
+    return roomId.isNotEmpty;
+  }
+
+  void _holdRoomPacketForMembershipSync(MeshPacket packet) {
+    final roomId = _normalizeRoomId(packet.payload['roomId'] as String? ?? '');
+    if (roomId.isEmpty) {
+      return;
+    }
+    _pendingRoomPacketsByRoomId.putIfAbsent(roomId, () => <MeshPacket>[]).add(packet);
+  }
+
+  void _releasePendingRoomPacketsForRoom(String roomId) {
+    final normalizedRoomId = _normalizeRoomId(roomId);
+    if (normalizedRoomId.isEmpty) {
+      return;
+    }
+    final pendingPackets = _pendingRoomPacketsByRoomId.remove(normalizedRoomId);
+    if (pendingPackets == null || pendingPackets.isEmpty) {
+      return;
+    }
+    pendingPackets.sort((left, right) => left.timestamp.compareTo(right.timestamp));
+    for (final packet in pendingPackets) {
+      _recordPacketInInbox(packet, authoredLocally: false);
+      _packetController.add(packet);
+    }
+  }
+
+  String _normalizeRoomId(String roomId) => roomId.trim();
 
   bool _shouldRecordPacketLocally(MeshPacket packet) {
     if (_isDirectMessage(packet)) {

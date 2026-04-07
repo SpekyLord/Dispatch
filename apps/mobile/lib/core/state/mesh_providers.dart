@@ -1,3 +1,4 @@
+import 'package:dispatch_mobile/core/services/experimental_location_fusion_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
@@ -56,6 +57,15 @@ final sarModeControllerProvider =
       );
     });
 
+final experimentalLocationFusionServiceProvider =
+    Provider<ExperimentalLocationFusionService>((ref) {
+      final service = ExperimentalLocationFusionService(
+        locationService: ref.read(locationServiceProvider),
+      );
+      ref.onDispose(service.dispose);
+      return service;
+    });
+
 final citizenLocationTrailControllerProvider =
     StateNotifierProvider<
       CitizenLocationTrailController,
@@ -63,6 +73,7 @@ final citizenLocationTrailControllerProvider =
     >((ref) {
       return CitizenLocationTrailController(
         locationService: ref.read(locationServiceProvider),
+        fusionService: ref.read(experimentalLocationFusionServiceProvider),
       );
     });
 

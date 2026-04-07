@@ -1767,19 +1767,9 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
           ),
 
           // ── Floating Action Overlay (right side) ────────────────────
-          if (widget.enableSelfTracking)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 76,
-              left: 16,
-              child: _GpsStatusBanner(
-                isDark: isDark,
-                label: gpsStatusLabel,
-                state: selfTrailState,
-              ),
-            ),
           Positioned(
-            right: 24,
-            top: MediaQuery.of(context).padding.top + 128,
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 90,
             child: _FloatingActions(
               isDark: isDark,
               onCompass: () => _openCompass(null),
@@ -2345,98 +2335,77 @@ class _MapAppBar extends StatelessWidget {
 
     return ClipRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          padding: EdgeInsets.fromLTRB(18, topPadding + 10, 18, 14),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 10, 16, 12),
           decoration: BoxDecoration(
             color: bg,
             border: Border(
               bottom: BorderSide(
                 color: (isDark ? dc.darkBorder : const Color(0xFFEBDCCD))
-                    .withValues(alpha: 0.45),
+                    .withValues(alpha: 0.35),
               ),
             ),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Brand icon
               Container(
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color:
-                      (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
-                          .withValues(alpha: 0.96),
-                  borderRadius: BorderRadius.circular(12),
+                  color: (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
+                      .withValues(alpha: 0.9),
+                  shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.location_on, color: iconColor, size: 18),
+                child: Icon(Icons.location_on_rounded, color: iconColor, size: 18),
               ),
               const SizedBox(width: 10),
+              // Title + subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       'Dispatch',
                       style: TextStyle(
                         fontFamily: 'Georgia',
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: iconColor,
+                        letterSpacing: -0.2,
+                        color: titleColor,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 1),
                     Text(
                       'OPERATIONAL AWARENESS',
                       style: TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.7,
-                        color: subtitleColor.withValues(alpha: 0.78),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Mesh Network',
-                      style: TextStyle(
-                        fontFamily: 'Georgia',
-                        fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: -0.4,
-                        color: titleColor,
+                        letterSpacing: 1.5,
+                        color: subtitleColor.withValues(alpha: 0.65),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Column(
+              // GPS badge + sync
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onSync,
-                      borderRadius: BorderRadius.circular(999),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Icon(Icons.sync, size: 22, color: iconColor),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                     decoration: BoxDecoration(
-                      color:
-                          (isDark
-                                  ? dc.darkSurfaceContainer
-                                  : dc.primaryContainer)
-                              .withValues(alpha: 0.96),
+                      color: (isDark ? dc.darkSurfaceContainer : dc.primaryContainer)
+                          .withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: iconColor.withValues(alpha: 0.18),
+                        width: 0.8,
+                      ),
                     ),
                     child: Text(
                       gpsLabel.toUpperCase(),
@@ -2444,10 +2413,20 @@ class _MapAppBar extends StatelessWidget {
                         fontFamily: 'Inter',
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: isDark
-                            ? dc.darkPrimaryAccent
-                            : dc.onPrimaryContainer,
+                        letterSpacing: 1.1,
+                        color: isDark ? dc.darkPrimaryAccent : dc.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onSync,
+                      borderRadius: BorderRadius.circular(999),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(Icons.sync_rounded, size: 20, color: iconColor),
                       ),
                     ),
                   ),
@@ -2506,56 +2485,31 @@ class _GpsStatusBanner extends StatelessWidget {
         : Icons.my_location;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor, width: 0.8),
         boxShadow: [
           BoxShadow(
-            color: dc.onSurface.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
+            color: dc.onSurface.withValues(alpha: 0.10),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: accentColor),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? dc.darkInk : dc.onSurface,
-                  ),
-                ),
-                if (detail != null && detail!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    detail!,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? dc.darkMutedInk
-                          : dc.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
+          Icon(icon, size: 14, color: accentColor),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? dc.darkInk : dc.onSurface,
             ),
           ),
         ],
@@ -2611,34 +2565,35 @@ class _FloatingActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isDark ? dc.darkSurface : const Color(0xFFFDF8F2),
-      borderRadius: BorderRadius.circular(18),
+      color: isDark ? dc.darkSurface : dc.surfaceContainerLowest,
+      shape: const CircleBorder(),
       elevation: 0,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        customBorder: const CircleBorder(),
         child: Container(
-          width: 52,
-          height: 52,
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            shape: BoxShape.circle,
             border: Border.all(
               color: isDark
-                  ? dc.darkBorder.withValues(alpha: 0.7)
-                  : const Color(0xFFEAD8C8),
+                  ? dc.darkBorder.withValues(alpha: 0.6)
+                  : dc.outlineVariant.withValues(alpha: 0.55),
+              width: 0.8,
             ),
             boxShadow: [
               BoxShadow(
-                color: dc.onSurface.withValues(alpha: 0.1),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+                color: dc.onSurface.withValues(alpha: 0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Icon(
             icon,
-            size: 24,
-            color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+            size: 22,
+            color: isDark ? dc.darkPrimaryAccent : dc.primary,
           ),
         ),
       ),

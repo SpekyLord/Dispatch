@@ -549,42 +549,45 @@ class _BoardChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: selected ? dc.primary : dc.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(999),
-      child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? dc.primary : dc.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: selected ? dc.primary : dc.warmBorder),
-          boxShadow: selected
-              ? const [
-                  BoxShadow(
-                    color: Color(0x269D5C34),
-                    blurRadius: 14,
-                    offset: Offset(0, 7),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              const Icon(Icons.check_circle_rounded, size: 14, color: dc.onPrimary),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                letterSpacing: selected ? 0.4 : 0,
-                color: selected ? dc.onPrimary : dc.ink,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? dc.primary : dc.warmBorder),
+            boxShadow: selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0x269D5C34),
+                      blurRadius: 14,
+                      offset: Offset(0, 7),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                const Icon(Icons.check_circle_rounded, size: 14, color: dc.onPrimary),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                  letterSpacing: selected ? 0.4 : 0,
+                  color: selected ? dc.onPrimary : dc.ink,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

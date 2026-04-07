@@ -336,13 +336,12 @@ The bootstrap seed script creates test accounts for local development:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Municipality | `municipality.admin@dispatch.local` | `$SEED_DEFAULT_PASSWORD` |
-| Fire Dept | `fire.station@dispatch.local` | `$SEED_DEFAULT_PASSWORD` |
-| Police Dept | `police.station@dispatch.local` | `$SEED_DEFAULT_PASSWORD` |
-| Medical Dept | `medical.response@dispatch.local` | `$SEED_DEFAULT_PASSWORD` |
-| Disaster (MDRRMO) | `mdrrmo.ops@dispatch.local` | `$SEED_DEFAULT_PASSWORD` |
-
-Citizens are not pre-seeded — they self-register through the app.
+| Municipality | `municipality.admin@dispatch.local` | `Dispatch123!` |
+| Fire Dept | `fire.station@dispatch.local` | `Dispatch123!` |
+| Police Dept | `police.station@dispatch.local` | `Dispatch123!` |
+| Medical Dept | `medical.response@dispatch.local` | `Dispatch123!` |
+| Disaster (MDRRMO) | `mdrrmo.ops@dispatch.local` | `Dispatch123!` |
+| Citizen (Demo) | `citizen.demo@dispatch.local` | `Dispatch123!` |
 
 ---
 
@@ -390,6 +389,22 @@ flutter test      # Unit tests
 - **Web:** ESLint + Prettier (enforced in CI, zero warnings)
 - **API:** Ruff (linter + formatter)
 - **Mobile:** `flutter analyze` with `flutter_lints`
+
+---
+
+## Tools Used
+
+### AI Tools
+| Tool | Purpose |
+|------|---------|
+| [OpenAI Codex](https://openai.com/codex) | AI-assisted code generation and completion |
+| [Claude Code](https://claude.ai/code) | AI coding assistant for development and refactoring |
+
+### Development Environment
+| Category | Tool |
+|----------|------|
+| IDE / Code Editor | Visual Studio Code |
+| Version Control | Git / GitHub |
 
 ---
 

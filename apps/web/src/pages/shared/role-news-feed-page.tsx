@@ -149,7 +149,6 @@ const readinessCategoryLabels: Record<
   situational_report: "Situational Report",
 };
 
-const footerLinks = ["Standard Ops", "Ethics Policy", "Command Chain"] as const;
 const baseWarmPanelClassName =
   "dispatch-news-feed-surface border-[#efd8d0] bg-[#fff8f3]";
 const baseWarmTabClassName =
@@ -158,8 +157,6 @@ const baseWarmActionTabClassName =
   "dispatch-news-feed-pill border border-[#ecd8cf] bg-[#f7efe7] text-[#8a5a40] transition-colors hover:bg-[#f2e7de]";
 const basePopupPanelShadowClassName =
   "shadow-[rgba(0,0,0,0.4)_0px_2px_4px,rgba(0,0,0,0.3)_0px_7px_13px_-3px,rgba(0,0,0,0.2)_0px_-3px_0px_inset]";
-const baseRaisedFeedCardClassName =
-  "shadow-[15px_15px_30px_rgba(208,191,179,0.78),-15px_-15px_30px_rgba(255,255,255,0.96)]";
 const publishedFeedCardShadowClassName =
   "shadow-[0_10px_22px_-12px_rgba(120,78,58,0.48),0_5px_5px_0_#00000026]";
 const basePublishLaneEffectClassName =

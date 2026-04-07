@@ -127,14 +127,56 @@ class _CitizenProfileEditScreenState
     final headerPhotoPreview =
         _headerPhoto ?? (_removeHeaderPhoto ? null : null);
 
-    return Scaffold(
+    return Theme(
+      data: ThemeData.light().copyWith(
+        scaffoldBackgroundColor: dc.background,
+        colorScheme: const ColorScheme.light(
+          primary: dc.primary,
+          onPrimary: dc.onPrimary,
+          surface: dc.background,
+          onSurface: dc.onSurface,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: dc.outlineVariant),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: dc.primary, width: 1.5),
+          ),
+          hintStyle: const TextStyle(color: dc.onSurfaceVariant),
+          filled: true,
+          fillColor: dc.surfaceContainerLowest,
+        ),
+      ),
+      child: Scaffold(
       backgroundColor: dc.background,
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        backgroundColor: dc.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: dc.onSurface),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: dc.onSurface,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Saving...' : 'Save'),
+            child: Text(
+              _saving ? 'Saving...' : 'Save',
+              style: const TextStyle(
+                color: dc.primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
           ),
         ],
       ),
@@ -178,50 +220,56 @@ class _CitizenProfileEditScreenState
               children: [
                 const Text(
                   'Display name',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: dc.onSurface),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _fullNameController,
+                  style: const TextStyle(color: dc.onSurface),
                   decoration: const InputDecoration(
                     hintText: 'Full name',
                     border: OutlineInputBorder(),
+                    hintStyle: TextStyle(color: dc.onSurfaceVariant),
                   ),
                 ),
                 const SizedBox(height: 14),
                 const Text(
                   'Phone number',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: dc.onSurface),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
+                  style: const TextStyle(color: dc.onSurface),
                   decoration: const InputDecoration(
                     hintText: '+63 900 000 0000',
                     border: OutlineInputBorder(),
+                    hintStyle: TextStyle(color: dc.onSurfaceVariant),
                   ),
                 ),
                 const SizedBox(height: 14),
                 const Text(
                   'Bio',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: dc.onSurface),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _descriptionController,
                   minLines: 4,
                   maxLines: 6,
+                  style: const TextStyle(color: dc.onSurface),
                   decoration: const InputDecoration(
-                    hintText:
-                        'Tell responders or neighbors what area you usually monitor.',
+                    hintText: 'Tell responders or neighbors what area you usually monitor.',
                     border: OutlineInputBorder(),
+                    hintStyle: TextStyle(color: dc.onSurfaceVariant),
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
       ),
     );
   }

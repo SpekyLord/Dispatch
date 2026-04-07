@@ -1,5 +1,6 @@
 import 'package:dispatch_mobile/core/i18n/app_locale.dart';
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,7 +13,7 @@ class LocaleActionButton extends ConsumerWidget {
     final strings = ref.watch(appStringsProvider);
 
     return PopupMenuButton<AppLocale>(
-      icon: const Icon(Icons.translate),
+      icon: const Icon(Icons.translate, color: dc.onSurface),
       initialValue: locale,
       onSelected: (value) {
         ref.read(appLocaleProvider.notifier).state = value;

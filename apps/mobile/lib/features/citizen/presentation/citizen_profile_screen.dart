@@ -215,8 +215,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final session = ref.watch(sessionControllerProvider);
     final transport = ref.watch(meshTransportProvider);
     final inbox = ref.watch(notificationInboxControllerProvider);
@@ -232,12 +230,14 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
         ? 'ACTIVE NODE'
         : 'STANDBY NODE';
     final topPadding = MediaQuery.of(context).padding.top + 18;
-    final backgroundColor = isDark ? dc.darkBackground : dc.background;
-    final cardColor = isDark ? dc.darkSurface : dc.surfaceContainerLow;
-    final labelColor = isDark ? dc.darkMutedInk : dc.onSurfaceVariant;
-    final textColor = isDark ? dc.darkInk : dc.onSurface;
+    const backgroundColor = dc.background;
+    const cardColor = dc.surfaceContainerLow;
+    const labelColor = dc.onSurfaceVariant;
+    const textColor = dc.onSurface;
 
-    return Stack(
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: Stack(
       children: [
         RefreshIndicator(
           color: dc.primary,
@@ -249,6 +249,14 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Row(
                   children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 20),
+                      tooltip: 'Back',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const SizedBox(width: 4),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,24 +335,41 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                 ),
               ),
               const SizedBox(height: 22),
-              Container(
-                height: 164,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(26),
-                  gradient: const LinearGradient(
-                    colors: dc.heroGradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.bottomCenter,
+                children: [
+                  // Header banner
+                  Container(
+                    height: 148,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(26),
+                      gradient: const LinearGradient(
+                        colors: dc.heroGradient,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      image: (_headerPhotoUrl ?? '').isNotEmpty
+                          ? DecorationImage(
+                              image: NetworkImage(_headerPhotoUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
                   ),
-                  image: (_headerPhotoUrl ?? '').isNotEmpty
-                      ? DecorationImage(
-                          image: NetworkImage(_headerPhotoUrl!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
+                  // Avatar overlapping the bottom of the banner
+                  Positioned(
+                    bottom: -48,
+                    child: _ProfileAvatarBadge(
+                      avatarUrl: (_profilePictureUrl ?? _avatarUrl ?? '').isEmpty
+                          ? _fallbackAvatarUrl
+                          : (_profilePictureUrl ?? _avatarUrl)!,
+                      initials: _initialsFor(fullName),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 62),
               Center(
                 child: _ProfileIdentityHero(
                   avatarUrl: (_profilePictureUrl ?? _avatarUrl ?? '').isEmpty
@@ -355,7 +380,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                   citizenId: citizenId,
                   sectorLabel: sectorLabel,
                   nodeStateLabel: nodeStateLabel,
-                  isDark: isDark,
                 ),
               ),
               if ((_description ?? '').trim().isNotEmpty) ...[
@@ -402,7 +426,7 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                   _StatCard(
                     label: 'Resolved',
                     value: '${stats.resolvedReports}',
-                    valueColor: isDark ? dc.darkPrimaryAccent : dc.primary,
+                    valueColor: dc.primary,
                     backgroundColor: cardColor,
                     labelColor: labelColor,
                   ),
@@ -439,9 +463,8 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                         ),
                       );
                     },
-                    isDark: isDark,
                   ),
-                  _ToneDivider(isDark: isDark),
+                  const _ToneDivider(),
                   _ActionTile(
                     icon: Icons.notifications_none_rounded,
                     title: 'Notifications',
@@ -455,9 +478,8 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                         ),
                       );
                     },
-                    isDark: isDark,
                   ),
-                  _ToneDivider(isDark: isDark),
+                  const _ToneDivider(),
                   _ActionTile(
                     icon: Icons.newspaper_outlined,
                     title: 'Dispatch News',
@@ -470,7 +492,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                         ),
                       );
                     },
-                    isDark: isDark,
                   ),
                 ],
               ),
@@ -499,7 +520,6 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                     : 'Light Mode active',
                 value: _darkModePreview,
                 onChanged: _toggleAppearance,
-                isDark: isDark,
                 backgroundColor: cardColor,
                 busy: false,
               ),
@@ -512,14 +532,12 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                     : 'BLE discovery paused',
                 value: transport.isDiscovering,
                 onChanged: _toggleMeshMode,
-                isDark: isDark,
                 backgroundColor: cardColor,
                 highlight: true,
                 busy: _meshBusy,
               ),
               const SizedBox(height: 30),
               _SignOutButton(
-                isDark: isDark,
                 busy: _signingOut,
                 onTap: _signOut,
               ),
@@ -549,6 +567,7 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
             ),
           ),
       ],
+    ),
     );
   }
 
@@ -644,6 +663,65 @@ class _CitizenProfileStats {
   }
 }
 
+// Standalone avatar + verified badge — used in the banner overlap
+class _ProfileAvatarBadge extends StatelessWidget {
+  const _ProfileAvatarBadge({required this.avatarUrl, required this.initials});
+
+  final String avatarUrl;
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 96,
+          height: 96,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: dc.primaryContainer,
+            border: Border.all(color: dc.background, width: 4),
+            boxShadow: const [
+              BoxShadow(color: Color(0x22000000), blurRadius: 18, offset: Offset(0, 8)),
+            ],
+          ),
+          child: ClipOval(
+            child: Image.network(
+              avatarUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    color: dc.onPrimaryContainer,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 2,
+          bottom: 2,
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: dc.primary,
+              shape: BoxShape.circle,
+              border: Border.all(color: dc.background, width: 2),
+            ),
+            child: const Icon(Icons.verified, size: 14, color: dc.onPrimary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProfileIdentityHero extends StatelessWidget {
   const _ProfileIdentityHero({
     required this.avatarUrl,
@@ -652,7 +730,6 @@ class _ProfileIdentityHero extends StatelessWidget {
     required this.citizenId,
     required this.sectorLabel,
     required this.nodeStateLabel,
-    required this.isDark,
   });
 
   final String avatarUrl;
@@ -661,102 +738,19 @@ class _ProfileIdentityHero extends StatelessWidget {
   final String citizenId;
   final String sectorLabel;
   final String nodeStateLabel;
-  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 94,
-              height: 94,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark
-                    ? dc.darkSurfaceContainerHigh
-                    : dc.primaryContainer,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 20,
-                    offset: Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: ClipOval(
-                child: Image.network(
-                  avatarUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? const [
-                                  dc.darkSurfaceContainerHigh,
-                                  dc.darkSurface,
-                                ]
-                              : const [
-                                  dc.primaryContainer,
-                                  dc.surfaceContainerLow,
-                                ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          initials,
-                          style: TextStyle(
-                            color: isDark ? dc.darkInk : dc.onPrimaryContainer,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: dc.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x1A000000),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.verified,
-                  size: 16,
-                  color: dc.onPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
         Text(
           fullName,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.6,
-            color: isDark ? dc.darkInk : dc.onSurface,
+            color: dc.onSurface,
           ),
         ),
         const SizedBox(height: 8),
@@ -779,10 +773,10 @@ class _ProfileIdentityHero extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           'ID: $citizenId',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+            color: dc.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 8),
@@ -790,19 +784,15 @@ class _ProfileIdentityHero extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.location_on,
-              size: 14,
-              color: isDark ? dc.darkPrimaryAccent : dc.primary,
-            ),
+            const Icon(Icons.location_on, size: 14, color: dc.primary),
             const SizedBox(width: 4),
             Text(
               '$sectorLabel - $nodeStateLabel',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.7,
-                color: isDark ? dc.darkPrimaryAccent : dc.primary,
+                color: dc.primary,
               ),
             ),
           ],
@@ -910,14 +900,12 @@ class _ActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    required this.isDark,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
@@ -930,11 +918,7 @@ class _ActionTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           child: Row(
             children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
-              ),
+              Icon(icon, size: 20, color: dc.onSurfaceVariant),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -942,29 +926,24 @@ class _ActionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? dc.darkInk : dc.onSurface,
+                        color: dc.onSurface,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
-                        color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                        color: dc.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: isDark
-                    ? dc.darkMutedInk.withValues(alpha: 0.8)
-                    : dc.onSurfaceVariant,
-              ),
+              const Icon(Icons.chevron_right, color: dc.onSurfaceVariant),
             ],
           ),
         ),
@@ -974,9 +953,7 @@ class _ActionTile extends StatelessWidget {
 }
 
 class _ToneDivider extends StatelessWidget {
-  const _ToneDivider({required this.isDark});
-
-  final bool isDark;
+  const _ToneDivider();
 
   @override
   Widget build(BuildContext context) {
@@ -984,9 +961,7 @@ class _ToneDivider extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Container(
         height: 1,
-        color: (isDark ? dc.darkMutedInk : dc.outlineVariant).withValues(
-          alpha: 0.12,
-        ),
+        color: dc.outlineVariant.withValues(alpha: 0.12),
       ),
     );
   }
@@ -999,7 +974,6 @@ class _ConfigTile extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
-    required this.isDark,
     required this.backgroundColor,
     required this.busy,
     this.highlight = false,
@@ -1010,7 +984,6 @@ class _ConfigTile extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
-  final bool isDark;
   final Color backgroundColor;
   final bool busy;
   final bool highlight;
@@ -1032,11 +1005,7 @@ class _ConfigTile extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(
-                icon,
-                size: 22,
-                color: isDark ? dc.darkPrimaryAccent : dc.primary,
-              ),
+              Icon(icon, size: 22, color: dc.primary),
               if (highlight && value)
                 Positioned(
                   right: -2,
@@ -1059,10 +1028,10 @@ class _ConfigTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? dc.darkInk : dc.onSurface,
+                    color: dc.onSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1070,9 +1039,7 @@ class _ConfigTile extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 12,
-                    color: highlight && value
-                        ? (isDark ? dc.darkPrimaryAccent : dc.primary)
-                        : (isDark ? dc.darkMutedInk : dc.onSurfaceVariant),
+                    color: highlight && value ? dc.primary : dc.onSurfaceVariant,
                     fontWeight: highlight && value
                         ? FontWeight.w600
                         : FontWeight.w500,
@@ -1133,12 +1100,10 @@ class _PillSwitch extends StatelessWidget {
 
 class _SignOutButton extends StatelessWidget {
   const _SignOutButton({
-    required this.isDark,
     required this.busy,
     required this.onTap,
   });
 
-  final bool isDark;
   final bool busy;
   final VoidCallback onTap;
 
@@ -1152,8 +1117,7 @@ class _SignOutButton extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           decoration: BoxDecoration(
-            color: (isDark ? dc.darkSurfaceContainer : dc.surfaceContainerHigh)
-                .withValues(alpha: 0.42),
+            color: dc.surfaceContainerHigh.withValues(alpha: 0.42),
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
@@ -1169,7 +1133,7 @@ class _SignOutButton extends StatelessWidget {
                 Icon(
                   Icons.logout,
                   size: 18,
-                  color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                  color: dc.onSurfaceVariant,
                 ),
               const SizedBox(width: 8),
               Text(
@@ -1177,7 +1141,7 @@ class _SignOutButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? dc.darkMutedInk : dc.onSurfaceVariant,
+                  color: dc.onSurfaceVariant,
                 ),
               ),
             ],

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,9 +54,7 @@ class _CitizenFeedDetailScreenState
       setState(() => _loading = true);
     }
     try {
-      final post = await ref
-          .read(authServiceProvider)
-          .getFeedPost(widget.postId);
+      final post = await ref.read(authServiceProvider).getFeedPost(widget.postId);
       if (mounted) {
         setState(() {
           _post = post;
@@ -69,91 +68,204 @@ class _CitizenFeedDetailScreenState
     }
   }
 
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final m = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour < 12 ? 'AM' : 'PM';
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year} · $h:$m $ampm';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final post = _post;
+    final category = (post?['category'] as String? ?? 'update');
+    final categoryLabel = category.replaceAll('_', ' ');
+    final isPinned = post?['is_pinned'] == true;
+    final deptName =
+        post?['department'] != null
+            ? (post!['department'] as Map<String, dynamic>)['name'] as String? ?? 'Unknown'
+            : null;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Announcement')),
+      backgroundColor: dc.background,
+      appBar: AppBar(
+        backgroundColor: dc.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          color: dc.onSurface,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'Announcement',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: dc.onSurface,
+          ),
+        ),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _post == null
-          ? const Center(child: Text('Post not found.'))
+          ? const Center(child: CircularProgressIndicator(color: dc.primary))
+          : post == null
+          ? const Center(
+              child: Text('Post not found.', style: TextStyle(color: dc.onSurfaceVariant)),
+            )
           : ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 48),
               children: [
+                // Category + pinned badges
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    Chip(
-                      label: Text(
-                        (_post!['category'] as String? ?? 'update').replaceAll(
-                          '_',
-                          ' ',
-                        ),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: dc.categoryColor(category).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: dc.categoryColor(category).withValues(alpha: 0.25),
+                          width: 0.8,
                         ),
                       ),
-                      visualDensity: VisualDensity.compact,
+                      child: Text(
+                        categoryLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: dc.categoryColor(category),
+                        ),
+                      ),
                     ),
-                    if (_post!['is_pinned'] == true)
-                      Chip(
-                        avatar: Icon(
-                          Icons.push_pin,
-                          size: 14,
-                          color: Colors.orange.shade700,
+                    if (isPinned)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: dc.statusPending.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: dc.statusPending.withValues(alpha: 0.22),
+                            width: 0.8,
+                          ),
                         ),
-                        label: const Text(
-                          'Pinned',
-                          style: TextStyle(fontSize: 10),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.push_pin_rounded, size: 12, color: dc.statusPending),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Pinned',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: dc.statusPending,
+                              ),
+                            ),
+                          ],
                         ),
-                        visualDensity: VisualDensity.compact,
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
+
+                // Title
                 Text(
-                  _post!['title'] as String? ?? '',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                  post['title'] as String? ?? '',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    height: 1.25,
+                    color: dc.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
-                if (_post!['department'] != null) ...[
-                  Text(
-                    'By ${(_post!['department'] as Map<String, dynamic>)['name'] ?? 'Unknown'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black54,
+                const SizedBox(height: 14),
+
+                // Author + date row
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: dc.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.business_rounded, size: 14, color: dc.primary),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (deptName != null)
+                            Text(
+                              deptName,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: dc.onSurface,
+                              ),
+                            ),
+                          Text(
+                            _formatDate(post['created_at'] as String?),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: dc.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Divider
+                Container(
+                  height: 1,
+                  color: dc.outlineVariant.withValues(alpha: 0.35),
+                ),
+                const SizedBox(height: 20),
+
+                // Body content
+                Text(
+                  post['content'] as String? ?? '',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    height: 1.7,
+                    color: dc.onSurface,
                   ),
-                  const SizedBox(height: 4),
-                ],
-                Text(
-                  _post!['created_at'] as String? ?? '',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
-                const Divider(height: 32),
-                Text(
-                  _post!['content'] as String? ?? '',
-                  style: const TextStyle(fontSize: 14, height: 1.6),
-                ),
-                if (_post!['image_urls'] != null &&
-                    (_post!['image_urls'] as List).isNotEmpty) ...[
-                  const SizedBox(height: 16),
+
+                // Images
+                if (post['image_urls'] != null &&
+                    (post['image_urls'] as List).isNotEmpty) ...[
+                  const SizedBox(height: 24),
                   SizedBox(
-                    height: 180,
+                    height: 200,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: (_post!['image_urls'] as List).length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(width: 8),
+                      itemCount: (post['image_urls'] as List).length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (_, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(16),
                         child: Image.network(
-                          (_post!['image_urls'] as List)[i] as String,
-                          height: 180,
+                          (post['image_urls'] as List)[i] as String,
+                          height: 200,
                           fit: BoxFit.cover,
                         ),
                       ),

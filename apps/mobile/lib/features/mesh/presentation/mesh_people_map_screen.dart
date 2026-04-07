@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
-import 'package:dispatch_mobile/core/services/sar_mode_service.dart';
 import 'package:dispatch_mobile/core/state/citizen_ble_chat_session_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_nearby_presence_controller.dart';
 import 'package:dispatch_mobile/core/state/citizen_location_trail_controller.dart';
@@ -771,47 +770,91 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
   }
 
   void _openCompassForNode(Map<String, dynamic> node) {
-    final existingMessageId = node['message_id'] as String?;
-    if (existingMessageId != null && !existingMessageId.startsWith('node:')) {
-      unawaited(_hydrateTrailForNode(node));
-      _openCompass(existingMessageId);
+    if (_isNearbyCitizenNode(node)) {
+      _openCompassForNearbyCitizen(node);
       return;
     }
 
     final point = _readPoint(node);
     final nodeDeviceId = _nodeDeviceId(node);
-    if (point == null || nodeDeviceId == null) {
+    if (point == null) {
       return;
     }
 
-    ref
-        .read(sarModeControllerProvider.notifier)
-        .upsertExternalSignal(
-          SurvivorSignalEvent(
-            messageId: 'node:$nodeDeviceId',
-            detectionMethod: SarDetectionMethod.blePassive,
-            signalStrengthDbm: -62,
-            estimatedDistanceMeters: _gpsCenter() == null
-                ? 0
-                : const Distance().as(LengthUnit.Meter, _gpsCenter()!, point),
-            detectedDeviceIdentifier:
-                _nodeFingerprint(node) ??
-                MeshTransportService.anonymizeDeviceFingerprint(nodeDeviceId),
-            lastSeenTimestamp:
-                DateTime.tryParse(node['last_seen'] as String? ?? '') ??
-                DateTime.now().toUtc(),
-            nodeLocation: SarNodeLocation(
-              lat: point.latitude,
-              lng: point.longitude,
-              accuracyMeters: 10,
-            ),
-            confidence: 0.82,
-            acousticPatternMatched: AcousticPatternMatched.none,
-          ),
-          pin: true,
-        );
+    final existingMessageId = node['message_id'] as String?;
+    final hasServerSignal =
+        existingMessageId != null && !existingMessageId.startsWith('node:');
+    final messageId = hasServerSignal
+        ? existingMessageId
+        : (nodeDeviceId != null ? 'node:$nodeDeviceId' : null);
+    if (messageId == null) {
+      return;
+    }
+
+    final fingerprint = _nodeFingerprint(node) ??
+        (nodeDeviceId != null
+            ? MeshTransportService.anonymizeDeviceFingerprint(nodeDeviceId)
+            : null);
+    final lastSeen =
+        DateTime.tryParse(node['last_seen'] as String? ?? '') ??
+        DateTime.now().toUtc();
+    final accuracy = (node['accuracy_meters'] as num?)?.toDouble();
+
+    final seed = CompassTargetSeed(
+      messageId: messageId,
+      displayName: _nodeTitle(node),
+      latitude: point.latitude,
+      longitude: point.longitude,
+      lastSeenAt: lastSeen,
+      accuracyMeters: accuracy,
+      deviceFingerprint: fingerprint,
+      nodeDeviceId: nodeDeviceId,
+      role: node['role'] as String?,
+    );
+
     unawaited(_hydrateTrailForNode(node));
-    _openCompass('node:$nodeDeviceId');
+    _openCompass(messageId, seed: seed);
+  }
+
+  void _openCompassForNearbyCitizen(Map<String, dynamic> node) {
+    final pin = _nearbyPinForNode(node);
+    final point = _readPoint(node);
+    if (pin == null && point == null) {
+      return;
+    }
+
+    final latitude = pin?.latitude ?? point!.latitude;
+    final longitude = pin?.longitude ?? point!.longitude;
+    final lastSeenAt = pin?.lastSeenAt ??
+        DateTime.tryParse(node['last_seen'] as String? ?? '') ??
+        DateTime.now().toUtc();
+    final accuracyMeters =
+        pin?.accuracyMeters ?? (node['accuracy_meters'] as num?)?.toDouble();
+    final userId = pin?.userId ?? node['user_id'] as String? ?? '';
+    final meshDeviceId = pin?.meshDeviceId ?? node['mesh_device_id'] as String?;
+    final messageId = userId.isNotEmpty
+        ? 'citizen:$userId'
+        : (meshDeviceId != null && meshDeviceId.isNotEmpty
+              ? 'citizen-device:$meshDeviceId'
+              : null);
+    if (messageId == null) {
+      return;
+    }
+
+    final seed = CompassTargetSeed(
+      messageId: messageId,
+      displayName: pin?.displayName ?? _nodeTitle(node),
+      latitude: latitude,
+      longitude: longitude,
+      lastSeenAt: lastSeenAt,
+      accuracyMeters: accuracyMeters,
+      nodeDeviceId: meshDeviceId,
+      role: 'Nearby Citizen',
+      isCitizen: true,
+      citizenUserId: userId.isNotEmpty ? userId : null,
+    );
+
+    _openCompass(messageId, seed: seed);
   }
 
   Future<void> _resolveSignal(String signalId) async {
@@ -824,11 +867,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
     }
   }
 
-  void _openCompass(String? messageId) {
+  void _openCompass(String? messageId, {CompassTargetSeed? seed}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SurvivorCompassScreen(
           initialTargetMessageId: messageId,
+          initialTargetSeed: seed,
           allowResolve: widget.allowResolveActions,
         ),
       ),
@@ -2013,27 +2057,12 @@ class _MeshPeopleMapScreenState extends ConsumerState<MeshPeopleMapScreen>
                         },
                         primaryActionLabel: _isSelfNode(selectedNode)
                             ? 'Center on My Position'
-                            : _isNearbyCitizenNode(selectedNode)
-                            ? 'Focus Nearby User'
                             : 'Open Compass Locator',
                         onOpenCompass: () {
                           if (_isSelfNode(selectedNode)) {
                             _focusOnUserLocation();
                             _showMapNotice(
                               'Your live node is centered and the self trail is active.',
-                            );
-                            return;
-                          }
-                          if (_isNearbyCitizenNode(selectedNode)) {
-                            final point = _readPoint(selectedNode);
-                            if (point != null) {
-                              _animateCameraTo(
-                                point,
-                                zoom: _mapController.camera.zoom,
-                              );
-                            }
-                            _showMapNotice(
-                              'Nearby citizen pin centered on the map.',
                             );
                             return;
                           }

@@ -17,6 +17,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Snapshot of an interactive-map node, passed into [SurvivorCompassScreen]
+/// so the compass has an immediate position to render and a stable identity
+/// to keep refreshing as the node moves.
+class CompassTargetSeed {
+  const CompassTargetSeed({
+    required this.messageId,
+    required this.displayName,
+    required this.latitude,
+    required this.longitude,
+    required this.lastSeenAt,
+    this.accuracyMeters,
+    this.deviceFingerprint,
+    this.nodeDeviceId,
+    this.role,
+    this.isCitizen = false,
+    this.citizenUserId,
+  });
+
+  final String messageId;
+  final String displayName;
+  final double latitude;
+  final double longitude;
+  final DateTime lastSeenAt;
+  final double? accuracyMeters;
+  final String? deviceFingerprint;
+  final String? nodeDeviceId;
+  final String? role;
+  final bool isCitizen;
+  final String? citizenUserId;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Compass Locator — Mesh Network
 // Editorial design: glassmorphic nav, precision compass, tonal layering
@@ -26,11 +57,13 @@ class SurvivorCompassScreen extends ConsumerStatefulWidget {
   const SurvivorCompassScreen({
     super.key,
     this.initialTargetMessageId,
+    this.initialTargetSeed,
     this.showMiniMap = true,
     this.allowResolve = true,
   });
 
   final String? initialTargetMessageId;
+  final CompassTargetSeed? initialTargetSeed;
   final bool showMiniMap;
   final bool allowResolve;
 
@@ -45,6 +78,8 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   StreamSubscription<CompassHeadingSample>? _headingSub;
   StreamSubscription<LocationData>? _locationSub;
   late final AnimationController _pulseController;
+  Timer? _liveRefreshTimer;
+  CompassTargetSeed? _targetSeed;
   CompassHeadingSample? _headingSample;
   LocationData? _rescuerLocation;
   bool _bootstrapping = true;
@@ -62,17 +97,40 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    final initialTargetMessageId = widget.initialTargetMessageId;
+    _targetSeed = widget.initialTargetSeed;
+
+    // Seed the SAR controller synchronously so the compass renders the
+    // selected node's position immediately, without waiting for a BLE beacon.
+    final seed = _targetSeed;
+    if (seed != null) {
+      ref
+          .read(sarModeControllerProvider.notifier)
+          .upsertExternalSignal(_signalFromSeed(seed), pin: true);
+    }
+
+    final initialTargetMessageId =
+        widget.initialTargetMessageId ?? seed?.messageId;
     if (initialTargetMessageId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ref
             .read(sarModeControllerProvider.notifier)
             .pinTarget(initialTargetMessageId);
+        _refreshActiveTargetLocation();
       });
     }
+
     // Listen to transport updates for real-time target location changes
     ref.read(meshTransportProvider).addListener(_handleTransportUpdate);
+
+    // Periodic refresh ensures the compass keeps tracking the target even if
+    // the transport listener never fires (e.g. citizen presence updates,
+    // throttled beacon batches, or stale BLE drops).
+    _liveRefreshTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) => _refreshActiveTargetLocation(),
+    );
+
     unawaited(_bindSensors());
     _bindRealtime();
     unawaited(Future<void>.microtask(() => _hydrateSignals(silent: true)));
@@ -81,6 +139,7 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   @override
   void dispose() {
     ref.read(meshTransportProvider).removeListener(_handleTransportUpdate);
+    _liveRefreshTimer?.cancel();
     _resolutionController.dispose();
     unawaited(_headingSub?.cancel());
     unawaited(_locationSub?.cancel());
@@ -94,47 +153,130 @@ class _SurvivorCompassScreenState extends ConsumerState<SurvivorCompassScreen>
   void _handleTransportUpdate() {
     if (!mounted) return;
     // Re-inject peer locations into SAR controller so compass tracks live positions
-    _updateTargetFromTransport();
+    _refreshActiveTargetLocation();
     _syncPulseState();
   }
 
-  void _updateTargetFromTransport() {
+  /// Refreshes the active target's position by consulting every available
+  /// data source in priority order. Designed to be safe to call repeatedly:
+  /// it never throws and only triggers a SAR upsert when something actually
+  /// changed, so the compass keeps following the target as it moves.
+  void _refreshActiveTargetLocation() {
+    if (!mounted) return;
+    final sarController = ref.read(sarModeControllerProvider.notifier);
     final target = ref.read(sarModeControllerProvider).activeTarget;
     if (target == null) return;
 
-    final fingerprint = target.detectedDeviceIdentifier;
-    if (fingerprint.isEmpty) return;
+    final live = _resolveLiveLocationForTarget(target);
+    if (live == null) return;
 
-    final transport = ref.read(meshTransportProvider);
-    final lastSeen = transport.lastSeenForDevice(fingerprint);
-    if (lastSeen == null) return;
+    // Skip churning the SAR controller when nothing meaningfully changed.
+    final unchanged = live.latitude == target.nodeLocation.lat &&
+        live.longitude == target.nodeLocation.lng &&
+        live.lastSeenAt.isAtSameMomentAs(target.lastSeenTimestamp);
+    if (unchanged) return;
 
-    // Update the SAR signal with the latest known location
-    ref.read(sarModeControllerProvider.notifier).upsertExternalSignal(
+    final distanceMeters = _rescuerLocation != null
+        ? _computeDistance(
+            _rescuerLocation!.latitude,
+            _rescuerLocation!.longitude,
+            live.latitude,
+            live.longitude,
+          )
+        : target.estimatedDistanceMeters;
+
+    sarController.upsertExternalSignal(
       SurvivorSignalEvent(
         messageId: target.messageId,
         detectionMethod: target.detectionMethod,
         signalStrengthDbm: target.signalStrengthDbm,
-        estimatedDistanceMeters: _rescuerLocation != null
-            ? _computeDistance(
-                _rescuerLocation!.latitude,
-                _rescuerLocation!.longitude,
-                lastSeen.lat,
-                lastSeen.lng,
-              )
-            : target.estimatedDistanceMeters,
-        detectedDeviceIdentifier: fingerprint,
-        lastSeenTimestamp: lastSeen.recordedAt,
+        estimatedDistanceMeters: distanceMeters,
+        detectedDeviceIdentifier: target.detectedDeviceIdentifier,
+        lastSeenTimestamp: live.lastSeenAt,
         nodeLocation: SarNodeLocation(
-          lat: lastSeen.lat,
-          lng: lastSeen.lng,
-          accuracyMeters: lastSeen.accuracyMeters ?? 10,
+          lat: live.latitude,
+          lng: live.longitude,
+          accuracyMeters: live.accuracyMeters ?? target.nodeLocation.accuracyMeters,
         ),
         confidence: target.confidence,
         acousticPatternMatched: target.acousticPatternMatched,
       ),
+      pin: true,
     );
     if (mounted) setState(() {});
+  }
+
+  /// Tries every known data source to locate [target] right now. Returns
+  /// `null` only if no source has any fix at all (in which case the existing
+  /// SAR position stays put rather than being wiped).
+  _LiveTargetFix? _resolveLiveLocationForTarget(SurvivorSignalEvent target) {
+    // 1. BLE transport last-seen by device fingerprint.
+    final fingerprint = target.detectedDeviceIdentifier;
+    if (fingerprint.isNotEmpty) {
+      final transport = ref.read(meshTransportProvider);
+      final lastSeen = transport.lastSeenForDevice(fingerprint);
+      if (lastSeen != null) {
+        return _LiveTargetFix(
+          latitude: lastSeen.lat,
+          longitude: lastSeen.lng,
+          accuracyMeters: lastSeen.accuracyMeters,
+          lastSeenAt: lastSeen.recordedAt,
+        );
+      }
+    }
+
+    // 2. Citizen nearby presence (geo-shared citizens often have no BLE).
+    final seed = _targetSeed;
+    if (seed != null && seed.isCitizen) {
+      final presence = ref.read(citizenNearbyPresenceControllerProvider);
+      for (final pin in presence.nearbyUsers) {
+        final matchesUser =
+            seed.citizenUserId != null && pin.userId == seed.citizenUserId;
+        final matchesDevice = seed.nodeDeviceId != null &&
+            pin.meshDeviceId == seed.nodeDeviceId;
+        if (matchesUser || matchesDevice) {
+          return _LiveTargetFix(
+            latitude: pin.latitude,
+            longitude: pin.longitude,
+            accuracyMeters: pin.accuracyMeters,
+            lastSeenAt: pin.lastSeenAt,
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Builds a SAR signal from a freshly-tapped map node so the compass has
+  /// something to render the moment the screen mounts.
+  SurvivorSignalEvent _signalFromSeed(CompassTargetSeed seed) {
+    final distanceMeters = _rescuerLocation != null
+        ? _computeDistance(
+            _rescuerLocation!.latitude,
+            _rescuerLocation!.longitude,
+            seed.latitude,
+            seed.longitude,
+          )
+        : 0.0;
+    return SurvivorSignalEvent(
+      messageId: seed.messageId,
+      detectionMethod: SarDetectionMethod.blePassive,
+      signalStrengthDbm: -62,
+      estimatedDistanceMeters: distanceMeters,
+      detectedDeviceIdentifier: seed.deviceFingerprint ??
+          (seed.nodeDeviceId != null
+              ? MeshTransportService.anonymizeDeviceFingerprint(seed.nodeDeviceId!)
+              : ''),
+      lastSeenTimestamp: seed.lastSeenAt,
+      nodeLocation: SarNodeLocation(
+        lat: seed.latitude,
+        lng: seed.longitude,
+        accuracyMeters: seed.accuracyMeters ?? 10,
+      ),
+      confidence: 0.85,
+      acousticPatternMatched: AcousticPatternMatched.none,
+    );
   }
 
   double _computeDistance(
@@ -1838,9 +1980,21 @@ String _signalLabel(SurvivorCompassConfidenceBand? band) {
   };
 }
 
+/// Snapshot of the freshest known position for a target, gathered from any
+/// available source (BLE last-seen, citizen presence, etc.).
+class _LiveTargetFix {
+  const _LiveTargetFix({
+    required this.latitude,
+    required this.longitude,
+    required this.lastSeenAt,
+    this.accuracyMeters,
+  });
 
-
-
+  final double latitude;
+  final double longitude;
+  final DateTime lastSeenAt;
+  final double? accuracyMeters;
+}
 
 
 

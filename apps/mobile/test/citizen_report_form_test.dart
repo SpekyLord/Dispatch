@@ -1,5 +1,8 @@
 import 'package:dispatch_mobile/core/services/location_service.dart';
 import 'package:dispatch_mobile/core/services/media_service.dart';
+import 'package:dispatch_mobile/core/services/auth_service.dart';
+import 'package:dispatch_mobile/core/state/session.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/location_picker.dart';
 import 'package:flutter/material.dart';
@@ -34,14 +37,59 @@ class _FakeMediaService extends MediaService {
   Future<SelectedMedia?> pickImageFromCamera() async => null;
 }
 
+class _FakeAuthService extends AuthService {
+  @override
+  Future<Map<String, dynamic>> createReport({
+    String? title,
+    required String description,
+    required String category,
+    String severity = 'medium',
+    String? address,
+    double? latitude,
+    double? longitude,
+  }) async {
+    return {
+      'report': {'id': 'report-redirect-1'},
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadReportImage(
+    String reportId,
+    SelectedMedia media,
+  ) async {
+    return {'ok': true};
+  }
+
+  @override
+  Future<Map<String, dynamic>> getReport(String reportId) async {
+    return {
+      'report': {
+        'id': reportId,
+        'description': 'Submitted report detail.',
+        'category': 'fire',
+        'severity': 'high',
+        'status': 'pending',
+        'address': 'Responder lane',
+        'image_urls': <String>[],
+      },
+      'timeline': const <Map<String, dynamic>>[],
+    };
+  }
+}
+
 void main() {
-  Widget buildTestWidget({LocationService? locationService}) {
+  Widget buildTestWidget({
+    LocationService? locationService,
+    AuthService? authService,
+  }) {
     return ProviderScope(
       overrides: [
         locationServiceProvider.overrideWith(
           (ref) => locationService ?? _FakeLocationService(),
         ),
         mediaServiceProvider.overrideWith((ref) => _FakeMediaService()),
+        authServiceProvider.overrideWith((ref) => authService ?? _FakeAuthService()),
       ],
       child: const MaterialApp(home: CitizenReportFormScreen()),
     );
@@ -127,5 +175,21 @@ void main() {
 
     // After confirming the pin, the form shows the manual location locked badge
     expect(find.text('MANUAL MAP PIN', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('navigates to the submitted report detail after success', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildTestWidget(authService: _FakeAuthService()));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'Warehouse fire');
+    await tester.tap(find.text('Broadcast to Mesh'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CitizenReportDetailScreen), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Report #report-r'), findsOneWidget);
   });
 }

@@ -1,15 +1,13 @@
 import 'dart:async';
 
 import 'package:dispatch_mobile/core/i18n/app_strings.dart';
-import 'package:dispatch_mobile/core/i18n/locale_action_button.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
-import 'package:dispatch_mobile/features/shared/presentation/location_map.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:intl/intl.dart';
 
 class CitizenReportDetailScreen extends ConsumerStatefulWidget {
   const CitizenReportDetailScreen({required this.reportId, super.key});
@@ -28,6 +26,7 @@ class _CitizenReportDetailScreenState
   List<RealtimeSubscriptionHandle> _subscriptions = [];
   bool _loading = true;
   String? _geocodedAddress;
+  CitizenReportTab _selectedTab = CitizenReportTab.overview;
 
   @override
   void initState() {
@@ -160,14 +159,6 @@ class _CitizenReportDetailScreenState
     return timeline;
   }
 
-  String _formatTimestamp(String? value) {
-    final parsed = DateTime.tryParse(value ?? '')?.toLocal();
-    if (parsed == null) {
-      return value ?? '';
-    }
-    return DateFormat('MMM d, y - h:mm a').format(parsed);
-  }
-
   Future<void> _reverseGeocode(double lat, double lng) async {
     try {
       final marks = await placemarkFromCoordinates(lat, lng);
@@ -193,323 +184,167 @@ class _CitizenReportDetailScreenState
     return '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
   }
 
+  List<String> _evidenceUrls(Map<String, dynamic> report) {
+    final raw = report['image_urls'];
+    if (raw is List) {
+      return raw
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList(growable: false);
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      return [raw.trim()];
+    }
+    return const <String>[];
+  }
+
+  List<CitizenTimelineEntry> _resolvedTimelineEntries(AppStrings strings) {
+    return _timeline
+        .whereType<Map>()
+        .map((entry) {
+          final type = (entry['type'] as String? ?? 'status_change').trim();
+          if (type == 'department_response') {
+            final action = (entry['action'] as String? ?? 'pending').trim();
+            final detail =
+                (entry['notes'] as String?)?.trim().isNotEmpty == true
+                ? entry['notes'] as String
+                : (entry['decline_reason'] as String?)?.trim().isNotEmpty == true
+                ? entry['decline_reason'] as String
+                : null;
+            return CitizenTimelineEntry(
+              type: type,
+              timestamp: entry['timestamp'] as String?,
+              headline:
+                  (entry['department_name'] as String?)?.trim().isNotEmpty == true
+                  ? entry['department_name'] as String
+                  : strings.unknownDepartment,
+              detail: detail,
+              statusKey: action,
+              tone: action == 'declined'
+                  ? dc.statusError
+                  : action == 'accepted'
+                  ? dc.statusAccepted
+                  : dc.statusResolved,
+              action: action,
+            );
+          }
+
+          final status = (entry['new_status'] as String? ?? 'pending').trim();
+          final detail = (entry['notes'] as String?)?.trim();
+          return CitizenTimelineEntry(
+            type: type,
+            timestamp: entry['timestamp'] as String?,
+            headline: strings.statusLabel(status),
+            detail: detail?.isEmpty == true ? null : detail,
+            statusKey: status,
+            tone: _statusColor(status),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<CitizenTimelineMilestone> _buildMilestones(AppStrings strings) {
+    final report = _report;
+    if (report == null) {
+      return const <CitizenTimelineMilestone>[];
+    }
+    final entries = _resolvedTimelineEntries(strings);
+    final reportStatus = (report['status'] as String? ?? 'pending').trim();
+    final acceptedEntry = entries.where((entry) => entry.statusKey == 'accepted').firstOrNull;
+    final respondingEntry = entries.where((entry) => entry.statusKey == 'responding').firstOrNull;
+    final resolvedEntry = entries.where((entry) => entry.statusKey == 'resolved').firstOrNull;
+    final completedStepIndex = reportStatus == 'resolved'
+        ? 3
+        : reportStatus == 'responding'
+        ? 2
+        : acceptedEntry != null || reportStatus == 'accepted'
+        ? 1
+        : 0;
+    final currentIndex = reportStatus == 'resolved'
+        ? 3
+        : (completedStepIndex + 1).clamp(0, 3);
+
+    final configs = [
+      (
+        key: 'pending',
+        title: strings.statusLabel('pending'),
+        description: 'Report submitted.',
+        timestamp: report['created_at'] as String?,
+      ),
+      (
+        key: 'accepted',
+        title: strings.statusLabel('accepted'),
+        description: acceptedEntry != null
+            ? 'A department has accepted your report.'
+            : 'Awaiting department acceptance.',
+        timestamp: acceptedEntry?.timestamp,
+      ),
+      (
+        key: 'responding',
+        title: strings.statusLabel('responding'),
+        description: respondingEntry != null
+            ? 'Emergency responders are moving to the incident.'
+            : 'Response team deployment pending.',
+        timestamp: respondingEntry?.timestamp,
+      ),
+      (
+        key: 'resolved',
+        title: strings.statusLabel('resolved'),
+        description: resolvedEntry != null
+            ? 'This incident has been marked as resolved.'
+            : 'Awaiting final resolution.',
+        timestamp: resolvedEntry?.timestamp,
+      ),
+    ];
+
+    return List<CitizenTimelineMilestone>.generate(configs.length, (index) {
+      final config = configs[index];
+      return CitizenTimelineMilestone(
+        key: config.key,
+        title: config.title,
+        description: config.description,
+        timestamp: config.timestamp,
+        isComplete: reportStatus == 'resolved'
+            ? index <= completedStepIndex
+            : index < currentIndex,
+        isCurrent: reportStatus != 'resolved' && index == currentIndex,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
-    final reportTitle = strings.reportTitle(widget.reportId.substring(0, 8));
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF7F2EA),
+        body: Center(child: CircularProgressIndicator(color: dc.primary)),
+      );
+    }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(reportTitle),
-        actions: const [LocaleActionButton()],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _report == null
-          ? Center(child: Text(strings.reportNotFound))
-          : RefreshIndicator(
-              onRefresh: () => _fetch(),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _statusColor(
-                            _report!['status'] as String? ?? 'pending',
-                          ).withAlpha(30),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          strings
-                              .statusLabel(
-                                _report!['status'] as String? ?? 'pending',
-                              )
-                              .toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _statusColor(
-                              _report!['status'] as String? ?? 'pending',
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Chip(
-                        label: Text(
-                          strings.categoryLabel(
-                            _report!['category'] as String? ?? '',
-                          ),
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      if (_report!['is_escalated'] == true) ...[
-                        const SizedBox(width: 8),
-                        Chip(
-                          label: Text(
-                            strings.escalated.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.red,
-                            ),
-                          ),
-                          color: const WidgetStatePropertyAll(
-                            Color(0x20FF0000),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    _report!['description'] as String? ?? '',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_report!['address'] != null)
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 14,
-                          color: Colors.black54,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            _report!['address'] as String,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.black54),
-                          ),
-                        ),
-                      ],
-                    ),
-                  if ((_report!['address'] as String? ?? '').trim().isEmpty &&
-                      _coordinatesLabel().isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.pin_drop_outlined,
-                            size: 14,
-                            color: Colors.black54,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              'Pinned coordinates: ${_coordinatesLabel()}',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: Colors.black54),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  Text(
-                    strings.severityValue(
-                      _report!['severity'] as String? ?? 'medium',
-                    ),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.black45),
-                  ),
-                  if (_report!['latitude'] != null &&
-                      _report!['longitude'] != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      strings.location,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    LocationMap(
-                      latitude: (_report!['latitude'] as num).toDouble(),
-                      longitude: (_report!['longitude'] as num).toDouble(),
-                      zoom: 15.0,
-                    ),
-                    if (_coordinatesLabel().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          _coordinatesLabel(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black45,
-                          ),
-                        ),
-                      ),
-                  ],
-                  if ((_report!['image_urls'] as List?)?.isNotEmpty ==
-                      true) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      strings.photos,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 120,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          for (final url in (_report!['image_urls'] as List))
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  url as String,
-                                  width: 120,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  Text(
-                    'Live timeline',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  if (_timeline.isEmpty)
-                    Text(
-                      strings.noStatusUpdatesYet,
-                      style: const TextStyle(color: Colors.black45),
-                    )
-                  else
-                    for (var index = 0; index < _timeline.length; index++)
-                      Builder(
-                        builder: (context) {
-                          final entry =
-                              _timeline[index] as Map<String, dynamic>;
-                          final type =
-                              entry['type'] as String? ?? 'status_change';
-                          final status =
-                              (entry['new_status'] as String?) ??
-                              (entry['action'] as String?) ??
-                              'pending';
-                          final tone = type == 'department_response'
-                              ? ((entry['action'] as String? ?? '') ==
-                                        'declined'
-                                    ? dc.statusError
-                                    : dc.statusResolved)
-                              : _statusColor(status);
-                          final headline = type == 'department_response'
-                              ? ((entry['department_name'] as String?) ??
-                                    strings.unknownDepartment)
-                              : strings.statusLabel(status);
-                          final detail =
-                              (entry['notes'] as String?)?.trim().isNotEmpty ==
-                                  true
-                              ? entry['notes'] as String
-                              : (entry['decline_reason'] as String?)
-                                        ?.trim()
-                                        .isNotEmpty ==
-                                    true
-                              ? entry['decline_reason'] as String
-                              : null;
+    if (_report == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF7F2EA),
+        body: Center(child: Text(strings.reportNotFound)),
+      );
+    }
 
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                children: [
-                                  Container(
-                                    width: 14,
-                                    height: 14,
-                                    decoration: BoxDecoration(
-                                      color: tone,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  if (index != _timeline.length - 1)
-                                    Container(
-                                      width: 2,
-                                      height: 58,
-                                      color: tone.withValues(alpha: 0.24),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        headline.toUpperCase(),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: tone,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      if (type == 'department_response')
-                                        Text(
-                                          strings
-                                              .responseActionLabel(
-                                                (entry['action'] as String?) ??
-                                                    'pending',
-                                              )
-                                              .toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: tone,
-                                          ),
-                                        ),
-                                      if (detail != null) ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          detail,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            height: 1.4,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _formatTimestamp(
-                                          entry['timestamp'] as String?,
-                                        ),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.black45,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                ],
-              ),
-            ),
+    return CitizenReportDetailView(
+      reportId: widget.reportId,
+      report: _report!,
+      selectedTab: _selectedTab,
+      onTabSelected: (tab) => setState(() => _selectedTab = tab),
+      onRefresh: () => _fetch(),
+      onBack: () => Navigator.of(context).maybePop(),
+      entries: _resolvedTimelineEntries(strings),
+      milestones: _buildMilestones(strings),
+      resolvedAddress: _report!['address']?.toString().trim().isNotEmpty == true
+          ? _report!['address'] as String
+          : (_geocodedAddress?.trim().isNotEmpty == true ? _geocodedAddress : null),
+      coordinatesLabel: _coordinatesLabel().trim().isEmpty ? null : _coordinatesLabel(),
+      evidenceUrls: _evidenceUrls(_report!),
+      strings: strings,
     );
   }
 }

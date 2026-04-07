@@ -516,7 +516,7 @@ export function NotificationsPage() {
 
   return (
     <AppShell subtitle="Stay informed" title="Notifications">
-      {userRole === "department" ? (
+      {userRole === "department" || userRole === "citizen" ? (
         <DepartmentPageHero
           dataTestId="department-notifications-hero"
           department={department}

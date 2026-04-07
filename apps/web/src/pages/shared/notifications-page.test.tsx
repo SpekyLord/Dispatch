@@ -102,6 +102,10 @@ describe("NotificationsPage", () => {
       </MemoryRouter>,
     );
 
+    expect(
+      screen.getByTestId("department-notifications-hero"),
+    ).toBeInTheDocument();
+
     await waitFor(() => {
       expect(screen.getByText("Team dispatched")).toBeInTheDocument();
     });

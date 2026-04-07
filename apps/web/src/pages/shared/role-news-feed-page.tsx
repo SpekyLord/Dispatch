@@ -461,7 +461,7 @@ function NewsFeedCaughtUpFooter({
 export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
   const copy = roleCopy[role];
   const canPost = role === "department";
-  const departmentLayout = role === "department";
+  const departmentLayout = role === "department" || role === "citizen";
   const showCaughtUpFooter = role === "citizen" || role === "department";
   const [searchParams, setSearchParams] = useSearchParams();
   const { isDarkMode } = useAppShellTheme();
@@ -1762,7 +1762,7 @@ export function RoleNewsFeedPage({ role }: { role: NewsFeedRole }) {
                   departmentLayout ? publishLaneEffectClassName : "space-y-5"
                 }
               >
-                {departmentLayout && (
+                {departmentLayout && canPost && (
                   <Card
                     className={`dispatch-news-feed-card ${warmPanelClassName} ${raisedFeedCardClassName}`}
                   >

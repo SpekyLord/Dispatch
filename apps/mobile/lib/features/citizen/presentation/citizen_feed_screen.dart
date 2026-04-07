@@ -3,20 +3,17 @@ import 'dart:async';
 import 'package:dispatch_mobile/core/services/mesh_transport_service.dart';
 import 'package:dispatch_mobile/core/services/realtime_service.dart';
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
-import 'package:dispatch_mobile/core/state/notification_inbox_controller.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_department_profile_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_detail_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_detail_screen.dart';
-import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/offline_comms_screen.dart';
-import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-enum CitizenFeedSegment { news, reports, messages }
+enum CitizenFeedSegment { news, messages }
 
 const _feedCategories = <String>[
   'all',
@@ -32,11 +29,13 @@ class CitizenFeedScreen extends ConsumerStatefulWidget {
     super.key,
     this.onOpenMapTab,
     this.onOpenNodesTab,
+    this.onOpenProfile,
     this.initialSegment = CitizenFeedSegment.news,
   });
 
   final VoidCallback? onOpenMapTab;
   final VoidCallback? onOpenNodesTab;
+  final VoidCallback? onOpenProfile;
   final CitizenFeedSegment initialSegment;
 
   @override
@@ -54,10 +53,7 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
   String? _loadError;
   String _searchQuery = '';
   String _newsCategory = 'all';
-  String _reportStatus = 'all';
-  String _reportCategory = 'all';
   List<Map<String, dynamic>> _posts = const <Map<String, dynamic>>[];
-  List<Map<String, dynamic>> _reports = const <Map<String, dynamic>>[];
 
   @override
   void initState() {
@@ -145,11 +141,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList(growable: false);
-      final reports =
-          (snapshot['reports'] as List<dynamic>? ?? const <dynamic>[])
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList(growable: false);
       final meshMessages =
           (snapshot['mesh_messages'] as List<dynamic>? ?? const <dynamic>[])
               .whereType<Map>()
@@ -172,7 +163,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
 
       setState(() {
         _posts = posts;
-        _reports = reports;
         _loading = false;
         _loadError = null;
       });
@@ -187,10 +177,14 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     }
   }
 
-  Future<void> _openNotifications() async {
+  Future<void> _openProfile() async {
+    if (widget.onOpenProfile != null) {
+      widget.onOpenProfile!.call();
+      return;
+    }
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    ).push(MaterialPageRoute(builder: (_) => const CitizenProfileScreen()));
   }
 
   Future<void> _openPost(_FeedPost post) async {
@@ -199,22 +193,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
         builder: (_) => CitizenFeedDetailScreen(postId: post.id),
       ),
     );
-    await _fetchFeed(showLoader: false);
-  }
-
-  Future<void> _openReport(_CitizenReport report) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CitizenReportDetailScreen(reportId: report.id),
-      ),
-    );
-    await _fetchFeed(showLoader: false);
-  }
-
-  Future<void> _openReportComposer() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()));
     await _fetchFeed(showLoader: false);
   }
 
@@ -320,33 +298,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
         .toList(growable: false);
   }
 
-  List<_CitizenReport> get _filteredReports {
-    final query = _searchQuery.trim().toLowerCase();
-    return _reports
-        .map(_CitizenReport.fromJson)
-        .where((report) {
-          if (_reportStatus != 'all' && report.status != _reportStatus) {
-            return false;
-          }
-          if (_reportCategory != 'all' && report.category != _reportCategory) {
-            return false;
-          }
-          if (query.isEmpty) {
-            return true;
-          }
-          final haystack = [
-            report.title,
-            report.description,
-            report.categoryLabel,
-            report.statusLabel,
-            report.address ?? '',
-            report.severityLabel,
-          ].join(' ').toLowerCase();
-          return haystack.contains(query);
-        })
-        .toList(growable: false);
-  }
-
   List<MeshInboxItem> get _meshItems {
     final items = ref.watch(meshTransportProvider).inboxItems.toList();
     items.sort((left, right) => right.createdAt.compareTo(left.createdAt));
@@ -370,11 +321,9 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionControllerProvider);
-    final inbox = ref.watch(notificationInboxControllerProvider);
     final segments = _isCitizen
         ? const <CitizenFeedSegment>[
             CitizenFeedSegment.news,
-            CitizenFeedSegment.reports,
             CitizenFeedSegment.messages,
           ]
         : const <CitizenFeedSegment>[CitizenFeedSegment.news];
@@ -432,21 +381,9 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                       ],
                     ),
                   ),
-                  _NotificationIconButton(
-                    unreadCount: inbox.unreadCount,
-                    onTap: _openNotifications,
-                  ),
-                  const SizedBox(width: 10),
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: dc.primaryDim,
-                    child: Text(
-                      profileInitial,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  _ProfileShortcut(
+                    profileInitial: profileInitial,
+                    onTap: _openProfile,
                   ),
                 ],
               ),
@@ -491,7 +428,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                       return _SegmentChip(
                         label: switch (item) {
                           CitizenFeedSegment.news => 'News',
-                          CitizenFeedSegment.reports => 'My Reports',
                           CitizenFeedSegment.messages => 'Messages',
                         },
                         selected: availableSegment == item,
@@ -531,7 +467,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
                 duration: const Duration(milliseconds: 220),
                 child: switch (availableSegment) {
                   CitizenFeedSegment.news => _buildNews(context),
-                  CitizenFeedSegment.reports => _buildReports(context),
                   CitizenFeedSegment.messages => _buildMessages(context),
                 },
               ),
@@ -663,128 +598,6 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
     );
   }
 
-  Widget _buildReports(BuildContext context) {
-    final reports = _filteredReports;
-    final reportCategories = <String>{
-      'all',
-      ..._reports
-          .map(_CitizenReport.fromJson)
-          .map((report) => report.category)
-          .where((category) => category.isNotEmpty),
-    }.toList(growable: false);
-
-    return Column(
-      key: const ValueKey<String>('reports'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: dc.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: dc.warmBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'My reports',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: dc.ink,
-                      ),
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: _openReportComposer,
-                    icon: const Icon(Icons.add_alert_rounded, size: 18),
-                    label: const Text('New report'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: dc.primary,
-                      foregroundColor: dc.onPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${reports.length} visible in this view',
-                style: const TextStyle(color: dc.mutedInk),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 38,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    for (final status in const [
-                      'all',
-                      'pending',
-                      'accepted',
-                      'responding',
-                      'resolved',
-                    ]) ...[
-                      _FilterChip(
-                        label: status == 'all' ? 'All statuses' : status,
-                        selected: _reportStatus == status,
-                        onTap: () => setState(() => _reportStatus = status),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 38,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemBuilder: (context, index) {
-                    final category = reportCategories[index];
-                    return _FilterChip(
-                      label: category == 'all'
-                          ? 'All categories'
-                          : category.replaceAll('_', ' '),
-                      selected: _reportCategory == category,
-                      onTap: () => setState(() => _reportCategory = category),
-                    );
-                  },
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(width: 8),
-                  itemCount: reportCategories.length,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        if (_loading && _reports.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Center(child: CircularProgressIndicator(color: dc.primary)),
-          )
-        else if (reports.isEmpty)
-          _EmptyStateCard(
-            icon: Icons.assignment_outlined,
-            title: 'No reports match this view',
-            body:
-                'Your submitted incidents will show status, severity, and response progress here.',
-            actionLabel: 'Create a report',
-            onAction: _openReportComposer,
-          )
-        else
-          for (final report in reports) ...[
-            _ReportCard(report: report, onTap: () => _openReport(report)),
-            const SizedBox(height: 12),
-          ],
-      ],
-    );
-  }
-
   Widget _buildMessages(BuildContext context) {
     final items = _meshItems;
     return Column(
@@ -870,48 +683,49 @@ class _CitizenFeedScreenState extends ConsumerState<CitizenFeedScreen> {
   }
 }
 
-class _NotificationIconButton extends StatelessWidget {
-  const _NotificationIconButton({
-    required this.unreadCount,
+class _ProfileShortcut extends StatelessWidget {
+  const _ProfileShortcut({
+    required this.profileInitial,
     required this.onTap,
   });
 
-  final int unreadCount;
+  final String profileInitial;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          onPressed: onTap,
-          icon: const Icon(Icons.notifications_none_rounded, color: dc.ink),
-          tooltip: 'Notifications',
-        ),
-        if (unreadCount > 0)
-          Positioned(
-            right: 5,
-            top: 5,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: dc.statusError,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                unreadCount > 99 ? '99+' : '$unreadCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: dc.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: dc.warmBorder),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: dc.primaryDim,
+                child: Text(
+                  profileInitial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 6),
+              const Icon(Icons.settings_outlined, color: dc.primary, size: 18),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }
@@ -1214,107 +1028,6 @@ class _FeedPostCard extends StatelessWidget {
                   tooltip: 'Bookmark',
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReportCard extends StatelessWidget {
-  const _ReportCard({required this.report, required this.onTap});
-
-  final _CitizenReport report;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Ink(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: dc.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: dc.warmBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    report.title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: dc.ink,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: dc
-                        .statusColor(report.status)
-                        .withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    report.statusLabel,
-                    style: TextStyle(
-                      color: dc.statusColor(report.status),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              report.description,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: dc.mutedInk,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _MetaPill(
-                  label: report.categoryLabel,
-                  icon: _reportCategoryIcon(report.category),
-                  color: dc.categoryColor(report.category),
-                ),
-                _MetaPill(
-                  label: report.severityLabel,
-                  icon: Icons.priority_high_rounded,
-                  color: _severityColor(report.severity),
-                ),
-                if ((report.address ?? '').isNotEmpty)
-                  _MetaPill(
-                    label: report.address!,
-                    icon: Icons.place_outlined,
-                    color: dc.coolAccent,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              report.createdAtLabel,
-              style: const TextStyle(fontSize: 12, color: dc.mutedInk),
             ),
           ],
         ),
@@ -1896,63 +1609,6 @@ class _FeedPost {
   String get publishedAtLabel => _formatDateTime(createdAt);
 }
 
-class _CitizenReport {
-  const _CitizenReport({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.category,
-    required this.status,
-    required this.severity,
-    required this.createdAt,
-    this.address,
-  });
-
-  factory _CitizenReport.fromJson(Map<String, dynamic> json) {
-    final title = (json['title'] as String?)?.trim();
-    final description = (json['description'] as String? ?? '').trim();
-    return _CitizenReport(
-      id: (json['id'] ?? '').toString(),
-      title: (title == null || title.isEmpty)
-          ? _deriveReportTitle(description, json['category'] as String?)
-          : title,
-      description: description,
-      category: (json['category'] as String? ?? 'other').trim(),
-      status: (json['status'] as String? ?? 'pending').trim(),
-      severity: (json['severity'] as String? ?? 'medium').trim(),
-      createdAt: (json['created_at'] as String? ?? '').trim(),
-      address: (json['address'] as String?)?.trim(),
-    );
-  }
-
-  final String id;
-  final String title;
-  final String description;
-  final String category;
-  final String status;
-  final String severity;
-  final String createdAt;
-  final String? address;
-
-  String get categoryLabel => _titleCase(category.replaceAll('_', ' '));
-  String get statusLabel => _titleCase(status);
-  String get severityLabel => _titleCase(severity);
-  String get createdAtLabel => _formatDateTime(createdAt);
-}
-
-String _deriveReportTitle(String description, String? category) {
-  final lines = description
-      .split('\n')
-      .map((line) => line.trim())
-      .where((line) => line.isNotEmpty)
-      .toList(growable: false);
-  if (lines.isNotEmpty) {
-    return lines.first;
-  }
-  final fallback = category?.trim().isNotEmpty == true ? category! : 'report';
-  return _titleCase(fallback.replaceAll('_', ' '));
-}
-
 String _attachmentLabel(String url) {
   final parsed = Uri.tryParse(url);
   final segment = parsed?.pathSegments.isNotEmpty == true
@@ -1995,24 +1651,3 @@ IconData _feedCategoryIcon(String category) {
   };
 }
 
-IconData _reportCategoryIcon(String category) {
-  return switch (category) {
-    'fire' => Icons.local_fire_department_rounded,
-    'flood' => Icons.water_drop_outlined,
-    'earthquake' => Icons.vibration_rounded,
-    'road_accident' => Icons.car_crash_outlined,
-    'medical' => Icons.medical_services_outlined,
-    'structural' => Icons.foundation_outlined,
-    _ => Icons.report_problem_outlined,
-  };
-}
-
-Color _severityColor(String severity) {
-  return switch (severity) {
-    'low' => dc.statusResolved,
-    'medium' => dc.coolAccent,
-    'high' => dc.statusPending,
-    'critical' => dc.statusError,
-    _ => dc.onSurfaceVariant,
-  };
-}

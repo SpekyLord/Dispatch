@@ -130,7 +130,10 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Report received.'), findsOneWidget);
+      await tester.tap(find.text('Timeline'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pending'), findsOneWidget);
 
       auth.moveToResponding();
       realtime.emit(
@@ -142,8 +145,8 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Responders are now en route.'), findsOneWidget);
-      expect(find.text('RESPONDING'), findsWidgets);
+      expect(find.text('Emergency responders are moving to the incident.'), findsOneWidget);
+      expect(find.text('Responding', skipOffstage: false), findsWidgets);
     },
   );
 
@@ -168,7 +171,10 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Report received.'), findsOneWidget);
+      await tester.tap(find.text('Timeline'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Awaiting department acceptance.'), findsOneWidget);
 
       auth.addDepartmentResponse();
       realtime.emit(
@@ -180,7 +186,7 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Unit 3 is on scene.'), findsOneWidget);
+      expect(find.text('A department has accepted your report.'), findsOneWidget);
     },
   );
 

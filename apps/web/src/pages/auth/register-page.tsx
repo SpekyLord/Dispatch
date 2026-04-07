@@ -283,12 +283,6 @@ export function RegisterPage() {
             </Link>
             <nav className="hidden items-center gap-8 md:flex">
               <Link
-                to="/feed"
-                className="text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface"
-              >
-                Feed
-              </Link>
-              <Link
                 to="/auth/login"
                 className="text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface"
               >

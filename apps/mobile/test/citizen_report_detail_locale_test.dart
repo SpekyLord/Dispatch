@@ -84,22 +84,20 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
-    // Unified live timeline: status and department response entries together
-    expect(find.text('Live timeline'), findsOneWidget);
-    expect(find.text('PENDING'), findsWidgets);
-    // Department response headline is department_name uppercased
-    expect(find.text('MDRRMO'), findsOneWidget);
+    await tester.tap(find.text('Timeline'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report Timeline'), findsOneWidget);
+    expect(find.text('Pending', skipOffstage: false), findsWidgets);
+    expect(find.text('Accepted', skipOffstage: false), findsWidgets);
 
     await tester.tap(find.byTooltip('Language'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Filipino'));
     await tester.pumpAndSettle();
 
-    // Live timeline heading is hardcoded (not translated)
-    expect(find.text('Live timeline'), findsOneWidget);
-    // Status labels are translated in timeline entries
-    expect(find.text('NAKABINBIN'), findsWidgets);
-    // Department name stays as-is
-    expect(find.text('MDRRMO'), findsOneWidget);
+    expect(find.text('Report Timeline'), findsOneWidget);
+    expect(find.text('Nakabinbin', skipOffstage: false), findsWidgets);
+    expect(find.text('Tinanggap', skipOffstage: false), findsWidgets);
   });
 }

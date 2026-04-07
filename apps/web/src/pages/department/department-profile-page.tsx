@@ -7,6 +7,7 @@ import {
   type ProfileInteractivePost,
 } from "@/components/feed/profile-interactive-post-stack";
 import { AppShell } from "@/components/layout/app-shell";
+import { DepartmentPageHero } from "@/components/layout/department-page-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -385,6 +386,14 @@ export function DepartmentProfilePage() {
             color: #f4eee8 !important;
           }
         `}</style>
+      <DepartmentPageHero
+        dataTestId="department-profile-news-feed-hero"
+        department={department}
+        eyebrow="Public Information Desk"
+        headingTone="soft-light"
+        icon="campaign"
+        title="News Feed"
+      />
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className={`min-w-0 ${profileLaneEffectClassName}`}>
         <section className={`overflow-hidden rounded-[28px] border text-on-surface ${profileSurfaceClassName} ${profileRaisedCardClassName} ${profileCardHoverClassName}`}>
@@ -525,33 +534,6 @@ export function DepartmentProfilePage() {
                   placeholder="Search response protocols and field updates..."
                   readOnly
                 />
-              </div>
-            </section>
-
-            <section className="overflow-hidden rounded-[28px] border border-[#e4c0ae] bg-gradient-to-br from-[#d98d63] via-[#bf6e49] to-[#a86446] p-5 text-white shadow-xl">
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="mx-auto max-w-[17rem]">
-                  <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/90">
-                    Department View
-                  </span>
-                  <h2 className="mt-3 font-headline text-[1.8rem] leading-[1.02]">ResilienceHub Temporary News Desk</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-white/80">
-                    Keep the same News Feed utility rail while the profile block stays in the center column.
-                  </p>
-                </div>
-
-                <div className="grid w-full max-w-[17rem] gap-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Published posts</p>
-                    <p className="mt-2 font-headline text-4xl">{String(postCount).padStart(2, "0")}</p>
-                    <p className="mt-1 text-xs text-white/70">Profile activity and public announcements</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-center backdrop-blur-sm">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">Verification</p>
-                    <p className="mt-2 font-headline text-2xl capitalize">{department.verification_status}</p>
-                    <p className="mt-1 text-xs text-white/70">Department profile overview</p>
-                  </div>
-                </div>
               </div>
             </section>
 

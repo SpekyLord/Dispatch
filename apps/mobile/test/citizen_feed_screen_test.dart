@@ -234,25 +234,22 @@ void main() {
       await _pumpFeedScreen(tester, auth: auth);
 
       expect(find.text('News'), findsOneWidget);
-      expect(find.text('My Reports'), findsOneWidget);
       expect(find.text('Messages'), findsOneWidget);
       expect(find.text('Flood advisory'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'Tapping My Reports segment shows report list',
+    'Tapping Messages segment shows mesh inbox view',
     (tester) async {
       final auth = _FakeFeedAuthService();
       await _pumpFeedScreen(tester, auth: auth);
 
-      await tester.tap(find.text('My Reports'));
+      await tester.tap(find.text('Messages'));
       await tester.pumpAndSettle();
 
+      expect(find.text('Mesh inbox'), findsOneWidget);
       expect(find.text('Flood advisory'), findsNothing);
-      // Report card renders with status label and category label (title-cased)
-      expect(find.text('Pending'), findsWidgets);
-      expect(find.text('Fire'), findsWidgets);
     },
   );
 

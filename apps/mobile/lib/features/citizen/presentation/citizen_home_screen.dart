@@ -1,6 +1,8 @@
 import 'package:dispatch_mobile/core/state/mesh_providers.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_my_reports_screen.dart';
+import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_report_form_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:dispatch_mobile/features/mesh/presentation/citizen_mesh_dashboard_screen.dart';
@@ -52,12 +54,18 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => const CitizenReportFormScreen()));
   }
 
+  Future<void> _openProfile() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CitizenProfileScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final hideBottomNav =
         ref.watch(mapNodeOverlayActiveProvider) && _selectedIndex == 1;
     final pages = [
-      CitizenMeshDashboardScreen(onOpenMapTab: () => _onItemTapped(2)),
+      CitizenMeshDashboardScreen(onOpenMapTab: () => _onItemTapped(1)),
       MeshPeopleMapScreen(
         title: 'Mesh Feed Map',
         subtitle: 'Interactive map',
@@ -66,11 +74,20 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
         enableSelfTracking: true,
         selfTrackingActive: _selectedIndex == 1,
       ),
+      CitizenMyReportsScreen(
+        onOpenMapTab: () => _onItemTapped(1),
+        onOpenProfile: _openProfile,
+      ),
       CitizenFeedScreen(
         onOpenMapTab: () => _onItemTapped(1),
         onOpenNodesTab: () => _onItemTapped(0),
+        onOpenProfile: _openProfile,
       ),
-      const CitizenProfileScreen(),
+      NotificationsScreen(
+        onOpenProfile: _openProfile,
+        onOpenFeed: () => _onItemTapped(3),
+        embeddedInShell: true,
+      ),
     ];
 
     return Scaffold(
@@ -91,6 +108,8 @@ class _CitizenHomeScreenState extends ConsumerState<CitizenHomeScreen> {
               selectedIndex: _selectedIndex,
               onItemTapped: _onItemTapped,
               onCenterActionTap: _openReportComposer,
+              showCitizenReportsTab: true,
+              showCitizenNotificationsTab: true,
             ),
           ),
         ),

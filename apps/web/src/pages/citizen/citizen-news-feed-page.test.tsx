@@ -87,11 +87,15 @@ describe("CitizenNewsFeedPage", () => {
     );
 
     expect(screen.getByRole("heading", { name: "News Feed" })).toBeInTheDocument();
-    expect(screen.getByText("Citizen View")).toBeInTheDocument();
-    expect(screen.getByText(/ResilienceHub Temporary News Desk/i)).toBeInTheDocument();
-    expect(screen.getByText("Read-only access")).toBeInTheDocument();
-    expect(screen.getByText(/Only department accounts can create awareness posts/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create Post" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("department-news-feed-hero")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Temporary news search" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Department composer")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /anything urgent to share/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Post" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /news feed/i }).length).toBeGreaterThan(0);
     await screen.findByText(/you've catched up with the news chu2/i);
 

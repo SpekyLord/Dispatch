@@ -183,13 +183,15 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Responder assigned'), findsOneWidget);
+      expect(find.text('Notifications'), findsOneWidget);
+      expect(find.textContaining('March 29'), findsOneWidget);
+      expect(find.text('Responder assigned'), findsNWidgets(2));
       expect(find.text('Flood advisory'), findsOneWidget);
       expect(find.text('Mark all read'), findsOneWidget);
 
       await tester.tap(find.text('Unread'));
       await tester.pumpAndSettle();
-      expect(find.text('Responder assigned'), findsOneWidget);
+      expect(find.text('Responder assigned'), findsNWidgets(2));
       expect(find.text('Flood advisory'), findsNothing);
 
       await tester.tap(find.text('Mark all read'));
@@ -220,7 +222,7 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Shelter update'), findsOneWidget);
+      expect(find.text('Shelter update'), findsNWidgets(2));
     },
   );
 
@@ -259,9 +261,9 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Your report was accepted'), findsOneWidget);
+      expect(find.text('Your report was accepted'), findsNWidgets(2));
 
-      await tester.tap(find.text('Your report was accepted'));
+      await tester.tap(find.text('Your report was accepted').last);
       await tester.pumpAndSettle();
 
       expect(find.byType(CitizenReportDetailScreen), findsOneWidget);

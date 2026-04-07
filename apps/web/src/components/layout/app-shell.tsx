@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 
+import { DispatchLogo } from "@/components/branding/dispatch-logo";
 import { LocationMap } from "@/components/maps/location-map";
 import { apiRequest } from "@/lib/api/client";
 import { useSessionStore } from "@/lib/auth/session-store";
@@ -851,13 +852,6 @@ export function AppShell({
           return { title: "Dispatch", subtitle: "" };
         }
 
-        if (user.role === "department") {
-          return {
-            title: "DISPATCHER",
-            subtitle: t(config.titleKey),
-          };
-        }
-
         return {
           title: t(config.titleKey),
           subtitle: t(config.subtitleKey),
@@ -995,37 +989,51 @@ export function AppShell({
                 )}
               >
                 {!isSidebarCollapsed ? (
-                  <div>
-                    <h2
-                      className={cn(
-                        "font-headline text-3xl italic",
-                        isDarkMode ? "text-white" : "text-on-surface",
-                      )}
-                    >
-                      {sidebarMeta.title}
-                    </h2>
-                    <p
-                      className={cn(
-                        "mt-1 text-xs font-medium uppercase tracking-widest",
-                        isDarkMode
-                          ? "text-white/60"
-                          : "text-on-surface-variant",
-                      )}
-                    >
-                      {sidebarMeta.subtitle}
-                    </p>
-                  </div>
+                  user.role === "department" ? (
+                    <DispatchLogo
+                      alt="Dispatch"
+                      className="h-12 w-[82px] rounded-[20px]"
+                    />
+                  ) : (
+                    <div>
+                      <h2
+                        className={cn(
+                          "font-headline text-3xl italic",
+                          isDarkMode ? "text-white" : "text-on-surface",
+                        )}
+                      >
+                        {sidebarMeta.title}
+                      </h2>
+                      <p
+                        className={cn(
+                          "mt-1 text-xs font-medium uppercase tracking-widest",
+                          isDarkMode
+                            ? "text-white/60"
+                            : "text-on-surface-variant",
+                        )}
+                      >
+                        {sidebarMeta.subtitle}
+                      </p>
+                    </div>
+                  )
                 ) : (
-                  <div
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-2xl text-lg font-semibold",
-                      isDarkMode
-                        ? "bg-white/8 text-[#f2a27b]"
-                        : "bg-[#f7ede5] text-[#a86446]",
-                    )}
-                  >
-                    D
-                  </div>
+                  user.role === "department" ? (
+                    <DispatchLogo
+                      alt="Dispatch"
+                      className="h-11 w-[58px] rounded-[16px]"
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "flex h-11 w-11 items-center justify-center rounded-2xl text-lg font-semibold",
+                        isDarkMode
+                          ? "bg-white/8 text-[#f2a27b]"
+                          : "bg-[#f7ede5] text-[#a86446]",
+                      )}
+                    >
+                      D
+                    </div>
+                  )
                 )}
                 <button
                   aria-label={

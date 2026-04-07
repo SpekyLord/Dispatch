@@ -11,6 +11,8 @@ class AppBottomNavigationBar extends StatelessWidget {
     this.onCenterActionTap,
     this.centerActionLabel = 'Submit\nReport',
     this.centerActionIcon = Icons.add_rounded,
+    this.showCitizenReportsTab = false,
+    this.showCitizenNotificationsTab = false,
   });
 
   final int selectedIndex;
@@ -18,6 +20,8 @@ class AppBottomNavigationBar extends StatelessWidget {
   final VoidCallback? onCenterActionTap;
   final String centerActionLabel;
   final IconData centerActionIcon;
+  final bool showCitizenReportsTab;
+  final bool showCitizenNotificationsTab;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +77,18 @@ class AppBottomNavigationBar extends StatelessWidget {
                       onTap: () => onItemTapped(1),
                     ),
                   ),
+                  if (showCitizenReportsTab)
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.assignment_outlined,
+                        activeIcon: Icons.assignment,
+                        label: 'REPORTS',
+                        isSelected: selectedIndex == 2,
+                        selectedColor: selectedColor,
+                        unselectedColor: unselectedColor,
+                        onTap: () => onItemTapped(2),
+                      ),
+                    ),
                   if (onCenterActionTap != null)
                     Expanded(
                       child: _CenterActionItem(
@@ -87,23 +103,36 @@ class AppBottomNavigationBar extends StatelessWidget {
                       icon: Icons.dynamic_feed_outlined,
                       activeIcon: Icons.dynamic_feed,
                       label: 'FEED',
-                      isSelected: selectedIndex == 2,
+                      isSelected: selectedIndex == _feedIndex,
                       selectedColor: selectedColor,
                       unselectedColor: unselectedColor,
-                      onTap: () => onItemTapped(2),
+                      onTap: () => onItemTapped(_feedIndex),
                     ),
                   ),
-                  Expanded(
-                    child: _NavItem(
-                      icon: Icons.settings_outlined,
-                      activeIcon: Icons.settings,
-                      label: 'SETTINGS',
-                      isSelected: selectedIndex == 3,
-                      selectedColor: selectedColor,
-                      unselectedColor: unselectedColor,
-                      onTap: () => onItemTapped(3),
+                  if (showCitizenNotificationsTab)
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.notifications_none_rounded,
+                        activeIcon: Icons.notifications_rounded,
+                        label: 'NOTIFS',
+                        isSelected: selectedIndex == _notificationsIndex,
+                        selectedColor: selectedColor,
+                        unselectedColor: unselectedColor,
+                        onTap: () => onItemTapped(_notificationsIndex),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.settings_outlined,
+                        activeIcon: Icons.settings,
+                        label: 'SETTINGS',
+                        isSelected: selectedIndex == _settingsIndex,
+                        selectedColor: selectedColor,
+                        unselectedColor: unselectedColor,
+                        onTap: () => onItemTapped(_settingsIndex),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -111,6 +140,24 @@ class AppBottomNavigationBar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  int get _feedIndex {
+    if (showCitizenReportsTab && showCitizenNotificationsTab) {
+      return 3;
+    }
+    return showCitizenReportsTab ? 3 : 2;
+  }
+
+  int get _notificationsIndex {
+    if (showCitizenReportsTab && showCitizenNotificationsTab) {
+      return 4;
+    }
+    return _settingsIndex;
+  }
+
+  int get _settingsIndex {
+    return showCitizenReportsTab ? 4 : 3;
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:dispatch_mobile/core/state/notification_inbox_controller.dart';
 import 'package:dispatch_mobile/core/state/session.dart';
 import 'package:dispatch_mobile/core/theme/dispatch_colors.dart' as dc;
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_feed_screen.dart';
+import 'package:dispatch_mobile/features/citizen/presentation/citizen_my_reports_screen.dart';
 import 'package:dispatch_mobile/features/citizen/presentation/citizen_profile_edit_screen.dart';
 import 'package:dispatch_mobile/features/shared/presentation/notifications_screen.dart';
 import 'package:flutter/material.dart';
@@ -434,11 +435,7 @@ class _CitizenProfileScreenState extends ConsumerState<CitizenProfileScreen> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const Scaffold(
-                            body: CitizenFeedScreen(
-                              initialSegment: CitizenFeedSegment.reports,
-                            ),
-                          ),
+                          builder: (_) => const Scaffold(body: CitizenMyReportsScreen()),
                         ),
                       );
                     },
